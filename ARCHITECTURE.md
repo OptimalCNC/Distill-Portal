@@ -21,7 +21,7 @@ Instead, all session discovery and file access should happen through a collector
 - Tool-aware handling: each tool has its own adapter, parser, renderer, and analyzer preparation path where needed.
 - Shared fields only: cross-tool consistency is limited to the fields needed for filtering, selection, and navigation.
 - Machine-aware provenance: every stored session records which collector and machine supplied it. Collector identity and machine identity are backend-issued, never self-asserted by an untrusted payload.
-- Derived outputs are cacheable: summaries and other expensive derived artifacts are stored, keyed so they survive source updates when possible, and regenerated lazily on cache miss.
+- Derived outputs are keyed and persisted: the Summary Cache is keyed so entries survive source updates when possible and is regenerated lazily on cache miss. Persisted distill runs are durable historical records keyed by `run_id` and looked up by `selection_fingerprint`; a new fingerprint produces a fresh run rather than regenerating an old one (see §8 and §"Storage Layout").
 - Replace-on-sync: the system stores the latest known session state, not a full version history.
 - Explainability over cleverness: v1 analysis favors transparent heuristics with visible inputs over opaque scoring.
 
@@ -65,7 +65,7 @@ The portal is organized into the following logical components:
 14. Observability and logs
 
 The following diagram shows the intended component boundary.
-Both the embedded local collector and any remote collector submit through the same collector protocol into the same ingest service. Derived caches (summary, distill) are shown explicitly, as is the annotation store and the query path for the UI.
+Both the embedded local collector and any remote collector submit through the same collector protocol into the same ingest service. Derived artifact stores — the summary cache and the distill run store (durable historical records, not a cache; see §"Storage Layout") — are shown explicitly, as is the annotation store and the query path for the UI.
 
 ```mermaid
 flowchart LR
@@ -124,8 +124,7 @@ flowchart LR
         Jobs --> Summary
         Jobs --> Distill
         Jobs --> Ingest
-        Ingest -. invalidates .-> SummaryCache
-        Ingest -. invalidates .-> DistillCache
+        Ingest -. marks stale .-> SummaryCache
         Ingest --> Obs
         Summary --> Obs
         Distill --> Obs
@@ -169,7 +168,7 @@ There is one logical contract and two transport bindings:
 - **In-process binding** — the embedded local collector calls the Ingest Service through a typed function interface. No sockets. This is the default for out-of-the-box local use.
 - **HTTP binding** — any remote collector, or an embedded collector that the user opted into HTTP for, posts over HTTP to the backend's loopback or network listener. v1 does not require TLS on this path; users who want wire encryption front the backend with their own TLS-terminating reverse proxy (see §14 and "Deployment Modes").
 
-Both bindings carry the same request and response types and the same idempotency rules. The backend must not skip steps (identity binding of `collector_id`/`machine_id`, fingerprint comparison, invalidation of derived caches) in either binding.
+Both bindings carry the same request and response types and the same idempotency rules. The backend must not skip steps (identity binding of `collector_id`/`machine_id`, fingerprint comparison, upserting the session's `fts_sessions` row, marking affected summary cache entries `stale`; persisted `distill_runs` are retained as historical records and are not modified on ingest — see §"Storage Layout" → "Cross-Component Atomicity") in either binding.
 
 #### Endpoints
 
@@ -314,19 +313,18 @@ The ingest service does not depend on direct file access to the collector's mach
 
 #### Crash Recovery and Transactional Boundary
 
-Every accepted `sessions:upsert` commits three things as a single transaction:
+Every accepted `sessions:upsert` is one logical commit, implemented as a two-step sequence (see §"Storage Layout" → "Cross-Store Reconciliation" for the full failure-mode analysis):
 
-1. raw payload written to the Raw Store and referenced by its content address
-2. shared record updated in the Indexer (including `sync_status`, `ingest_status`, timestamps)
-3. cache invalidation entries posted for the Summary Cache and Distill run store
+1. raw payload written to the BlobStore by content address (`BlobStore.put`); the BlobStore's own write is atomic per blob (see §"Storage Layout" → "v1 Implementation: `LocalFsBlobStore`" for the temp-file + `rename(2)` mechanism)
+2. one SQLite transaction that updates the shared record in the Indexer (including `sync_status`, `ingest_status`, timestamps), bumps `raw_blobs.refcount` for the new `content_addr` (and decrements the previous `raw_ref` if any), upserts the session's `fts_sessions` row so the Search Index stays synchronous with the shared record (§10), marks Summary Cache entries for that session as `stale`, and enqueues follow-up jobs. Persisted `distill_runs` rows are not modified — see §"Storage Layout" → "Cross-Component Atomicity" for the selection-fingerprint rationale.
 
-If any step fails, the whole submission is treated as failed and the collector is asked to resubmit. On backend restart, a reconciliation sweep reconciles any partially-written raw blobs against shared records and drops orphans. This makes the ingest path crash-safe: the only observable outcomes are "no change" or "full update."
+If any step fails, the whole submission is treated as failed and the collector is asked to resubmit. The metadata-side write (step 2) is one SQLite transaction, so partial metadata commits are impossible. The blob-side write (step 1) and the metadata transaction are physically separate, so a crash between them can leave an orphan blob; the startup reconciliation sweep described in §"Storage Layout" → "Cross-Store Reconciliation" deletes such orphans. The only externally observable outcomes remain "no change" or "full update."
 
 #### Ingest Status and Sync Status
 
 These fields live on every shared session record. Allowed values and transitions are enumerated exhaustively:
 
-`ingest_status ∈ { pending, parsing, ingested, failed_parse, failed_storage, purged }`
+`ingest_status ∈ { pending, parsing, ingested, failed_parse, failed_storage }`
 
 - `pending` → `parsing` when the ingest worker picks the submission up
 - `parsing` → `ingested` on success
@@ -335,8 +333,7 @@ These fields live on every shared session record. Allowed values and transitions
 - `failed_storage` → `pending` when the backend recovers (disk space freed, store transient error resolved) or when the collector resubmits with any fingerprint
 - `failed_parse` → `parsing` only if the collector resubmits with a different `source_fingerprint`; the new submission is a fresh parse attempt
 - `ingested` → `parsing` when a newer `source_fingerprint` is accepted (via `sync_status=updating`)
-- any state → `purged` when the user invokes Purge; this is terminal for the current `session_uid`
-- from `purged` there is no transition back. Releasing the tombstone and accepting a new upsert creates a **new** `session_uid` starting at `pending`
+- Purge is terminal and does not add a status value: Purge deletes the `sessions` row outright (see §"Storage Layout" → "How Derived Data Connects to a Session"), so there is no row left to carry a `purged` state. The durable record of the purge is the `tombstones` entry, not an `ingest_status` value. Releasing the tombstone and accepting a new upsert creates a **new** `session_uid` starting at `pending`.
 
 `sync_status ∈ { fresh, updating, stale, orphaned_source, never_synced, sync_blocked }`
 
@@ -381,22 +378,25 @@ The store must support:
 - the JSONL delivered by a collector is stored verbatim
 - large sessions are streamed to storage; the Ingest Service never buffers a full payload in memory beyond a configured threshold
 - a replace-on-sync update dereferences the previous blob; once dereferenced and no other record points to it, the blob is eligible for garbage collection
-- the physical engine (local filesystem, embedded KV, SQLite blob) is not fixed, but the logical content-address semantics are
+- the physical engine is reached only through the `BlobStore` abstraction defined in §"Storage Layout"; v1 ships `LocalFsBlobStore`, and an object-store implementation (S3 / MinIO / GCS) can replace it without changes to the Ingest Service, Renderer, Summary Service, or Distill Analyzer
 
 #### Retention
 
 - v1 raw retention is unbounded and uncapped. The Raw Store does not auto-evict raw payloads, and v1 exposes no user-configurable cap on raw storage. Reclaiming raw-store space requires explicit Purge of selected sessions. This matches the PRD's "durable local storage of raw sessions" guarantee.
 - The user can monitor raw store size from Settings and the health view. The backend also tracks a free-disk-space floor (configurable as an alert/abort threshold, not as a destructive cap): when free disk falls below the floor, the Ingest Service responds with `507 Insufficient Storage` (see §3) so the collector backs off and the user is prompted to free space (typically by archiving + purging old sessions). Crossing the floor never triggers automatic deletion.
-- Summary cache and Distill cache are cheap to regenerate and may be evicted under independent retention caps configured by the user.
+- The Summary Cache is cheap to regenerate and may be evicted under a user-configurable retention cap. Persisted `distill_runs` are **not** a cache — they are durable historical records (see §8 and §"Storage Layout" → "Cross-Component Atomicity") and are not auto-evicted. A user-initiated "delete old distill runs" action remains available for ordinary cleanup.
 - A future configurable raw-eviction policy (e.g., FIFO eviction of archived blobs above a cap) is deferred — it would conflict with the PRD's current durable-storage guarantee and is tracked under "Open Architecture Decisions."
 
 #### Purge Tombstones
 
-When the user purges a session, the backend:
+When the user purges a session, the backend runs two ordered steps (metadata-first, then blob) so that any crash between them leaves only an orphan blob — a state the reconciliation sweep can repair — rather than a dangling `raw_ref`:
 
-1. deletes the raw payload, summary cache entries, distill citations for that session, user annotations on that session
-2. writes a tombstone keyed by `(tool, source_session_id)`
-3. refuses further `sessions:upsert` calls for that key until the tombstone is released
+1. one SQLite transaction that deletes the `sessions` row (cascading to summary cache entries, distill citation rows, user annotations, and queued jobs — see §"Storage Layout"), explicitly issues `DELETE FROM fts_sessions WHERE session_uid = ?` to remove the search-index entries (the `fts_sessions` virtual table is not FK-linked — FTS5 does not support foreign keys), decrements `raw_blobs.refcount`, removes the `raw_blobs` row if the refcount is now zero, and writes a tombstone keyed by `(tool, source_session_id)` in `tombstones`.
+2. immediately after that transaction commits (before reporting success to the user), if the blob's row was removed in step 1, synchronously call `BlobStore.delete(content_addr)`. Purge uses this synchronous deletion, not the async `blob_gc` path. If the backend crashes between step 1 commit and step 2, the blob becomes an orphan (no `raw_blobs` row points at it) and is removed by the startup reconciliation sweep (§"Storage Layout" → "Cross-Store Reconciliation").
+
+Further rules:
+
+3. the backend refuses further `sessions:upsert` calls for that `(tool, source_session_id)` until the tombstone is released
 4. the tombstone persists across collector restarts and across backend restarts
 
 Tombstone enforcement: the tombstone check is the **first gate** in every `sessions:upsert` call — it runs before identity binding, fingerprint comparison, or raw-blob write. A purged session cannot be resurrected by a late-arriving submission from any collector.
@@ -433,6 +433,7 @@ Every stored session exposes this logical record, even though the raw payload re
 | `archived` | boolean | User action | UI/API | toggled by user |
 | `bookmarked` | boolean | User action | UI/API | toggled by user |
 | `quality_mark` | enum, nullable | User action | UI/API | session-level `successful` / `reusable` / `problematic` (or unset); see §11 |
+| `do_not_send_to_llm` | boolean | User action | UI/API | per-session LLM-egress override; when `true`, Summary (§7) and Distill (§8) never send this session's content to any external LLM — see §14 "LLM Egress Controls" |
 | `ingest_status` | enum | Ingest Service | Ingest | state machine in §3 |
 | `sync_status` | enum | Ingest + collector cursor | Ingest | state machine in §3 |
 | `schema_version` | int | Indexer release | Indexer | set at write time; used for migration |
@@ -445,8 +446,9 @@ Optional derived fields (recomputed lazily):
 - `files_mentioned`
 - `task_type` (enum matching PRD's v1 category list: `bug_fix`, `feature_work`, `refactor`, `review`, `investigation`, `documentation`, `setup_or_configuration`, `uncategorized`. `uncategorized` is the explicit fallback value the classifier emits when no category matches; the field is nullable only while the classifier has not yet run for the session.)
 - `outcome_signals`
-- `tags`
 - `has_subagent_sidecars` (Claude-specific boolean; true if the adapter saw a `subagents/` directory. Unlike the other fields in this "derived" list, this one is written by Ingest at upsert time from a collector-supplied hint, not recomputed by the Indexer. v1 does not ingest sidecar content; the flag is preserved so a future release can retroactively ingest them.)
+
+(User-authored per-session tags are not derived; they live in `annotations_tags` — see §11 and §"Storage Layout". Indexer-level tag exposure and search are served via a join over that table.)
 
 These shared fields exist to support filtering and listing, not to replace raw tool structure.
 
@@ -463,7 +465,7 @@ On update, v1 uses last-write-wins with a deterministic tiebreak chain:
 
 When a submission wins, it replaces `raw_ref`, overwrites the latest-seen provenance fields (`collector_id`, `machine_id`, `source_path`), and triggers cache invalidation.
 
-Preservation across replace-on-sync: Ingest writes only the Ingest-owned columns listed in the field ownership table. User-owned columns (`archived`, `bookmarked`) and rows in the User Annotations Store (tags, notes, highlights) are never touched by a replace-on-sync update. Annotations that can no longer be relinked to a current block are surfaced as "orphaned annotations" in the UI; they are not silently deleted.
+Preservation across replace-on-sync: Ingest writes only the Ingest-owned columns listed in the field ownership table. User-owned session-row columns (`archived`, `bookmarked`, `quality_mark`, `do_not_send_to_llm`) and session-scoped annotation rows (`annotations_tags`, session-level `annotations_notes`) are preserved verbatim and never touched by a replace-on-sync update. Block-anchored annotation rows (block-level `annotations_notes`, `annotations_highlights`) are relinked using the three-step strategy in §11; rows that cannot be relinked are surfaced as "orphaned annotations" in the UI, and are not silently deleted.
 
 v1 records only the latest-seen provenance, not the full history of provenance entries. Recovering "which other machines have ever submitted this session" is out of scope for v1.
 
@@ -644,7 +646,7 @@ Summary results are cached persistently in a summary cache table. Each entry tra
 Status distinctions:
 
 - `stale` — entry's `block_content_hash` no longer matches current source; it will be recomputed on next view
-- `invalidated` — entry was explicitly marked unusable (for example, `prompt_version` changed, an upstream schema migration ran, or the user purged and re-ingested); it will be regenerated from scratch, not relinked
+- `invalidated` — entry was explicitly marked unusable (for example, `prompt_version` changed or an upstream schema migration ran); it will be regenerated from scratch, not relinked. Purge is not an example of this state: Purge deletes the `sessions` row and cascades away the summary cache entries entirely, and a subsequent re-ingest creates a fresh `session_uid` with no cache history to relink.
 
 The cache prevents regeneration on every view. A cache hit requires both `block_key` match AND `block_content_hash` match; a `block_key` hit with a hash mismatch is treated as `stale`.
 
@@ -716,24 +718,24 @@ A distill result includes:
 - supporting summary-block or transcript references when available
 - a category such as improvement, repeated pattern, or candidate skill
 - an overall confidence note (human-readable)
-- the exact input selection fingerprint used (so a repeat run with the same selection is cacheable)
+- the exact input selection fingerprint used (so a repeat run with the same selection is resolved to the most recent matching historical run record via `selection_fingerprint` lookup — see §"Run Persistence")
 
 #### Run Persistence
 
 A distill run is persisted as a `DistillRun` record with:
 
 - `run_id`
-- `selection_fingerprint` (hash over: the sorted list of selected `session_uid`s with their current `source_updated_at`; the analyzer `mode`; the active `prompt_version`; and the active `model_id`. Mode and version are part of the fingerprint so an improvement-mode run and a skill-mode run over the same selection — or the same mode under a newer prompt or model — produce distinct cache entries rather than collapsing into one.)
+- `selection_fingerprint` (hash over: the sorted list of selected `session_uid`s with their current `source_updated_at`; the analyzer `mode`; the active `prompt_version`; the active `model_id`; and a normalized hash of the active lens/filter context used to produce the selection (so two runs over the same set of sessions but reached through different lenses — e.g. a project lens vs. a freeform search — are treated as distinct runs). `distill_runs` are durable historical records, not a cache — see §"Storage Layout" → "Cross-Component Atomicity".)
 - `mode` (improvement or skill)
 - `prompt_version`
 - `model_id`
-- `dismissed_finding_ids[]` (per-run user-dismissed findings; a dismissal hides the finding from the run's default view but the run record is retained and dismissals are reversible from the run detail)
+- per-finding `dismissed` flag on each row in `distill_findings` (a dismissal hides the finding from the run's default view but the run record and the finding row are retained, and dismissals are reversible from the run detail; see §"Storage Layout" for the schema)
 - `started_at`, `finished_at`
 - `findings[]` as above
 - `status` ∈ `{ running, succeeded, cancelled, failed, partial }`
 - `last_checkpoint` (cursor into the selection; used for resume)
 
-Persisting runs lets the user revisit a prior result rather than regenerate it on every refresh. Cache hits on `selection_fingerprint` return the prior run unless the user explicitly requests a fresh run; because `mode`, `prompt_version`, and `model_id` are inputs to the fingerprint, changing any of them produces a different fingerprint and therefore a fresh run.
+Persisting runs lets the user revisit a prior result rather than regenerate it on every refresh. A lookup by `selection_fingerprint` returns the **most recent** (latest `started_at`) matching historical run record when one or more exist; older runs with the same fingerprint remain on disk (not overwritten) and are reachable from the run-history list in the UI. The user can explicitly request a fresh run, which always produces a new record regardless of fingerprint match. Because `mode`, `prompt_version`, `model_id`, and the normalized lens/filter context hash are inputs to the fingerprint, changing any of them produces a different fingerprint and therefore a fresh run rather than reusing an older one.
 
 A finding may be saved as a new Skill draft or merged into an existing Skill draft (appending the finding's headline, explanation, and supporting citations to the chosen draft). The User Annotations Store (§11) owns Skill draft state; the Distill Analyzer only emits the finding.
 
@@ -821,29 +823,32 @@ Search is an explicit component, not a side effect of the Indexer.
 
 Responsibilities:
 
-- build and maintain a full-text index over raw session content and derived metadata (tags, task_type, files_mentioned, machine_label, project_label)
+- build and maintain a full-text index (the `fts_sessions` virtual table — see §"Storage Layout") over raw session content, user-authored per-session tags from `annotations_tags`, and Indexer-derived metadata (`task_type`, `files_mentioned`, `machine_label`, `project_label`)
 - accept query-plus-filter requests from the UI/API
 - return ranked session hits with highlight snippets
 - incrementally update the index when a session is ingested or updated (cost proportional to session size, not corpus size)
 - drop entries when a session is purged
 - honor archived and `do_not_send_to_llm` visibility rules (the latter does not prevent local search)
 
-The engine is deliberately not fixed; a SQLite FTS5 index plus stored blobs is a reasonable v1 choice. Whatever engine is used must bound re-index cost per session so update-in-place does not cause corpus-wide rebuilds.
+v1 uses SQLite FTS5 (the `fts_sessions` virtual table — see §"Storage Layout" for the table layout). The implementation must bound re-index cost per session so update-in-place does not cause corpus-wide rebuilds.
 
 Summaries are not indexed in v1; skim-oriented search can be added later by including `summary_text` as a searchable document linked to `(session_uid, block_key)`.
 
 ### 11. User Annotations Store
 
-Annotations are user-authored data attached to sessions, skim blocks, or arbitrary ranges of raw events:
+Annotations are user-authored data attached to sessions, skim blocks, or arbitrary ranges of raw events. They come in two physical storage forms (see §"Storage Layout" for the schema):
 
-- **Bookmark** — boolean per session
-- **Tag** — free-form label per session
-- **Note** — free-text attached to a session or to an individual skim block (the PRD's "attach tags or notes" requirement covers both granularities)
-- **Highlight** — a raw-event or block range marked as `successful`, `reusable`, or `problematic`
-- **Quality mark** — the same `successful` / `reusable` / `problematic` vocabulary applied at session granularity (stored as the `quality_mark` derived field on the shared session record, §5; backs the PRD's session-level marking requirement)
-- **Skill draft** — a standalone Markdown document that can collect multiple highlights, notes, and distill findings (created from a finding via "save as new draft" or extended via "merge into existing draft," see §8)
+- Two single-value session-row flags stored as columns on the `sessions` row itself:
+  - **Bookmark** (`bookmarked`, boolean per session)
+  - **Quality mark** (`quality_mark`, session-level enum: `successful` / `reusable` / `problematic`, nullable — backs the PRD's session-level marking requirement, using the same vocabulary as the excerpt-level Highlight below)
+  (Note: `archived` is also a user-toggled column on the `sessions` row — see §5 field ownership and §"Archive Semantics" — but it is a removal-state flag rather than an annotation, so it is not listed among the annotation types here.)
+- Multi-valued or block-anchored annotations stored in their own tables:
+  - **Tag** (`annotations_tags`) — free-form label; many tags per session
+  - **Note** (`annotations_notes`) — free-text attached to a session or to an individual skim block (the PRD's "attach tags or notes" requirement covers both granularities; `block_key` is nullable for session-level notes)
+  - **Highlight** (`annotations_highlights`) — a raw-event or block range marked as `successful`, `reusable`, or `problematic`
+  - **Skill draft** (`skill_drafts`) — a standalone Markdown document that can collect multiple highlights, notes, and distill findings (created from a finding via "save as new draft" or extended via "merge into existing draft," see §8)
 
-Annotations live in their own store so they are never lost when a session's raw payload is replaced on sync. Replace-on-sync handling depends on annotation scope:
+Annotations are never lost when a session's raw payload is replaced on sync. Replace-on-sync handling depends on annotation scope:
 
 - **Session-scoped state** — `bookmarked`, `quality_mark`, session-level tags, and notes attached to the session as a whole — is preserved verbatim across replace-on-sync. Because there is no block target to track, these can never become "orphaned" by relink.
 - **Block-anchored annotations** — notes attached to a specific skim block, highlights on a raw-event or block range — are relinked using the same three-step strategy the Summary Cache uses (per-tool stable id → ordinal → mark orphaned for user review). Block-anchored annotations that cannot be relinked surface as "orphaned annotations" in the UI rather than being silently discarded.
@@ -857,13 +862,13 @@ Local backend configuration covers:
 - source locations to scan (per tool, per collector)
 - registered remote collectors with their assigned `collector_id`/`machine_id` and binding state (v1 does not issue collector credentials)
 - LLM provider, model id, API credential handle, concurrency, token budget
-- egress policy (first-run consent, per-tool opt-out, per-project opt-out, per-session do-not-send)
+- egress policy: first-run consent state, per-tool opt-outs, per-project opt-outs. The per-session opt-out is **not** stored here — it lives on each `sessions` row as the `do_not_send_to_llm` column (see §5 and §"Storage Layout")
 - raw-store free-disk-space alert floor (non-destructive; v1 does not expose a raw-eviction cap — see §4 Retention)
-- retention caps for the regenerable derived caches (summary cache, distill cache)
+- retention cap for the Summary Cache (the only regenerable derived cache subject to auto-eviction in v1; persisted `distill_runs` are durable historical records and are not auto-evicted — see §"Storage Layout")
 - project-alias map
 - UI/API auth settings
 
-Configuration is user-editable and versioned (small `config_version` counter) so derived components can react to changes without restart. Secret-bearing entries (credentials) are stored in the OS-appropriate secret backend when available; the configuration store holds only handles to them.
+The Configuration Store is a logical grouping that spans two physical tables in the Metadata DB (see §"Storage Layout"): `config` holds every versioned key/value entry in the bullet list above (source locations, LLM provider, egress policy, raw-store alert floor, retention cap, project-alias map, UI/API auth settings) except collector registration/binding state, which lives in `collectors` (one row per registered collector). The `config_version` counter applies only to `config` entries so derived components can react to configuration changes without restart; `collectors` rows carry their own registration timestamps and state transitions (see §"Collector Liveness and Removal"). Secret-bearing entries (credentials) are stored in the OS-appropriate secret backend when available; the `config` table holds only handles to them.
 
 ### 13. Job Queue
 
@@ -873,12 +878,13 @@ Expensive derived work runs asynchronously via a local job queue:
 - distill runs
 - ingest batches when a collector hands over many sessions at once
 - reindex jobs after a `derivation_version` bump
+- `blob_gc` — background removal of blobs whose `raw_blobs` row has been marked `garbage` because its `refcount` reached zero through a replace-on-sync dereference. The job calls `BlobStore.delete(content_addr)` on the underlying blob and removes the corresponding `raw_blobs` row (Purge uses synchronous blob deletion instead — see §"Storage Layout" → "Cross-Store Reconciliation")
 
 The queue is persistent (surviving backend restart) and exposes status to the UI so users see progress rather than silent processing. A restart replays any jobs that were in `running` or `pending` state; checkpointed jobs resume from their last checkpoint.
 
-Concrete v1 choice: the queue persists jobs in the same SQLite database that holds the shared session records. Each job row carries `(id, kind, payload_json, status, attempts, scheduled_at, checkpoint_json)` and is worked by a single-process worker pool. Priority between job kinds is FIFO within a kind; concurrency is governed by the LLM rate limiter (§7) for summary and distill jobs and by an internal bound for ingest/reindex jobs. Advanced scheduling (fairness, weighted priority) is out of scope for v1.
+Concrete v1 choice: the queue persists jobs in the same SQLite database that holds the shared session records (the `jobs` table — see §"Storage Layout"). Each job row carries `(job_id, kind, payload_json, status, attempts, scheduled_at, checkpoint_json, session_uid)` (the trailing `session_uid` is nullable and is set on jobs scoped to one session) and is worked by a single-process worker pool. Priority: `blob_gc` runs at low priority on a single worker; other kinds are FIFO within a kind; concurrency is governed by the LLM rate limiter (§7) for summary and distill jobs and by an internal bound for ingest/reindex/blob_gc jobs. Advanced scheduling (fairness, weighted priority) is out of scope for v1.
 
-On resume, any job whose target `session_uid` has an active purge tombstone transitions to `cancelled` with reason `target_purged`; partial findings or partial summary output for that target are dropped.
+Purge interaction: when a session is purged, the cascade in §"Storage Layout" → "How Derived Data Connects to a Session" deletes every `jobs` row whose `session_uid` matches the purged session inside the same SQLite transaction that destroys the metadata. There is therefore no surviving job-row to "cancel after the fact"; if a worker is mid-execution on such a job at the moment of Purge, it observes the row's disappearance on its next checkpoint write and aborts cleanly. The session's `summary_cache` rows and its `distill_finding_citations` rows are cascaded away atomically; any in-flight per-block summary output or per-session citation for that session is therefore dropped. Already-persisted `distill_findings` bodies for completed findings remain on disk — only their citations to the purged session disappear, and a finding that loses all its citations is rendered with a "cited sessions redacted" note.
 
 ### 14. Security and Privacy
 
@@ -1033,7 +1039,7 @@ Additional filters that layer on top of the shared record when they are useful (
 - `has_subagent_sidecars`
 - `quality_mark` (session-level `successful` / `reusable` / `problematic` marker, §5)
 
-Filters combine conjunctively by default; Search (§10) can layer a free-text query on top of a filter combination. A filter combination plus an optional query can be saved as a named **lens** (stored in the User Annotations Store).
+Filters combine conjunctively by default; Search (§10) can layer a free-text query on top of a filter combination. A filter combination plus an optional query can be saved as a named **lens** (persisted in the Metadata DB's `lenses` table; see §"Storage Layout").
 
 ## Session Lifecycle
 
@@ -1049,7 +1055,7 @@ The lifecycle for a session is:
 8. optionally archived, bookmarked, or annotated by the user
 9. updated in place when the collector reports a changed source session (`sync_status=updating` → `fresh`)
 10. optionally marked `orphaned_source` if the collector reports the source file no longer exists
-11. optionally purged by the user, which destroys raw + derived + annotations and writes a tombstone
+11. optionally purged by the user, which destroys the raw payload, the `sessions` row (cascading to session-scoped derived rows — summary cache entries, annotation rows, queued jobs — and to the session's citation rows in `distill_finding_citations`), explicitly deletes the session's `fts_sessions` search-index entries, and writes a tombstone. Persisted `distill_runs` headers and `distill_findings` bodies are retained as historical records; only the purged session's citation rows inside `distill_finding_citations` cascade away. A finding that loses all its citations remains on disk and is rendered with a "cited sessions redacted" note (see §"Storage Layout").
 
 ## Update Semantics
 
@@ -1058,11 +1064,11 @@ V1 does not keep historical versions of a session.
 When a session changes:
 
 - the owning collector detects the update via its local sync state and resubmits the latest known state
-- the Ingest Service verifies identity, compares `source_fingerprint`, and if newer writes a transactional update to raw + index + cache invalidations
+- the Ingest Service verifies identity, compares `source_fingerprint`, and if newer applies the same two-step commit described in §3 and §"Storage Layout" → "Cross-Store Reconciliation": `BlobStore.put` for the new payload, followed by one SQLite transaction that updates the shared record, bumps/decrements `raw_blobs.refcount`, upserts the session's `fts_sessions` row, and marks affected summary cache rows as `stale`. The previous blob is eligible for asynchronous `blob_gc` once its refcount reaches zero. Persisted `distill_runs` rows are retained as historical results; because each run's `selection_fingerprint` includes the selection's `source_updated_at` values (§8), a post-update distill request produces a different fingerprint and triggers a fresh run without modifying the historical entries.
 - derived metadata is recomputed as needed; `derivation_version` on the record is bumped to the current Indexer version
 - summary cache entries are relinked using the three-step strategy in §7 with the content-hash guardrail; unlinkable entries are marked `stale`
 - stale summary caches are invalidated and lazily regenerated the next time a block is viewed
-- distill run cache entries keyed on the selection that included this session are invalidated so a next run sees the updated state
+- persisted `distill_runs` from before the update remain on disk as historical results; the next distill request over a selection containing this session produces a different `selection_fingerprint` (because `source_updated_at` changed, §8) and therefore a fresh run — no explicit invalidation is needed
 
 Collectors may resend the same session state multiple times. The ingest path is idempotent on identical fingerprints.
 
@@ -1099,16 +1105,146 @@ Search is owned by the Search Index and Query component (§10). It operates over
 
 - raw session text where extraction is possible
 - shared metadata fields
-- derived fields such as tags, task type, files mentioned, or machine label
+- user-authored per-session tags from `annotations_tags`
+- Indexer-derived fields such as task type, files mentioned, or machine label
 - cached summaries in a later iteration (v1 does not index `summary_text`)
 
 Search indexing does not require a normalized universal transcript format. It must update incrementally per-session (cost proportional to session size, not to corpus size).
 
+## Storage Layout
+
+The portal uses two physical stores in v1, separated by data shape and access pattern:
+
+1. **BlobStore** — opaque, append-mostly raw session payloads accessed by content address.
+2. **Metadata Database** — small, transactional, queried records: shared session records, derived caches, annotations, jobs, search index.
+
+This split exists because the two have different costs. Blobs are large (Claude and Codex sessions can reach tens of MB) and benefit from streaming I/O and easy garbage collection. Metadata is small but transactional, queried with joins, and full-text searched.
+
+### BlobStore Abstraction
+
+All access to raw session payloads goes through a single `BlobStore` interface so the v1 local-filesystem implementation can be replaced by an object-store implementation (S3, MinIO, GCS, etc.) without touching the Ingest Service, Renderer, Summary Service, or Distill Analyzer.
+
+Interface (logical):
+
+```
+BlobStore {
+  put(content_addr, stream)   -> commits the blob; idempotent on identical content_addr
+  get(content_addr)           -> bytes
+  get_stream(content_addr)    -> chunked stream (for large blobs)
+  exists(content_addr)        -> bool
+  stat(content_addr)          -> { size, created_at }
+  delete(content_addr)        -> removes the blob; called only after refcount reaches zero
+}
+```
+
+Rules common to every implementation:
+
+- The address is the SHA-256 of the stored bytes (`sha256:<hex>`); `put` is therefore idempotent — re-storing the same content is a no-op.
+- `put` is streaming-capable so the Ingest Service never has to buffer a full payload in memory.
+- Refcounts are tracked in the Metadata Database (`raw_blobs` table), not in the BlobStore. The store has no knowledge of which sessions point at a blob; it only stores and serves bytes by address. `delete` is invoked only after the metadata layer has driven a blob's refcount to zero.
+- Failure modes are explicit: `get` on a missing blob returns a structured `BlobMissing` error rather than silently empty content.
+- The interface is the only seam through which raw payloads enter or leave durable storage. No component may bypass it (analogous to the `LLMClient` rule in §15).
+
+#### v1 Implementation: `LocalFsBlobStore`
+
+- Layout: `$XDG_DATA_HOME/distill-portal/blobs/<aa>/<bb>/<sha256>` where `<aa>` and `<bb>` are the first two pairs of hex digits of the address (two-level fanout keeps any single directory under tens of thousands of entries).
+- `put` writes to a temp file in the same directory and `rename(2)`s into place atomically; partial temp files are detectable on restart and removed by a startup sweep.
+- `get_stream` opens the file read-only and returns a chunked iterator.
+- `delete` removes the file; empty fanout directories are pruned lazily.
+- File mode is `0600`; directory mode is `0700`. OS-level filesystem permissions are the only access control at this layer (consistent with §14 "Trust Model").
+
+#### Future Implementation: Object-store Backend (deferred)
+
+A `S3BlobStore` (or compatible — MinIO, GCS, R2) is anticipated for v1.x deployments that want centralized storage. The interface above is the contract: `put`/`get`/`exists`/`stat`/`delete` map directly to object operations with `<sha256>` as the object key. The Metadata Database remains local — only the blob layer moves to the object store. Cross-store reconciliation (below) is unchanged because the metadata write is the commit point in either case. Adding an object-store backend is tracked under "Open Architecture Decisions."
+
+### Metadata Database
+
+A single SQLite database file (`$XDG_DATA_HOME/distill-portal/distill.db`) holds all SQLite-managed application state (shared session records, derived caches, annotations, jobs, FTS index, configuration). Two small exceptions live outside it: secret-bearing credentials referenced from the `config` table are stored in the OS-appropriate secret backend when available (see §12), and the UI/API loopback bearer token lives in a mode-0600 state file under `$XDG_STATE_HOME/distill-portal/` (see §14 "UI / API Authentication"). SQLite was chosen because v1 is single-user, single-process, and benefits from one-file backup, ACID transactions across components, and built-in FTS5 for full-text search.
+
+Operating mode:
+
+- **WAL journal mode** so the UI can read while the ingest worker writes.
+- **`foreign_keys = ON`** so cascade rules are enforced.
+- **`synchronous = NORMAL`** under WAL (safe with WAL; faster than `FULL`).
+- A single writer thread inside the backend serializes write transactions; readers are unrestricted.
+
+#### Logical Tables
+
+Names are illustrative; concrete column lists live with the migrations (see §"Schema Migration").
+
+| Table | Purpose | Key | Notable references |
+| --- | --- | --- | --- |
+| `sessions` | Shared session record (§5) | `session_uid` | `raw_ref` → `raw_blobs.content_addr` |
+| `raw_blobs` | Refcount + size for every blob in the BlobStore | `content_addr` | — |
+| `collectors` | Registered collectors with `machine_id`, last heartbeat, state | `collector_id` | — |
+| `tombstones` | Purged `(tool, source_session_id)` pairs (§4) | `(tool, source_session_id)` | — |
+| `summary_cache` | One row per skim block summary (§7) | `(session_uid, block_key)` | `session_uid` → `sessions` (cascade on Purge) |
+| `distill_runs` | Persisted distill run header (§8) | `run_id` | — |
+| `distill_findings` | One row per finding within a run, holding `headline`, `explanation`, `category`, `confidence_note`, and `dismissed` flag | `(run_id, finding_id)` | `run_id` → `distill_runs` (cascade) |
+| `distill_finding_citations` | One row per citation a finding makes; a finding that cites N sessions / blocks / events has N rows. `block_key` and `raw_event_id` are nullable to support session-level, block-level, and raw-event-level citations respectively | `(run_id, finding_id, citation_idx)` | `(run_id, finding_id)` → `distill_findings` (cascade); `session_uid` → `sessions` (cascade on Purge) |
+| `annotations_tags` | Per-session tag rows | `(session_uid, tag)` | `session_uid` → `sessions` (cascade) |
+| `annotations_notes` | Session-level and block-level notes; `block_key` nullable | `note_id` | `session_uid` → `sessions` (cascade) |
+| `annotations_highlights` | Range highlights with quality label (§11) | `highlight_id` | `session_uid` → `sessions` (cascade) |
+| `skill_drafts` | Skill-draft Markdown documents | `draft_id` | — |
+| `skill_draft_citations` | Citations inside a draft (may be tombstoned post-purge, §11) | `(draft_id, citation_id)` | `draft_id` → `skill_drafts` (cascade) |
+| `lenses` | Saved filter combinations | `lens_id` | — |
+| `jobs` | Persistent job queue (§13) | `job_id` | optional `session_uid` → `sessions` (cascade) so Purge removes the session's queued jobs atomically |
+| `config` | Versioned key/value config (§12); secret values are handles into the OS secret backend | `key` | — |
+| `migrations` | Applied-migration ledger | `version` | — |
+| `fts_sessions` | FTS5 virtual table indexing raw text + `annotations_tags` + Indexer-derived metadata (§10); the `session_uid` (opaque string) is stored as an unindexed FTS column that resolves each hit back to a `sessions` row | FTS5 `rowid` (integer, internal) | side-linked to `sessions.session_uid` via the unindexed column |
+
+#### How Derived Data Connects to a Session
+
+Every session-scoped derived row carries `session_uid` (and, for block-level rows, `block_key`; for raw-event-level rows, `raw_event_id`) as its link back to the originating session. Selection-scoped artifacts (`distill_runs`, their `distill_findings`, and `distill_finding_citations`) are covered separately: `distill_runs` is keyed on `run_id` and holds a `selection_fingerprint` that identifies the input set rather than a single session; `distill_findings` holds each finding's body (headline, explanation, category, confidence note, dismissal flag) per `(run_id, finding_id)`; `distill_finding_citations` carries one `session_uid` per citation row (with nullable `block_key` and `raw_event_id`) and cascades on Purge of that session (which effectively removes that citation from every historical run that cited it, while leaving both the run header and the finding body intact — a finding with all its citations purged still exists and is rendered with a "cited sessions redacted" note). The session-scoped user state lives directly on the `sessions` row (`archived`, `bookmarked`, `quality_mark`, `do_not_send_to_llm` — see §5 field ownership), so Purge removes it automatically when the row is deleted. Block-anchored and list-valued annotations live in their own tables (`annotations_tags`, `annotations_notes`, `annotations_highlights`) and reference `session_uid` with `ON DELETE CASCADE`. Cascading delete on the `sessions` row — driven by Purge (§4) — removes summaries, distill citation rows (in `distill_finding_citations`), annotation rows, and queued jobs for that session in a single SQLite transaction. The `fts_sessions` virtual table is not FK-linked (FTS5 does not support FKs), so the same Purge transaction explicitly issues `DELETE FROM fts_sessions WHERE session_uid = ?` so the search-index entries for the purged session are removed atomically with the rest. Skill-draft citations are an exception: their parent draft is user-authored content that must survive Purge, so the foreign key is `ON DELETE SET TOMBSTONE` (a marker value in the citation row) rather than cascade. The relink rules in §7 (summary cache) and §11 (annotations) operate inside the same database, so a sync update is a single transaction across `sessions`, `summary_cache`, `fts_sessions`, and the annotation tables.
+
+#### Cross-Component Atomicity
+
+The Ingest Service's transactional boundary (§3) is implemented as one SQLite transaction that:
+
+1. inserts or updates the `sessions` row (and bumps `raw_blobs.refcount` for the new `content_addr`, decrementing the old one if any);
+2. upserts the corresponding `fts_sessions` row so the Search Index stays synchronous with the shared record (§10);
+3. marks relevant `summary_cache` rows as `stale`. Persisted `distill_runs` rows are **not** modified on ingest — they remain on disk as historical results; because §8's `selection_fingerprint` includes every selected session's current `source_updated_at`, a post-update distill request carries a new fingerprint and therefore selects a different historical run record (rather than reusing the older one). No separate "invalidated" state is added to `distill_runs`.
+4. enqueues follow-up jobs in `jobs`.
+
+Because all three live in the same database and the same transaction, partial commits are impossible. The BlobStore-side write happens before the transaction (see below) and is reconciled separately on crash.
+
+### Cross-Store Reconciliation
+
+Because the BlobStore and the Metadata DB are physically separate, ingest is a two-step commit:
+
+1. `BlobStore.put(content_addr, stream)` — durable on success.
+2. SQLite transaction recording the new `content_addr`, updating `sessions`, and bumping the refcount.
+
+Failure modes:
+
+- **Step 1 succeeds, step 2 fails.** The blob exists with no metadata reference. The startup reconciliation sweep walks the BlobStore, looks up each `content_addr` in `raw_blobs`, and deletes orphans. (For an `S3BlobStore` this sweep can be expensive; v1 commits to it being correct, not fast.)
+- **Step 1 fails.** Nothing changes. The collector retries.
+- **Step 2 succeeds, then the session is later updated (replace-on-sync).** The previous `raw_ref` is decremented inside the metadata transaction. If the refcount reaches zero, the `raw_blobs` row is marked `garbage` and a low-priority `blob_gc` job (§13) calls `BlobStore.delete` asynchronously. Asynchronous deletion is acceptable here because the bytes are no longer reachable from any surviving session and are not the target of a redaction request.
+- **Step 2 succeeds, then the user invokes Purge.** Purge is the redaction path and must not leave the bytes on disk after it returns. The Purge sequence (§4) is therefore two ordered steps: (a) one SQLite transaction that deletes the `sessions` row, removes the `raw_blobs` row when the refcount reaches zero, and writes the tombstone; (b) **synchronous** `BlobStore.delete(content_addr)` immediately after the transaction commits, before reporting success to the user. Any crash between (a) and (b) leaves an orphan blob that this section's reconciliation sweep removes on next startup — it never leaves a dangling `raw_ref`. The `blob_gc` job kind is **not** used on the Purge path.
+
+Refcount rules: every `raw_blobs` row has a non-negative `refcount`. `sessions.raw_ref` is the only thing that holds a reference in v1. On replace-on-sync the previous `raw_ref` is decremented and the new one is incremented inside the same transaction. When `refcount` hits zero through replace-on-sync, the row is marked `garbage` and a `blob_gc` job is scheduled. When `refcount` hits zero through Purge, the row and the underlying blob are deleted synchronously (no `garbage` marking, no `blob_gc` job).
+
+### Filesystem Layout Summary
+
+```
+$XDG_DATA_HOME/distill-portal/
+├── distill.db          # SQLite metadata, derived caches, FTS, jobs
+├── distill.db-wal      # SQLite WAL (transient)
+├── distill.db-shm      # SQLite shared memory (transient)
+└── blobs/
+    └── <aa>/<bb>/<sha256>   # raw session JSONL, content-addressed
+$XDG_STATE_HOME/distill-portal/
+└── ui_token            # mode-0600 UI/API bearer token (§14)
+```
+
+The user's local-filesystem permissions on `$XDG_DATA_HOME/distill-portal/` are the only at-rest protection v1 provides; full-disk encryption is the recommended defense (§14 "Trust Model").
+
 ## Backup and Retention
 
-- The Raw Store is the authoritative artifact. Summary cache, distill cache, and search index are all regenerable from raw plus configuration.
-- v1 does not run automatic backups. A user-initiated backup is a filesystem copy of the backend data directory; users should be aware the backup file contains raw transcripts in the clear and should apply their preferred encryption to the backup target.
-- A Disaster Recovery path is: restore the data directory; on startup the backend verifies shared-record integrity, replays any incomplete ingest transactions, and lazily regenerates derived caches on demand.
+- The Raw Store is the authoritative artifact for session content. The Summary Cache is regenerable from raw plus configuration. The Search Index (`fts_sessions`) is regenerable from raw content plus persisted metadata (Indexer-derived fields, user-authored `annotations_tags`) — it is not rebuildable from raw alone. Persisted `distill_runs` are durable historical records (§8), not a regenerable cache, and must be backed up with the metadata DB.
+- v1 does not run automatic backups. A user-initiated backup is a snapshot of two paths together: `$XDG_DATA_HOME/distill-portal/distill.db` (use SQLite's online backup API or copy after `PRAGMA wal_checkpoint(FULL)` for a consistent snapshot) and `$XDG_DATA_HOME/distill-portal/blobs/`. Both must be backed up together — restoring one without the other looks like data corruption (orphan blobs or `BlobMissing` errors). Two pieces of state intentionally live outside this recovery set and are **not** restored by the backup: (a) secret-bearing credentials (LLM API keys, etc.) held in the OS secret backend — the user must re-enter these after a restore, and the `config` table's credential handles still resolve once they do; (b) the UI/API loopback bearer token in `$XDG_STATE_HOME/distill-portal/` — the backend regenerates this file on first launch if missing. Users should be aware the backup contains raw transcripts in the clear and should apply their preferred encryption to the backup target.
+- A Disaster Recovery path is: restore the two paths above; on startup SQLite's WAL replay rolls back any uncommitted metadata transaction (so partial metadata writes leave no observable state); the backend then runs the orphan-blob reconciliation sweep described in §"Storage Layout" (any blob in the BlobStore whose `content_addr` has no reference in `raw_blobs` is deleted). Missing blobs — `sessions` rows whose `raw_ref` no longer resolves in the BlobStore — are detected lazily at read time via `BlobMissing`; the UI then offers the same "archive / keep / purge" choice as `orphaned_source` sessions in §"Deleted Source Policy". Derived caches are regenerated lazily on demand. There is no separate ingest journal — the SQLite WAL is the only journal, and any payload that did not commit on the metadata side is re-fetched by the collector via the cursor in §1.
+- For an object-store BlobStore (deferred), the user's existing object-store backup tooling and the local `distill.db` snapshot together form the recovery set; the same consistency rule applies.
 
 ## Schema Migration
 
@@ -1167,13 +1303,14 @@ For future reference, these decisions were resolved during the initial design re
 - **LLM egress default:** tiered — summaries opt-out after one-time consent; distill opt-in with a pre-run confirmation per run.
 - **Cross-machine dedup policy:** simple `(tool, source_session_id)` last-write-wins. Full provenance lists and conflict-resolution UI are out of scope for v1; both duplicate records, if they ever appear, remain visible in the UI as-is.
 - **Claude subagent transcripts:** not ingested in v1. The adapter records `has_subagent_sidecars` as a boolean hint for future retrofit.
-- **Distill result persistence:** persisted per `selection_fingerprint`, where the fingerprint includes the analyzer mode and the active prompt/model versions so different modes or versions never share a cache entry.
+- **Distill result persistence:** each run is persisted as a durable historical record keyed by `run_id` and looked up by `selection_fingerprint` (not a cache — see §"Storage Layout"). The fingerprint includes the analyzer mode and the active prompt/model versions so different modes or versions never share a historical run record.
 - **Summary auto-regeneration on source update:** mark stale, regenerate lazily on next view.
 - **UI/API authentication:** bearer token in a mode-0600 state file, with `Origin`/`Host` checks.
 - **Secret-scrubbing location:** at egress only; raw fidelity on disk preserved.
 - **Collector credential:** none in v1; backend binds registration to the source interface and issues `machine_id`.
 - **Raw retention:** unbounded for v1; reclaiming space requires explicit Purge. Automatic eviction under a storage cap is deferred (see "Open Architecture Decisions").
 - **Collector deregistration visibility:** sessions from a `removed` collector remain visible by default; only `archived` hides sessions by default. The session detail view badges the originating collector's removed state.
+- **Storage layout:** raw payloads live behind a `BlobStore` abstraction (v1: `LocalFsBlobStore` writing content-addressed files under `$XDG_DATA_HOME/distill-portal/blobs/`); all SQLite-managed application state — shared session records, Summary Cache, persisted distill runs, annotations, jobs, FTS index, configuration — lives in a single SQLite database (`distill.db`). Two small exceptions live outside the DB: secret-bearing credentials referenced from `config` are stored in the OS-appropriate secret backend when available (§12), and the UI/API loopback bearer token lives in a mode-0600 state file under `$XDG_STATE_HOME/distill-portal/` (§14). See §"Storage Layout" for the interface, schema, and reconciliation rules.
 
 ## Open Architecture Decisions (deferred)
 
@@ -1186,6 +1323,7 @@ These remain open for later stakeholder iteration. They are not blocking for v1.
 5. **Log and telemetry opt-in.** Whether to ship an opt-in local log viewer and an opt-in aggregate telemetry channel (no raw content) in v1.x.
 6. **Search indexing of cached summaries.** When to add `summary_text` to the search index; this improves skim-oriented search but doubles index size for sessions that have been summarized.
 7. **Configurable raw-eviction policy.** Whether to add a user-configurable raw-storage cap with automatic FIFO eviction of archived (then non-bookmarked) sessions. Adding it would require a corresponding update to PRD's "durable local storage" guarantee and would introduce a third destructive lifecycle alongside Archive and Purge.
+8. **Object-store BlobStore.** Which object-store backends to ship first (S3, MinIO, GCS, R2), and whether the Metadata DB should follow (e.g., to a hosted SQLite-compatible store) once the blob layer moves off-disk.
 
 ## Boundary Between PRD and Architecture
 
@@ -1203,7 +1341,7 @@ This architecture document defines:
 - adapter boundaries and per-tool identity/block rules
 - the shared session record, field ownership, and derivation and schema versioning
 - collector deployment modes, liveness, and removal policy
-- caching, invalidation, and relinking behavior for summaries and distill runs
+- caching, invalidation, and relinking behavior for summaries; durable-run persistence and selection-fingerprint semantics for distill runs (no "invalidated" state, no relink — a new fingerprint produces a fresh run)
 - replace-on-sync semantics, deleted/moved/edited source policies, and purge tombstones
 - security posture: collector auth, transport, UI/API auth, scrubbing, at-rest policy, logs/telemetry, backup/export hygiene
 - observability, job queue, search index, user annotations store, configuration store
