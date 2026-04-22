@@ -9,7 +9,7 @@
 - Prompt pack: `phase1-coordinator-prompt.md`
 - Open work:
   - optional live smoke run outside the current sandbox to verify loopback port binding with real local session roots
-  - decide whether to commit/freeze Phase 1 and begin Phase 2 planning
+  - decide whether to freeze Phase 1 and begin implementing `working/phase-2.md`
 
 ## Source-of-Truth Reference
 
@@ -25,7 +25,7 @@
 - Acceptance:
   - `Cargo.toml`, `src/**`, and `tests/**` implement the Phase 1 local raw-session store described in `working/phase-1.md`
   - spec-critical behaviors are covered by passing automated verification
-  - `phase-1.progress.md` reflects the final delivered state, evidence, and remaining risks
+  - `progress/phase-1.progress.md` reflects the final delivered state, evidence, and remaining risks
 
 ## Remaining Milestones
 
@@ -40,7 +40,7 @@
 ## Completed Work Log
 
 - 2026-04-21: created `working/phase-1.md` defining the Phase 1 local raw session store design
-- 2026-04-22: created initial `phase1-coordinator-prompt.md` and `phase-1.progress.md`
+- 2026-04-22: created initial `phase1-coordinator-prompt.md` and `progress/phase-1.progress.md`
 - 2026-04-22: completed first prompt review round with planner-oriented subagent, reviewer-oriented subagent, and Claude CLI; revised prompt pack to add stronger missing-evidence rules, stronger developer evidence handoff, durable milestone tracking, explicit out-of-scope guardrails, and stricter convergence criteria
 - 2026-04-22: completed final prompt review round; reviewer outcomes converged at `approved` or `approved with nits` with no unresolved `Missing Evidence` and no unresolved `Required Changes`
 - 2026-04-22: clarified the prompt hierarchy so the human talks only to the coordinator, while planner/reviewer/developer/Claude templates are explicitly coordinator-owned delegation templates
@@ -52,6 +52,7 @@
 - 2026-04-22: revised the Phase 1 inspection surface to match the updated product requirement: discovery is now preview-first instead of auto-import, `/` serves a minimal webpage, `/api/v1/source-sessions` lists discovered sessions with `not_stored` / `up_to_date` / `outdated` status, `/api/v1/source-sessions/import` saves selected sessions, and stored-session views report `up_to_date` / `outdated` / `source_missing`
 - 2026-04-22: updated `working/phase-1.md` so the source-of-truth document matches the delivered selective-save HTTP surface
 - 2026-04-22: expanded automated verification to 9 passing tests covering HTML surface render, discovery without auto-import, explicit save, stored-session freshness status, re-save after source change, incomplete trailing-line handling with explicit re-save, orphan/temp blob cleanup, and restart persistence
+- 2026-04-22: created `working/phase-2.md` and `progress/phase-2.progress.md` to capture the planned workspace split, frontend/backend separation, explicit component grouping, and developer-documentation goals for the next phase
 
 ## Review Log
 
@@ -68,8 +69,8 @@
 - 2026-04-22: kickoff implementation reviewer found the first chunk would be too broad if it mixed storage, adapters, and HTTP without tests; this directly shaped the chunk ordering and verification focus
 - 2026-04-22: one developer subagent returned analysis only and no code; one developer subagent produced the `src/collect/**` implementation seam but not tests or verification, which the coordinator completed and verified locally
 - 2026-04-22: coordinator direct review against `working/phase-1.md`, the final code, and passing `cargo test` found no blocking spec mismatches; the only remaining note is the sandbox-specific live bind failure during `cargo run`
-- 2026-04-22: final implementation reviewer initially returned `needs changes`; the only blocking finding was that `phase-1.progress.md` still described the repo as in-progress instead of reflecting the implemented workspace and passing test suite
-- 2026-04-22: coordinator updated `phase-1.progress.md` to match the delivered code, milestones, and verification evidence
+- 2026-04-22: final implementation reviewer initially returned `needs changes`; the only blocking finding was that `progress/phase-1.progress.md` still described the repo as in-progress instead of reflecting the implemented workspace and passing test suite
+- 2026-04-22: coordinator updated `progress/phase-1.progress.md` to match the delivered code, milestones, and verification evidence
 - 2026-04-22: final implementation reviewer re-checked the updated progress log and returned `approved`; no findings, no missing evidence, and no required changes
 - 2026-04-22: after the requirement changed from auto-import to user-selected save, the coordinator updated the implementation, tests, and `working/phase-1.md` together so the inspection surface and the source of truth stayed aligned
 
@@ -81,4 +82,4 @@
 
 ## Next Recommended Task
 
-- Run `cargo run` from a normal local shell outside the current sandbox, open `/` in a browser, verify the selective-save workflow against the real `~/.claude/projects` and `~/.codex/sessions` trees, then decide whether to freeze Phase 1 and start Phase 2 planning.
+- Run `cargo run` from a normal local shell outside the current sandbox, open `/` in a browser, verify the selective-save workflow against the real `~/.claude/projects` and `~/.codex/sessions` trees, then begin Phase 2 Milestone 1 from `working/phase-2.md`.
