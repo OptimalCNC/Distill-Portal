@@ -1,0 +1,4 @@
+{"timestamp":"2026-04-11T11:05:37.639Z","type":"session_meta","payload":{"id":"019d7c37-119c-7740-96b0-84f86262cf05","timestamp":"2026-04-11T11:04:37.030Z","cwd":"/home/huwei/ai_codings/oh-my-codex","originator":"codex-tui","cli_version":"0.120.0","source":"cli","model_provider":"OpenAI"}}
+{"timestamp":"2026-04-11T11:05:37.642Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Introduce omx and its subcommands."}]}}
+{"timestamp":"2026-04-11T11:05:37.642Z","type":"event_msg","payload":{"type":"user_message","message":"Introduce omx and its subcommands.","images":[],"local_images":[],"text_elements":[]}}
+{"timestamp":"2026-04-11T11:05:37.700Z","type":"turn_context","payload":{"turn_id":"019d0472-50c5-7aa2-9566-f339dd64a406","cwd":"/home/huwei/ai_codings/oh-my-codex","current_date":"2026-04-11","timezone":"Asia/Shanghai"}}
