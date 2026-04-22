@@ -2,11 +2,11 @@
 
 ## Source-of-Truth Reference
 
-- Implementation spec: `working/phase-3.md` (currently untracked in git; present in the working tree as of 2026-04-23)
+- Implementation spec: `working/phase-3.md` (committed at `bae99d010a1657e9fb351c4fdd3a75954b6d7414` on `main`, 2026-04-23)
 - Coordinator operating prompt: `coordinator-prompt.md`
 - Architecture vocabulary: `ARCHITECTURE.md`
 - Prior phase log for context: `progress/phase-2.progress.md`
-- Revision signal: `git rev-parse HEAD` = `ee9e6ead0f55619cacce868beec919b45fff36ef` at Phase 3 start (2026-04-23); `working/phase-3.md` is untracked on top of this HEAD
+- Revision signal: Phase 3 frozen source-of-truth commit is `bae99d010a1657e9fb351c4fdd3a75954b6d7414` on `main` (2026-04-23); pre-Phase-3 HEAD was `ee9e6ead0f55619cacce868beec919b45fff36ef`
 
 ## Current Snapshot
 
@@ -24,13 +24,13 @@
 
 ## Active Plan
 
-- Chunk: none yet (planner output received; awaiting human approval to queue Chunk A and Chunk B)
-- Owner: none
-- Status: planner proposal drafted 2026-04-23; three chunks surfaced (see Review Log entry below); human input requested on branch strategy, codegen tool pre-choice, and whether to bundle Chunk C (dev-topology docs) with Milestone 1
-- Proposed next chunk once approved:
-  - Chunk A (coordinator): commit `working/phase-3.md` so reviewers have a stable source-of-truth SHA; update this log with the resulting hash
-  - Chunk B (developer): Milestone 1 core — pick Rust-to-TypeScript codegen tool (ts-rs vs typeshare), wire it into `components/ui-api-contracts` behind a cargo feature, check in deterministic generated TS files for the full inspection-surface contract set, add a staleness-detection test, update `components/ui-api-contracts/README.md` + `docs/dev-commands.md` + `docs/dependency-rules.md` "Contract Handling"
-  - Chunk C (optional, coordinator or developer): record the backend-4000 / frontend-4100 dev topology and `/api/v1/**` dev-proxy intent in `docs/dev-commands.md` before Milestone 2 begins
+- Chunk: Chunk B — Milestone 1 core: pick Rust-to-TypeScript codegen tool and prove it generates the current contract types
+- Owner: pending developer assignment (developer Claude subagent)
+- Status: Chunk A complete (spec + progress log committed at `bae99d0`); Chunk B about to be dispatched
+- Human decisions recorded 2026-04-23:
+  - Phase 3 commits land directly on `main` (same pattern as Phase 2)
+  - Codegen tool choice is delegated to the developer; developer must justify ts-rs vs typeshare (or a named alternative) in `components/ui-api-contracts/README.md`
+  - Chunk C (dev-topology docs) deferred until Milestone 2 so the docs are validated against running Vite/Bun config
 
 ## Remaining Milestones
 
@@ -53,6 +53,7 @@
 ## Completed Work Log
 
 - 2026-04-23: created `progress/phase-3.progress.md`; loaded `working/phase-3.md` and `coordinator-prompt.md`; confirmed `codex exec` and `claude -p` CLI availability on this host
+- 2026-04-23: Chunk A complete — committed `working/phase-3.md` and `progress/phase-3.progress.md` as `bae99d010a1657e9fb351c4fdd3a75954b6d7414` on `main` ("Add Phase 3 planning doc and bootstrap progress log"); this fixes the source-of-truth SHA all Phase 3 reviewers will cite
 
 ## Review Log
 
@@ -74,10 +75,10 @@
 
 ## Open Risks / Open Questions
 
-- `working/phase-3.md` is untracked on top of HEAD `ee9e6ea`; should be committed before substantive work lands so reviewers have a stable source-of-truth reference
-- Contract generation tool choice (ts-rs vs typeshare vs another) is unresolved; planner must surface the tradeoff
-- Dev proxy + port choices (backend 4000, frontend 4100 per spec) need a decision point when Milestone 2 lands
+- Codegen tool choice (ts-rs vs typeshare vs alternative) is delegated to the developer; Chunk B evidence must include the tradeoff rationale and a demonstration that the chosen tool produces deterministic output for every inspection-surface contract type
+- Dev proxy + port choices (backend 4000, frontend 4100 per spec) remain a Milestone-2 decision point; deliberately not pre-committed in docs while the Bun skeleton is not yet in place
+- Generated TS output must not silently mutate wire shapes; backend-protection reviewer must confirm no `#[serde(...)]` attribute on any contract struct was changed, added, or removed, and that `cargo test -p distill-portal-backend --test http_api` + `cargo test -p distill-portal-e2e --test inspection_surface` still pass unmodified
 
 ## Next Recommended Task
 
-- Resolve three human-gated decisions (branch strategy for Phase 3 commits, ts-rs vs typeshare pre-choice, whether to bundle Chunk C with Milestone 1), then execute Chunk A (commit the spec), then assign Chunk B to a developer with the three-reviewer rule in force.
+- Dispatch Chunk B to a developer Claude subagent using the Developer Delegation Prompt Template. On the developer's completion claim, run the three-reviewer rule strictly: backend-protection reviewer first, then the normal reviewer Claude subagent and `codex exec` in parallel. Capture Codex stdout verbatim and log all three verdicts here.
