@@ -1,0 +1,8 @@
+[package]
+name = "distill-portal-configuration"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dirs = "6"
+thiserror = "2"

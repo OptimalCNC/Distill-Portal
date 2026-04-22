@@ -39,7 +39,7 @@ The frontend and backend must become separate Rust projects under different fold
 Phase 2 target:
 
 - `apps/backend` is the backend service
-  - owns JSON APIs
+  - owns machine-consumable HTTP APIs and raw-content download endpoints
   - owns application orchestration
   - owns storage, ingest, and scanning runtime wiring
   - does not render end-user HTML
@@ -171,7 +171,6 @@ Recommended target shape:
 │       └── src/
 ├── docs/
 │   ├── README.md
-│   ├── repo-map.md
 │   ├── dependency-rules.md
 │   ├── dev-commands.md
 │   ├── architecture/
@@ -212,7 +211,7 @@ Responsibilities:
 
 - start the backend process
 - wire component crates together
-- expose JSON APIs only
+- expose machine-consumable HTTP APIs and raw-content download without rendering end-user HTML
 - run polling and ingest orchestration
 
 ### Frontend App
@@ -369,9 +368,7 @@ Must answer:
 - where to start
 - which document is for repo structure, component ownership, features, and dev commands
 
-### 2. `docs/repo-map.md`
-
-A practical map of the repository.
+It also serves as the practical repo map of the repository.
 
 Must answer:
 
@@ -380,7 +377,7 @@ Must answer:
 - which crate is the backend
 - where implemented architecture components live
 
-### 3. `docs/dependency-rules.md`
+### 2. `docs/dependency-rules.md`
 
 Must describe:
 
@@ -389,7 +386,7 @@ Must describe:
 - how shared contract types are handled
 - which layers may talk to storage directly
 
-### 4. `docs/dev-commands.md`
+### 3. `docs/dev-commands.md`
 
 Must describe:
 
@@ -399,7 +396,7 @@ Must describe:
 - how to run tests by app and by component
 - workspace verification commands
 
-### 5. Component Docs
+### 4. Component Docs
 
 Each implemented component folder must include its own `README.md`.
 
@@ -413,7 +410,7 @@ Each component `README.md` must answer:
 - files developers should read before modifying behavior
 - tests covering that component
 
-### 6. Feature Docs
+### 5. Feature Docs
 
 At minimum, add:
 
@@ -429,7 +426,7 @@ Each feature doc must answer:
 - API endpoints involved
 - tests that cover the feature
 
-### 7. Developer Playbooks
+### 6. Developer Playbooks
 
 Add short playbooks such as:
 

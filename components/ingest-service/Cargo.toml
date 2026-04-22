@@ -1,0 +1,13 @@
+[package]
+name = "distill-portal-ingest-service"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+distill-portal-collector-runtime = { path = "../collector-runtime" }
+distill-portal-raw-session-store = { path = "../raw-session-store" }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+thiserror = "2"
+time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
+tracing = "0.1"
