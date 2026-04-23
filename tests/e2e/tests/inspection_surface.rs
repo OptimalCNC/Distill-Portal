@@ -9,7 +9,8 @@ use distill_portal_backend::App as BackendApp;
 use distill_portal_configuration::{BackendConfig, FrontendConfig};
 use distill_portal_frontend::App as FrontendApp;
 use distill_portal_ui_api_contracts::{
-    source_key, SessionSyncStatus, SourceSessionView, StoredSessionView, Tool,
+    source_key, ImportReport, ImportSourceSessionsRequest, SessionSyncStatus, SourceSessionView,
+    StoredSessionView, Tool,
 };
 use http_body_util::{BodyExt, Full};
 use hyper::{header::CONTENT_TYPE, Method, Request, StatusCode, Uri};
@@ -75,10 +76,9 @@ async fn inspection_surface_works_through_frontend_backend_http_boundary() {
     assert_eq!(backend_root, StatusCode::NOT_FOUND);
 
     let home = get_text(frontend_addr, "/").await;
-    assert!(home.contains("Distill Portal Phase 2"));
+    assert!(home.contains("Distill Portal"));
     assert!(home.contains("Source Sessions"));
     assert!(home.contains("Stored Sessions"));
-    assert!(home.contains("Save Selected Sessions"));
 
     let source_sessions: Vec<SourceSessionView> =
         get_json(frontend_addr, "/api/v1/source-sessions").await;
@@ -86,12 +86,16 @@ async fn inspection_surface_works_through_frontend_backend_http_boundary() {
     assert_eq!(source_sessions[0].status, SessionSyncStatus::NotStored);
 
     let key = source_key(Tool::ClaudeCode, CLAUDE_SESSION_ID);
-    post_form(
+    let import_report: ImportReport = post_json(
         frontend_addr,
-        "/import",
-        format!("session_key={}", encode_form_value(&key)),
+        "/api/v1/source-sessions/import",
+        &ImportSourceSessionsRequest {
+            session_keys: vec![key.clone()],
+        },
     )
     .await;
+    assert_eq!(import_report.requested_sessions, 1);
+    assert_eq!(import_report.inserted_sessions, 1);
 
     let stored_sessions: Vec<StoredSessionView> = get_json(frontend_addr, "/api/v1/sessions").await;
     assert_eq!(stored_sessions.len(), 1);
@@ -148,16 +152,22 @@ async fn get_json<T: serde::de::DeserializeOwned>(addr: SocketAddr, path: &str) 
     serde_json::from_slice(&body).unwrap()
 }
 
-async fn post_form(addr: SocketAddr, path: &str, body: String) {
-    let (status, _) = request(
+async fn post_json<Req, Res>(addr: SocketAddr, path: &str, body: &Req) -> Res
+where
+    Req: serde::Serialize,
+    Res: serde::de::DeserializeOwned,
+{
+    let payload = serde_json::to_vec(body).unwrap();
+    let (status, body) = request(
         addr,
         Method::POST,
         path,
-        Some(("application/x-www-form-urlencoded", body.into_bytes())),
-        Some(StatusCode::SEE_OTHER),
+        Some(("application/json", payload)),
+        Some(StatusCode::OK),
     )
     .await;
-    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(status, StatusCode::OK);
+    serde_json::from_slice(&body).unwrap()
 }
 
 async fn request(
@@ -208,6 +218,3 @@ fn seed_claude_source(base: &Path, bytes: &[u8]) -> PathBuf {
     claude_root
 }
 
-fn encode_form_value(value: &str) -> String {
-    value.replace(':', "%3A")
-}

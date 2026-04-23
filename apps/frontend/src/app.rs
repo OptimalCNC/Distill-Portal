@@ -1,9 +1,9 @@
 use std::{future::Future, io, sync::Arc};
 
 use axum::{
-    extract::{Form, Path, State},
+    extract::{Path, State},
     http::{header, StatusCode},
-    response::{Html, IntoResponse, Redirect, Response},
+    response::{Html, IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -41,12 +41,6 @@ struct AppInner {
 pub struct App {
     state: AppState,
     router: Router,
-}
-
-#[derive(Debug, serde::Deserialize, Default)]
-struct ImportForm {
-    #[serde(default, deserialize_with = "deserialize_session_keys")]
-    session_key: Vec<String>,
 }
 
 impl App {
@@ -99,8 +93,6 @@ fn router(state: AppState) -> Router {
     Router::new()
         .route("/", get(home))
         .route("/health", get(health))
-        .route("/rescan", post(rescan_html))
-        .route("/import", post(import_html))
         .route("/api/v1/admin/rescan", post(proxy_rescan))
         .route("/api/v1/admin/scan-errors", get(proxy_scan_errors))
         .route("/api/v1/source-sessions", get(proxy_source_sessions))
@@ -129,25 +121,6 @@ async fn home(State(state): State<AppState>) -> Result<Html<String>, AppError> {
 
 async fn health() -> &'static str {
     "ok"
-}
-
-async fn rescan_html(State(state): State<AppState>) -> Result<Redirect, AppError> {
-    state.inner.backend.rescan().await?;
-    Ok(Redirect::to("/"))
-}
-
-async fn import_html(
-    State(state): State<AppState>,
-    Form(form): Form<ImportForm>,
-) -> Result<Redirect, AppError> {
-    state
-        .inner
-        .backend
-        .import_source_sessions(&ImportSourceSessionsRequest {
-            session_keys: form.session_key,
-        })
-        .await?;
-    Ok(Redirect::to("/"))
 }
 
 async fn proxy_rescan(State(state): State<AppState>) -> Result<Json<RescanReport>, AppError> {
@@ -392,11 +365,6 @@ fn render_home_page(
   <section class="hero">
     <h1>Distill Portal Phase 2</h1>
     <p>This frontend owns the inspection surface. It fetches source inventory, stored metadata, and raw session access through the backend JSON API boundary.</p>
-    <div class="actions">
-      <form method="post" action="/rescan">
-        <button type="submit">Refresh Source Inventory</button>
-      </form>
-    </div>
     <div class="link-row">
       <a href="/api/v1/source-sessions">Source Sessions JSON</a>
       <a href="/api/v1/sessions">Stored Sessions JSON</a>
@@ -409,21 +377,14 @@ fn render_home_page(
     html.push_str(
         r#"<section class="panel">
   <h2>Source Sessions</h2>
-  <p>Choose which discovered sessions to save into the backend-owned store.</p>
+  <p>Discovered sessions that the backend has observed in the configured source roots.</p>
 "#,
     );
     if source_sessions.is_empty() {
         html.push_str(r#"<div class="empty">No source sessions are currently discoverable.</div>"#);
     } else {
-        html.push_str(r#"<form method="post" action="/import">"#);
-        html.push_str(
-            r#"<div class="actions" style="margin-bottom: 14px;">
-  <button type="submit">Save Selected Sessions</button>
-</div>"#,
-        );
         html.push_str(
             r#"<div class="table-wrap"><table><thead><tr>
-  <th>Save</th>
   <th>Status</th>
   <th>Tool</th>
   <th>Title</th>
@@ -435,10 +396,6 @@ fn render_home_page(
         );
         for session in source_sessions {
             html.push_str("<tr>");
-            html.push_str(&format!(
-                "<td><input type=\"checkbox\" name=\"session_key\" value=\"{}\"></td>",
-                escape_html(&session.session_key)
-            ));
             html.push_str(&format!("<td>{}</td>", status_badge(session.status)));
             html.push_str(&format!(
                 "<td class=\"mono\">{}</td>",
@@ -468,7 +425,7 @@ fn render_home_page(
             ));
             html.push_str("</tr>");
         }
-        html.push_str("</tbody></table></div></form>");
+        html.push_str("</tbody></table></div>");
     }
     html.push_str("</section>");
 
@@ -601,46 +558,4 @@ fn escape_html(value: &str) -> String {
 
 async fn shutdown_signal() {
     let _ = tokio::signal::ctrl_c().await;
-}
-
-fn deserialize_session_keys<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    struct SessionKeyVisitor;
-
-    impl<'de> serde::de::Visitor<'de> for SessionKeyVisitor {
-        type Value = Vec<String>;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            formatter.write_str("a form field or sequence of form fields named session_key")
-        }
-
-        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-        where
-            A: serde::de::SeqAccess<'de>,
-        {
-            let mut values = Vec::new();
-            while let Some(value) = seq.next_element::<String>()? {
-                values.push(value);
-            }
-            Ok(values)
-        }
-
-        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-        where
-            E: serde::de::Error,
-        {
-            Ok(vec![value.to_string()])
-        }
-
-        fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
-        where
-            E: serde::de::Error,
-        {
-            Ok(vec![value])
-        }
-    }
-
-    deserializer.deserialize_any(SessionKeyVisitor)
 }

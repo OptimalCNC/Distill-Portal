@@ -176,7 +176,6 @@ pub struct ImportReport {
     ts(export_to = "ImportSourceSessionsRequest.ts")
 )]
 pub struct ImportSourceSessionsRequest {
-    #[serde(default)]
     pub session_keys: Vec<String>,
 }
 
