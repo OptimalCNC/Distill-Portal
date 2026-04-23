@@ -52,3 +52,9 @@
 - Source discovery and parsing belong to `components/collector-runtime`
 - Environment variable mapping belongs to `components/configuration`
 - HTTP routes belong to the app crates only
+
+## Frontend Dev-Time Topology (Phase 3)
+
+- During Phase 3, `apps/frontend/` hosts two apps side by side: the legacy Rust crate (`Cargo.toml`, `src/*.rs`) and the new Bun + React + TypeScript app (`package.json`, `bun.lock`, `vite.config.ts`, `index.html`, `src/*.tsx`). Both still need to coexist until Milestone 5 removes the Rust crate — Cargo only considers the `src/*.rs` files and `Cargo.toml`, so the non-Rust files are inert from Cargo's perspective.
+- Frontend dev-time proxying of `/api/v1/**` and `/health` to the backend belongs in `apps/frontend/vite.config.ts`, not in any application code path. This is the Phase 3 replacement for the Rust frontend's per-route HTTP forwarding.
+- The Bun app must continue to honor the existing frontend-boundary rules above: no direct dependency on `components/collector-runtime`, `components/ingest-service`, or `components/raw-session-store`; all backend communication goes over HTTP to the Rust backend.
