@@ -598,3 +598,73 @@ test("rescan prunes stale selection so the import POST matches the visible rows"
     (importInit?.body as string).includes("claude_code:key-B"),
   ).toBe(false);
 });
+
+test("per-panel error isolation: scan-errors 500 leaves source and stored panels rendered", async () => {
+  // `Promise.allSettled` in `refetchAll` is supposed to isolate failures
+  // per panel: a non-2xx on `/api/v1/admin/scan-errors` must not prevent
+  // the source + stored panels from rendering their fixtures. This test
+  // pins that contract so a future refactor that short-circuits on the
+  // first rejection (e.g. switching to `Promise.all`) surfaces as a
+  // failing assertion on either fixture's presence.
+  const fetchMock = mock(
+    async (input: Request | string | URL): Promise<Response> => {
+      const url = urlOf(input);
+      if (url === SOURCE_SESSIONS_PATH) {
+        return jsonResponse(SOURCE_FIXTURE);
+      }
+      if (url === STORED_SESSIONS_PATH) {
+        return jsonResponse(STORED_FIXTURE);
+      }
+      if (url === SCAN_ERRORS_PATH) {
+        return new Response("boom", {
+          status: 500,
+          headers: { "Content-Type": "text/plain" },
+        });
+      }
+      return new Response(`unexpected url ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+  const { container } = render(<App />);
+
+  // Wait for the source and stored panels to land (they must still render
+  // even though the scan-errors panel is about to error out).
+  await screen.findByText("claude_code:fixture-abc");
+  await screen.findAllByText("abc-uid-123");
+
+  // Wait for the errored panel to surface its `<p role="alert">`.
+  await waitFor(() => {
+    expect(container.querySelectorAll('[role="alert"]').length).toBe(1);
+  });
+
+  // (1) Source fixture session_key is in the DOM -> source panel rendered.
+  expect(
+    container.textContent?.includes("claude_code:fixture-abc"),
+  ).toBe(true);
+
+  // (2) Stored fixture session_uid is in the DOM -> stored panel rendered.
+  expect(container.textContent?.includes("abc-uid-123")).toBe(true);
+
+  // (3) Exactly one errored panel in the DOM — `App.tsx`'s `PanelBody`
+  // renders `<p role="alert">` only on the error branch, so the count is
+  // a precise match for "exactly one panel failed". A regression that
+  // shared the error across all three panels (e.g. a `Promise.all` short-
+  // circuit) would push this to 3.
+  const alerts = container.querySelectorAll('[role="alert"]');
+  expect(alerts.length).toBe(1);
+  // The surviving alert must belong to the scan-errors panel: its error
+  // label starts with "Failed to load scan errors" (see `App.tsx`).
+  expect(
+    alerts[0]?.textContent?.startsWith("Failed to load scan errors"),
+  ).toBe(true);
+
+  // (4) The scan-errors section's tbody has zero rows — the error state
+  // renders only the alert paragraph; `ScanErrorsPanel` is not mounted.
+  // The three `<section>` children are in DOM order: source, stored,
+  // scan-errors (see App.tsx), so the 3rd section is the scan-errors one.
+  const sections = container.querySelectorAll("section");
+  expect(sections.length).toBe(3);
+  const scanErrorsSection = sections[2]!;
+  expect(scanErrorsSection.querySelectorAll("tbody tr").length).toBe(0);
+});
