@@ -3,6 +3,8 @@ use std::{fmt, str::FromStr};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export_to = "Tool.ts"))]
 #[serde(rename_all = "snake_case")]
 pub enum Tool {
     ClaudeCode,
@@ -48,6 +50,11 @@ impl FromStr for Tool {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export_to = "SessionSyncStatus.ts")
+)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionSyncStatus {
     NotStored,
@@ -68,6 +75,11 @@ impl SessionSyncStatus {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export_to = "SourceSessionView.ts")
+)]
 pub struct SourceSessionView {
     pub session_key: String,
     pub tool: Tool,
@@ -85,6 +97,11 @@ pub struct SourceSessionView {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export_to = "StoredSessionRecord.ts")
+)]
 pub struct StoredSessionRecord {
     pub session_uid: String,
     pub tool: Tool,
@@ -101,13 +118,24 @@ pub struct StoredSessionRecord {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export_to = "StoredSessionView.ts")
+)]
 pub struct StoredSessionView {
     #[serde(flatten)]
+    #[cfg_attr(feature = "ts-bindings", ts(flatten))]
     pub session: StoredSessionRecord,
     pub status: SessionSyncStatus,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export_to = "PersistedScanError.ts")
+)]
 pub struct PersistedScanError {
     pub error_id: String,
     pub tool: Tool,
@@ -119,6 +147,8 @@ pub struct PersistedScanError {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export_to = "RescanReport.ts"))]
 pub struct RescanReport {
     pub discovered_files: usize,
     pub skipped_files: usize,
@@ -130,6 +160,8 @@ pub struct RescanReport {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export_to = "ImportReport.ts"))]
 pub struct ImportReport {
     pub requested_sessions: usize,
     pub inserted_sessions: usize,
@@ -138,6 +170,11 @@ pub struct ImportReport {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(
+    feature = "ts-bindings",
+    ts(export_to = "ImportSourceSessionsRequest.ts")
+)]
 pub struct ImportSourceSessionsRequest {
     #[serde(default)]
     pub session_keys: Vec<String>,

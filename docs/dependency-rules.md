@@ -36,8 +36,10 @@
 ## Contract Handling
 
 - Shared page and JSON payloads live in `components/ui-api-contracts`
+- `components/ui-api-contracts/src/lib.rs` is the single source of truth for the contract. The TypeScript declarations under `components/ui-api-contracts/bindings/` are checked-in generated artifacts derived from `src/lib.rs` by the `ts-bindings` cargo feature — they are the canonical downstream output and must stay in sync with the Rust source: regenerate and commit them together with any Rust contract change, never hand-edited
 - If a backend JSON shape changes, update:
   - `components/ui-api-contracts/src/lib.rs`
+  - `components/ui-api-contracts/bindings/*.ts` (regenerate via `cargo test -p distill-portal-ui-api-contracts --features ts-bindings -- --ignored regenerate_ts_bindings`; see `docs/dev-commands.md`)
   - `apps/backend/src/http_api.rs`
   - `apps/frontend/src/backend_client.rs`
   - any impacted frontend page rendering in `apps/frontend/src/app.rs`

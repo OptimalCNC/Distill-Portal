@@ -3,5 +3,15 @@ name = "distill-portal-ui-api-contracts"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+# Enables Rust-to-TypeScript binding generation via the `ts-rs` crate.
+# Off by default so the backend build does not pull in codegen tooling.
+# Turn on with: `cargo test -p distill-portal-ui-api-contracts --features ts-bindings`.
+ts-bindings = ["dep:ts-rs"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
+ts-rs = { version = "12.0.1", default-features = false, features = [
+    "serde-compat",
+], optional = true }

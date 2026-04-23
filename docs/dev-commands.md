@@ -51,6 +51,24 @@ cargo test -p distill-portal-backend --test http_api
 cargo test -p distill-portal-e2e --test inspection_surface
 ```
 
+## TypeScript Contract Bindings
+
+The Rust contract types in `components/ui-api-contracts/src/lib.rs` are the source of truth. TypeScript declarations under `components/ui-api-contracts/bindings/` are generated from them via the `ts-bindings` cargo feature (off by default) and must be regenerated whenever the Rust contract changes.
+
+Verify the checked-in TS files match the current Rust source (fails on drift):
+
+```bash
+cargo test -p distill-portal-ui-api-contracts --features ts-bindings
+```
+
+Regenerate the checked-in TS files after a contract change:
+
+```bash
+cargo test -p distill-portal-ui-api-contracts --features ts-bindings -- --ignored regenerate_ts_bindings
+```
+
+See `components/ui-api-contracts/README.md` for the tool-choice rationale and the full list of generated files.
+
 ## Workspace Verification
 
 ```bash
