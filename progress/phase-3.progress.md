@@ -111,7 +111,11 @@
 
 ## Backend Exception Log
 
-- none — no protected-backend exception has been requested or granted for Phase 3 to date.
+- 2026-04-23: Human-approved exception for Chunk E1 (Milestone 3 entry cleanup).
+  - Approved scope: remove `#[serde(default)]` from `ImportSourceSessionsRequest.session_keys` in `components/ui-api-contracts/src/lib.rs`; regenerate `components/ui-api-contracts/bindings/*.ts`; update any test under `apps/backend/tests/**` or elsewhere that currently sends `{}` as an import payload so it sends `{"session_keys": []}` or a non-empty array instead.
+  - NOT approved: any other change to `apps/backend/**`, `components/collector-runtime/**`, `components/ingest-service/**`, `components/raw-session-store/**`, `components/configuration/**`, or `components/observability/**`. No new routes, no renamed routes, no payload-shape changes other than the single `#[serde(default)]` removal. No change to the handler signatures of `import_source_sessions` in `apps/backend/src/app.rs` or `apps/backend/src/http_api.rs` — they continue to read `request.session_keys` as a `Vec<String>`.
+  - Reason: the `#[serde(default)]` attribute was defensive permissiveness with no real caller. The TS type generated from the contract crate already requires `session_keys`; removing the attribute aligns the Rust wire shape to the already-generated TS type. Bundled with the Rust-frontend route retirement (Chunk E1 primary goal) so both cleanup tasks land in one reviewable commit.
+  - Reviewer obligation: the backend-protection reviewer must confirm every edit under the protected surface falls within the approved scope above, and that `cargo test -p distill-portal-backend --test http_api` still passes after the test update; any edit outside the approved scope is blocking.
 
 ## Open Risks / Open Questions
 
