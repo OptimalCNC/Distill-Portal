@@ -1,29 +1,60 @@
-// Source sessions panel table (read-only).
+// Source sessions panel table.
 //
-// Columns match `apps/frontend/src/app.rs` (the Rust reference) exactly:
-// Status, Tool, Title (stacked with source_session_id), Project,
-// Updated (source_updated_at), Stored Copy (session_uid + stored_ingested_at),
-// Source Path. Empty-state copy ports the Rust reference's
-// "No source sessions are currently discoverable." message.
+// Columns match `apps/frontend/src/app.rs` (the Rust reference) plus a
+// leading select column owned by Chunk F2: Select, Status, Tool, Title
+// (stacked with source_session_id), Project, Updated (source_updated_at),
+// Stored Copy (session_uid + stored_ingested_at), Source Path.
+// Empty-state copy ports the Rust reference's "No source sessions are
+// currently discoverable." message.
 //
-// F1 is read-only: no selection checkbox, no buttons, no mutation handlers.
-// Selection / rescan / import are owned by Chunk F2.
+// Selection is lifted to `App.tsx`: this component is a controlled view of
+// whatever `selected` set the parent owns. `onToggle(sessionKey)` toggles a
+// single row; `onToggleAll()` is invoked by the header-row checkbox and
+// should switch between "all selected" and "none selected" in the parent.
+// Rows are keyed by `session_key` (globally unique).
 import type { SourceSessionView } from "../lib/contracts";
 import { StatusBadge } from "./StatusBadge";
 
-type SourceSessionsTableProps = { sessions: SourceSessionView[] };
+type SourceSessionsTableProps = {
+  sessions: SourceSessionView[];
+  selected: Set<string>;
+  onToggle: (sessionKey: string) => void;
+  onToggleAll: () => void;
+};
 
-export function SourceSessionsTable({ sessions }: SourceSessionsTableProps) {
+export function SourceSessionsTable({
+  sessions,
+  selected,
+  onToggle,
+  onToggleAll,
+}: SourceSessionsTableProps) {
   if (sessions.length === 0) {
     return (
       <div className="empty">No source sessions are currently discoverable.</div>
     );
   }
+  const selectedCount = sessions.reduce(
+    (acc, s) => (selected.has(s.session_key) ? acc + 1 : acc),
+    0,
+  );
+  const allChecked = selectedCount === sessions.length;
+  const someChecked = selectedCount > 0 && selectedCount < sessions.length;
   return (
     <div className="table-wrap">
       <table>
         <thead>
           <tr>
+            <th className="select-col">
+              <input
+                type="checkbox"
+                aria-label="Select all source sessions"
+                checked={allChecked}
+                ref={(el) => {
+                  if (el) el.indeterminate = someChecked;
+                }}
+                onChange={onToggleAll}
+              />
+            </th>
             <th>Status</th>
             <th>Tool</th>
             <th>Title</th>
@@ -36,6 +67,14 @@ export function SourceSessionsTable({ sessions }: SourceSessionsTableProps) {
         <tbody>
           {sessions.map((session) => (
             <tr key={session.session_key}>
+              <td className="select-col">
+                <input
+                  type="checkbox"
+                  aria-label={`Select ${session.session_key}`}
+                  checked={selected.has(session.session_key)}
+                  onChange={() => onToggle(session.session_key)}
+                />
+              </td>
               <td>
                 <StatusBadge status={session.status} />
               </td>
