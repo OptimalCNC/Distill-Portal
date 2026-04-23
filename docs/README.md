@@ -25,7 +25,7 @@ This file is both the docs entry point and the practical repo map.
 ### Frontend And Backend
 
 - Frontend (`apps/frontend`): in Phase 3 a Bun + React + TypeScript app coexists with the legacy Rust crate under the same directory. Frontend tests and commands live with this app; see `dev-commands.md`.
-  - Bun app entrypoints: `apps/frontend/package.json`, `apps/frontend/vite.config.ts`, `apps/frontend/index.html`, `apps/frontend/src/main.tsx`, `apps/frontend/src/App.tsx`
+  - Bun app entrypoints: `apps/frontend/package.json`, `apps/frontend/vite.config.ts`, `apps/frontend/index.html`, `apps/frontend/src/main.tsx`, `apps/frontend/src/App.tsx`, and the typed API layer under `apps/frontend/src/lib/` (`api.ts`, `config.ts`, `contracts.ts`)
   - legacy Rust crate entrypoints (still present until Milestone 5): `apps/frontend/src/main.rs`, `apps/frontend/src/app.rs`, backend client `apps/frontend/src/backend_client.rs`
 - Backend crate: `apps/backend`
   - entrypoints: `src/main.rs`, `src/app.rs`

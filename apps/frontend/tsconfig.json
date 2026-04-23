@@ -18,7 +18,7 @@
     "useDefineForClassFields": true,
     "verbatimModuleSyntax": false,
     "noEmit": true,
-    "types": ["vite/client"],
+    "types": ["vite/client", "bun"],
     "baseUrl": ".",
     "paths": {
       "@contracts/*": ["../../components/ui-api-contracts/bindings/*"]

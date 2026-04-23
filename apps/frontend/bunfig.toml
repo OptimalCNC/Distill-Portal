@@ -1,0 +1,5 @@
+[test]
+# Preload a happy-dom Window into the global scope so mounted React
+# components can render into a real `document`. Wired this way so that
+# `bun test` (and `bun run test`) activate the DOM without CLI flags.
+preload = ["./test-setup.ts"]

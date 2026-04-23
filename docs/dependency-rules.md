@@ -37,6 +37,7 @@
 
 - Shared page and JSON payloads live in `components/ui-api-contracts`
 - `components/ui-api-contracts/src/lib.rs` is the single source of truth for the contract. The TypeScript declarations under `components/ui-api-contracts/bindings/` are checked-in generated artifacts derived from `src/lib.rs` by the `ts-bindings` cargo feature — they are the canonical downstream output and must stay in sync with the Rust source: regenerate and commit them together with any Rust contract change, never hand-edited
+- The Bun frontend consumes contract types via one-way TypeScript imports from `components/ui-api-contracts/bindings/*.ts`, using the `@contracts/*` path alias wired in `apps/frontend/tsconfig.json` (or a direct relative path). The frontend MUST NOT re-declare contract types by hand; the thin barrel at `apps/frontend/src/lib/contracts.ts` re-exports the generated types for internal consumption
 - If a backend JSON shape changes, update:
   - `components/ui-api-contracts/src/lib.rs`
   - `components/ui-api-contracts/bindings/*.ts` (regenerate via `cargo test -p distill-portal-ui-api-contracts --features ts-bindings -- --ignored regenerate_ts_bindings`; see `docs/dev-commands.md`)

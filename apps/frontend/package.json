@@ -7,16 +7,19 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "echo \"tests land in D2\" && exit 0"
+    "test": "bun test"
   },
   "dependencies": {
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
   },
   "devDependencies": {
+    "@testing-library/react": "16.3.2",
+    "@types/bun": "^1.3.13",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.7.0",
+    "happy-dom": "20.9.0",
     "typescript": "^5.9.3",
     "vite": "^6.4.2"
   }

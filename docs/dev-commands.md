@@ -44,7 +44,7 @@ bun run test
 
 - `bun run dev` starts the Vite dev server on `http://127.0.0.1:4100` with `strictPort: true` so a port collision fails fast.
 - `bun run build` writes static assets to `apps/frontend/dist/`.
-- `bun run test` is a stub in D1 (echoes a placeholder and exits 0); a real test harness lands in D2.
+- `bun run test` runs `bun test`. As of Milestone 2 this covers a single smoke test at `apps/frontend/src/lib/api.test.ts` that fetch-mocks `listSourceSessions()` and asserts the typed client composes the expected URL and parses the generated `SourceSessionView` shape. A broader test harness lands with Milestone 4.
 
 ## Dev Topology (Phase 3)
 
