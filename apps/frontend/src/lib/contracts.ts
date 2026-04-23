@@ -8,5 +8,7 @@
 // Frontend code MUST import contract types from this barrel (or directly
 // from `@contracts/*`) and MUST NOT re-declare them by hand.
 export type { SourceSessionView } from "@contracts/SourceSessionView";
+export type { StoredSessionView } from "@contracts/StoredSessionView";
+export type { PersistedScanError } from "@contracts/PersistedScanError";
 export type { SessionSyncStatus } from "@contracts/SessionSyncStatus";
 export type { Tool } from "@contracts/Tool";

@@ -1,16 +1,19 @@
-// Single mounted-App Bun smoke test.
+// Single mounted-App Bun smoke test for the Phase 3 inspection surface.
 //
-// Replaces the prior unit test on `api.ts` with an end-to-end DOM smoke
-// that proves Milestone 2 ("list `session_key`s pulled live from the
-// backend"). In one test, we:
+// Exercises the three read-only panels wired by Chunk F1: Source Sessions,
+// Stored Sessions, Scan Errors. We:
 //
-//   (1) mock `globalThis.fetch` with a canned `SourceSessionView[]`
-//       (typed from the `@contracts/*` re-export barrel to preserve the
-//       contract-consumption assertion),
+//   (1) mock `globalThis.fetch` to return a distinct JSON body per URL
+//       (source sessions, stored sessions, scan errors), using fixtures
+//       typed from the `@contracts/*` re-export barrel so contract shape
+//       drift surfaces as a type error,
 //   (2) mount `<App />` via `@testing-library/react`,
-//   (3) assert the client requested `/api/v1/source-sessions`,
-//   (4) assert the mounted DOM contains the fixture `session_key`
-//       `claude_code:fixture-abc` inside the expected `<li><code>` shape.
+//   (3) wait for each panel's async settle and assert all three fixtures
+//       rendered (session_key, stored session_uid, scan-error message),
+//   (4) assert `fetch` was called with exactly the three expected
+//       same-origin paths,
+//   (5) assert the StatusBadge mapping, the Raw anchor `href`, and the
+//       three-section page structure.
 //
 // happy-dom is installed globally by `./test-setup.ts` (preloaded via
 // `bunfig.toml`). Restoring `globalThis.fetch` in `afterEach` keeps the
@@ -18,10 +21,18 @@
 import { afterEach, beforeEach, expect, mock, test } from "bun:test";
 import { cleanup, render, screen } from "@testing-library/react";
 import { App } from "./App";
-import { SOURCE_SESSIONS_PATH } from "./lib/api";
-import type { SourceSessionView } from "./lib/contracts";
+import {
+  SCAN_ERRORS_PATH,
+  SOURCE_SESSIONS_PATH,
+  STORED_SESSIONS_PATH,
+} from "./lib/api";
+import type {
+  PersistedScanError,
+  SourceSessionView,
+  StoredSessionView,
+} from "./lib/contracts";
 
-const FIXTURE: SourceSessionView[] = [
+const SOURCE_FIXTURE: SourceSessionView[] = [
   {
     session_key: "claude_code:fixture-abc",
     tool: "claude_code",
@@ -33,9 +44,39 @@ const FIXTURE: SourceSessionView[] = [
     project_path: "/tmp/fixture",
     title: null,
     has_subagent_sidecars: false,
-    status: "not_stored",
-    session_uid: null,
-    stored_ingested_at: null,
+    status: "up_to_date",
+    session_uid: "abc-uid-123",
+    stored_ingested_at: "2026-04-22T00:00:01Z",
+  },
+];
+
+const STORED_FIXTURE: StoredSessionView[] = [
+  {
+    status: "up_to_date",
+    session_uid: "abc-uid-123",
+    tool: "claude_code",
+    source_session_id: "fixture-abc",
+    source_path: "/tmp/fixture/abc.jsonl",
+    source_fingerprint: "fp-abc",
+    raw_ref: "raw/abc-uid-123.ndjson",
+    created_at: "2026-04-22T00:00:00Z",
+    source_updated_at: "2026-04-22T00:00:00Z",
+    ingested_at: "2026-04-22T00:00:01Z",
+    project_path: "/tmp/fixture",
+    title: "Fixture stored session",
+    has_subagent_sidecars: false,
+  },
+];
+
+const SCAN_ERRORS_FIXTURE: PersistedScanError[] = [
+  {
+    error_id: "err-1",
+    tool: "claude_code",
+    source_path: "/tmp/fixture/broken.jsonl",
+    fingerprint: "fp-broken",
+    message: "Malformed NDJSON on line 3",
+    first_seen_at: "2026-04-22T00:00:00Z",
+    last_seen_at: "2026-04-22T00:00:05Z",
   },
 ];
 
@@ -52,42 +93,78 @@ afterEach(() => {
   }
 });
 
-test("mounted App fetches /api/v1/source-sessions and renders the session_key", async () => {
+function urlOf(input: Request | string | URL): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.toString();
+  return input.url;
+}
+
+test("mounted App fetches all three panels and renders them independently", async () => {
   const fetchMock = mock(
-    async (_input: Request | string | URL): Promise<Response> =>
-      new Response(JSON.stringify(FIXTURE), {
+    async (input: Request | string | URL): Promise<Response> => {
+      const url = urlOf(input);
+      const payload =
+        url === SOURCE_SESSIONS_PATH
+          ? SOURCE_FIXTURE
+          : url === STORED_SESSIONS_PATH
+            ? STORED_FIXTURE
+            : url === SCAN_ERRORS_PATH
+              ? SCAN_ERRORS_FIXTURE
+              : null;
+      if (payload === null) {
+        return new Response(`unexpected url ${url}`, { status: 404 });
+      }
+      return new Response(JSON.stringify(payload), {
         status: 200,
         headers: { "Content-Type": "application/json" },
-      }),
+      });
+    },
   );
   globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
   const { container } = render(<App />);
 
-  // (3) DOM evidence: wait for the async useEffect -> fetch -> setState
-  // pipeline to settle, then assert the fixture session_key appears.
-  const rendered = await screen.findByText("claude_code:fixture-abc");
-  expect(rendered).toBeDefined();
+  // Each panel settles independently; wait for one fixture per panel.
+  // `findAllByText` tolerates the stored-session UID appearing both as
+  // the anchor text and the source-session row's "Stored Copy" cell.
+  await screen.findByText("claude_code:fixture-abc");
+  await screen.findAllByText("abc-uid-123");
+  await screen.findByText("Malformed NDJSON on line 3");
 
-  // (1) URL assertion: client composed the expected same-origin path.
-  expect(fetchMock).toHaveBeenCalledTimes(1);
-  const calledWith = fetchMock.mock.calls[0]?.[0];
-  const requestedUrl =
-    typeof calledWith === "string"
-      ? calledWith
-      : calledWith instanceof URL
-        ? calledWith.toString()
-        : (calledWith as Request).url;
-  expect(requestedUrl).toBe(SOURCE_SESSIONS_PATH);
+  // (1) fetch called exactly three times with the three expected paths.
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+  const requestedUrls = fetchMock.mock.calls
+    .map((args) => urlOf(args[0] as Request | string | URL))
+    .sort();
+  expect(requestedUrls).toEqual(
+    [SOURCE_SESSIONS_PATH, STORED_SESSIONS_PATH, SCAN_ERRORS_PATH].sort(),
+  );
 
-  // (2) Contract-type consumption: FIXTURE is typed `SourceSessionView[]`,
-  // so the import above is load-bearing. Re-assert the fields that the
-  // contract type guarantees so a future shape drift would surface here.
-  expect(FIXTURE[0]?.tool).toBe("claude_code");
-  expect(FIXTURE[0]?.status).toBe("not_stored");
+  // (2) DOM contains the source-session fixture session_key.
+  expect(
+    container.textContent?.includes("claude_code:fixture-abc"),
+  ).toBe(true);
 
-  // (4) List structure: the app renders each session as <li><code>...
-  const codeEl = container.querySelector("li > code");
-  expect(codeEl).not.toBeNull();
-  expect(codeEl?.textContent).toBe("claude_code:fixture-abc");
+  // (3) DOM contains the stored-session fixture session_uid.
+  expect(container.textContent?.includes("abc-uid-123")).toBe(true);
+
+  // (4) DOM contains the scan-error fixture message.
+  expect(
+    container.textContent?.includes("Malformed NDJSON on line 3"),
+  ).toBe(true);
+
+  // (5) StatusBadge renders with the expected class combination for the
+  // source session row (status `up_to_date` -> `badge` + `up-to-date`).
+  const badges = container.querySelectorAll("span.badge.up-to-date");
+  expect(badges.length).toBeGreaterThanOrEqual(1);
+
+  // (6) Raw-download anchor targets the exact backend path.
+  const rawAnchor = container.querySelector(
+    'a[href="/api/v1/sessions/abc-uid-123/raw"]',
+  );
+  expect(rawAnchor).not.toBeNull();
+  expect(rawAnchor?.textContent).toBe("View Raw");
+
+  // (7) Structural: exactly three panel sections (source / stored / errors).
+  expect(container.querySelectorAll("section").length).toBe(3);
 });

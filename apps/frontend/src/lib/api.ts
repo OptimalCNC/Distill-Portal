@@ -5,9 +5,15 @@
 // components/ui-api-contracts/bindings/* (re-exported from ./contracts);
 // handwritten response types are not allowed.
 import { API_BASE } from "./config";
-import type { SourceSessionView } from "./contracts";
+import type {
+  PersistedScanError,
+  SourceSessionView,
+  StoredSessionView,
+} from "./contracts";
 
 export const SOURCE_SESSIONS_PATH = "/api/v1/source-sessions";
+export const STORED_SESSIONS_PATH = "/api/v1/sessions";
+export const SCAN_ERRORS_PATH = "/api/v1/admin/scan-errors";
 
 /**
  * Thrown by this module on any non-2xx response. Carries the HTTP status
@@ -37,7 +43,35 @@ export class ApiError extends Error {
 export async function listSourceSessions(
   signal?: AbortSignal,
 ): Promise<SourceSessionView[]> {
-  const response = await fetch(`${API_BASE}${SOURCE_SESSIONS_PATH}`, {
+  return getJson<SourceSessionView[]>(SOURCE_SESSIONS_PATH, signal);
+}
+
+/**
+ * GET /api/v1/sessions -> Vec<StoredSessionView>.
+ *
+ * Returns metadata for every session already persisted in the local store.
+ * Same error model as `listSourceSessions`.
+ */
+export async function listStoredSessions(
+  signal?: AbortSignal,
+): Promise<StoredSessionView[]> {
+  return getJson<StoredSessionView[]>(STORED_SESSIONS_PATH, signal);
+}
+
+/**
+ * GET /api/v1/admin/scan-errors -> Vec<PersistedScanError>.
+ *
+ * Returns persisted scan errors observed during source scanning.
+ * Same error model as `listSourceSessions`.
+ */
+export async function listScanErrors(
+  signal?: AbortSignal,
+): Promise<PersistedScanError[]> {
+  return getJson<PersistedScanError[]>(SCAN_ERRORS_PATH, signal);
+}
+
+async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
     method: "GET",
     headers: { Accept: "application/json" },
     signal,
@@ -46,8 +80,7 @@ export async function listSourceSessions(
     const body = await safeReadText(response);
     throw new ApiError(response.status, body);
   }
-  const payload = (await response.json()) as SourceSessionView[];
-  return payload;
+  return (await response.json()) as T;
 }
 
 async function safeReadText(response: Response): Promise<string> {
