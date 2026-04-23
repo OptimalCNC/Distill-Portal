@@ -114,11 +114,14 @@
 
 ## Open Risks / Open Questions
 
-- Dev proxy + port choices (backend 4000, frontend 4100 per spec) remain a Milestone-2 decision point; deliberately not pre-committed in docs while the Bun skeleton is not yet in place.
-- ts-rs `#[serde(default)]` gap is documented but not resolved: the generated TS keeps `ImportSourceSessionsRequest.session_keys` required. When Milestone 3 ports the UI, the typed API client must either always pass `session_keys: []` for empty-case requests, or a follow-up chunk (out of Chunk B scope) must adjust the emission to mark the field as optional and adjust the backend tests accordingly.
-- Residual nit from the normal reviewer: the `ts(flatten)` emission orders fields differently from Rust declaration order on `StoredSessionView`. Cosmetic only (TS object types are structural), but worth a one-line comment in `src/lib.rs` next to the flatten if a future reader mistakes it for drift. Not blocking.
-- ts-rs identifier uniqueness assumption: if a future contribution adds a second type named `Tool` or `ImportReport` elsewhere in the crate, output filenames would collide. The `EXPECTED_BINDING_FILES` constant and the staleness test would catch the collision, though the error message would be generic. Not a current risk.
-- ts-rs maps Rust `usize` to TS `number`. Today all `usize` contract fields are small counters, but any future contract field that could exceed 2^53 would need `#[ts(as = "i64")]` plus a config for BigInt mapping. Flagged for awareness, not action.
+- **ts-rs `#[serde(default)]` gap remains unresolved (Milestone 3 entry decision)**: the generated TS keeps `ImportSourceSessionsRequest.session_keys` required. When Milestone 3 wires POST import, the typed client must either (a) always pass `session_keys: [...]` (likely fine since real UI actions populate the field), or (b) a narrow follow-up contract-emission chunk must add `#[ts(optional)]` / `Option<Vec<String>>` and update tests.
+- **Rust `apps/frontend` `/rescan` and `/import` HTML form routes still present**: coexist with the Bun app. Unreachable when the Bun dev server binds port 4100, but still in the Rust binary. Milestone 5 removes the Rust crate; human may decide to retire the form routes earlier for cleanliness.
+- React 19 + RTL `act(...)` warning visible in D2 mounted-App smoke test output. Cosmetic; the test passes. Suppression would add code with no behavioral gain.
+- happy-dom v20 `GlobalWindow` choice in `apps/frontend/test-setup.ts` is load-bearing (bare `Window` leaves JS built-ins off window and happy-dom's selector parser throws). Documented inline. A downgrade would break the smoke loudly.
+- Stray `apps/frontend/.codex` zero-byte file created by `codex exec` during reviews; left untracked. Future chunk could add `.codex` to `apps/frontend/.gitignore` if it becomes noisy.
+- Residual nit from the normal reviewer on Milestone 1: the `ts(flatten)` emission orders fields differently from Rust declaration order on `StoredSessionView`. Cosmetic only (TS object types are structural). Not blocking.
+- ts-rs identifier uniqueness assumption (Milestone 1): if a future contribution adds a second type named `Tool` or `ImportReport`, output filenames would collide. The staleness test would catch it with a generic error. Not a current risk.
+- ts-rs maps Rust `usize` to TS `number` (Milestone 1): safe for all current counter fields; any future numeric contract field exceeding 2^53 would need `#[ts(as = "i64")]` plus a BigInt mapping. Flagged for awareness.
 
 ## Next Recommended Task
 
