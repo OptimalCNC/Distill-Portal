@@ -26,19 +26,27 @@
 
 ## Active Plan
 
-- Chunk: none currently in flight — Chunk B (Milestone 1) just closed
-- Owner: none
-- Status: ready to plan the next chunk for Milestone 2 (Bun frontend skeleton); planner has not yet been asked for Milestone 2 chunking
+- Chunk: Chunk D1 complete (committed as `6ef3a7a`); Chunk D2 not yet dispatched
+- Owner: none currently in flight
+- Status: Milestone 2 is ~half delivered — scaffolding + dev server + build + live `/health` proof landed. Remaining D2 work: typed API client + demo page listing source-session keys + one `bun test` smoke
+- Follow-up chunk queued: Chunk D2 — typed API client consuming `components/ui-api-contracts/bindings/*.ts`, demo page listing source-session keys, one `bun test` smoke — closes Milestone 2
 - Human decisions currently active:
   - Phase 3 commits land directly on `main` (same pattern as Phase 2)
-  - Chunk C (dev-topology docs) stays deferred until Milestone 2 so the docs are validated against a running Bun/Vite config
+  - Milestone 2 bundler = **Vite** (Bun remains package manager and script runner)
+  - Milestone 2 layout = **`apps/frontend/` root** (Bun files alongside the still-present Rust `Cargo.toml` and `src/*.rs`); Milestone 5 deletes the Rust files in place, no rename
+  - Chunk C (dev-topology docs) bundled into Chunk D1; docs validated against the running Vite config shipped in the same PR
+  - D1 ship test = `/health` fetched through the Vite proxy; D2 ship test = typed `GET /api/v1/source-sessions` list
+  - Testing harness = document `bun run test` in D1, land exactly one smoke test in D2; full harness deferred to Milestone 4
+  - Rust frontend crate stays on port 4100 same as Bun dev; docs say "run one or the other, not both"
+  - ts-rs `#[serde(default)]` gap is deliberately avoided in Milestone 2 (D2 uses only GET paths); Milestone 3 either always passes `session_keys: []` or ships a follow-up contract-emission chunk before the import path is wired
 
 ## Remaining Milestones
 
 - Milestone 1: Contract Stabilization and Tooling Choice — complete 2026-04-23 (commit `12a1979`)
-- Milestone 2: Bun Frontend Skeleton — not started
-  - Why it remains: the Rust `apps/frontend` still renders the inspection page; no Bun/Vite/React/TypeScript scaffold exists yet; no typed API client yet
-  - Dependency status: unblocked — Milestone 1 provides the generated TS types this milestone will consume
+- Milestone 2: Bun Frontend Skeleton — in progress
+  - D1 complete 2026-04-23 (commit `6ef3a7a`): Bun + Vite 6 + React 19 + TS 5.9 scaffold under `apps/frontend/`, Vite dev server on `127.0.0.1:4100` with `/api/v1` + `/health` proxy to backend on `127.0.0.1:4000`, placeholder React page hits `/health` through the proxy, dev-topology docs bundled
+  - Remaining: D2 (typed API client at `apps/frontend/src/lib/api.ts` consuming the checked-in `components/ui-api-contracts/bindings/*.ts`, demo page listing source-session keys via `GET /api/v1/source-sessions`, one `bun test` smoke with fetch mock, minor docs touches)
+  - Why it remains: D2 closes the "one typed API client layer exists" DoD item and proves the generated TS types actually flow to a running frontend
 - Milestone 3: Inspection Surface Port — not started
   - Why it remains: depends on Milestone 2 scaffolding and on a typed API client layer
   - Dependency status: blocked on Milestone 2
@@ -70,12 +78,20 @@
 - 2026-04-23: Chunk B Codex cross-agent review round 2 (post-fix) — verdict `approved`; findings `none`; required changes `none`. Codex CLI: `codex-cli 0.123.0`, session id `019db848-767d-71c0-acc5-3f6d521e6202`, model `gpt-5.4`. Stdout persisted verbatim at `/home/huwei/.claude/projects/-home-huwei-ai-codings-distill-portal/edd7fadd-c161-4cdd-bcaf-9aa82e866903/tool-results/bukkqk658.txt`. Prompt piped in from `/tmp/codex-chunk-b-prompt-v2.txt` (session-local). Codex re-verified both documentation hunks in-tree and re-ran `cargo test -p distill-portal-ui-api-contracts --features ts-bindings`.
 - Re-review decision: the backend-protection reviewer and the normal reviewer Claude subagent were NOT re-run after the docs fix. Rationale: (a) the backend-protection reviewer's scope (protected-backend file paths and wire-shape invariance) is invariant under documentation-only edits in `components/ui-api-contracts/README.md` and `docs/dependency-rules.md`; (b) the normal reviewer approved the pre-fix pack and the fixes strengthened the documentation it had already approved; (c) Codex was the reviewer that raised the issues, so rerunning Codex is both necessary and sufficient for the updated pack. Both Claude reviewers' earlier verdicts remain authoritative on the file set, diffs, tests, and verification commands, which did not change.
 - Chunk B final disposition: approved by all three required reviewers on converged evidence — `backend untouched` (backend-protection), `approved` (normal reviewer), `approved` (Codex round 2). Committed as `12a1979`.
+- 2026-04-23: Milestone 2 planner Claude subagent returned two-chunk plan (D1 scaffold + bundled Chunk C, D2 typed client + smoke test) with concrete recommendations for all five human decisions. Coverage map links D1+D2 to every Milestone 2 DoD item.
+- 2026-04-23: Chunk D1 developer completion claim received. Evidence pack captured at `/tmp/chunk-d1-evidence.md` (session-local). Coordinator independently ran `cargo build -p distill-portal-frontend`, `cargo check --workspace`, `git status`, spot-check on layout — all green.
+- 2026-04-23: Chunk D1 backend-protection reviewer Claude subagent — verdict `backend untouched`; required action `proceed to normal review`; findings `none`. Independently ran `cargo build -p distill-portal-frontend` (0.03s cache-hit), `cargo check --workspace`, `cargo test -p distill-portal-backend --test http_api` (6/6). Confirmed `git diff HEAD -- apps/backend components/collector-runtime components/ingest-service components/raw-session-store components/configuration components/observability apps/backend/tests components/ui-api-contracts` returned empty.
+- 2026-04-23: Chunk D1 normal reviewer Claude subagent — verdict `approved`; findings `none`; required changes `none`. Independently reproduced Rust+Bun build, verified `vite.config.ts` matches docs, verified `.gitignore` hygiene (`node_modules/` + `dist/` excluded, `bun.lock` tracked), verified version pins within planner envelope, verified `fetch("/health")` is same-origin (no hardcoded backend URL), verified no `@contracts/*` imports in D1 source (scope discipline).
+- 2026-04-23: Chunk D1 Codex cross-agent review — verdict `approved with nits`; one nit: `docs/README.md:3` still read "Phase 2 workspace" while the rest of D1 describes Phase 3 coexistence. Codex-cli 0.123.0, session id `019db8d7-70f3-74b2-90ed-343d0bc15dd2`, model `gpt-5.4`. Stdout persisted verbatim at `/home/huwei/.claude/projects/-home-huwei-ai-codings-distill-portal/edd7fadd-c161-4cdd-bcaf-9aa82e866903/tool-results/bgzckgnns.txt`. Prompt piped from `/tmp/codex-chunk-d1-prompt.txt` (session-local).
+- 2026-04-23: Coordinator applied the Codex nit directly (one-line edit to `docs/README.md` line 3 — replaced "Phase 2 workspace" with a phase-neutral opener that names Phase 3 as in progress). Re-ran `cargo test -p distill-portal-ui-api-contracts --features ts-bindings` (1 passed, 1 ignored) and `cargo check --workspace` (green) to confirm no regression. This is the first time in Phase 3 that the coordinator edited a docs file directly rather than spawning a developer; rationale: Codex's Required Changes list was `none` (the nit was informational), the fix was a single unambiguous line with no prose judgment, and spawning a developer for one word would have been a heavier process cost than the fix. Future precedent: coordinator may apply explicit one-line docs fixes directly when the required change is unambiguous AND Required Changes is `none`; anything larger goes back to a developer.
+- Chunk D1 final disposition: approved by all three required reviewers on converged evidence — `backend untouched` (backend-protection), `approved` (normal reviewer), `approved with nits` (Codex; nit fixed inline before commit). Committed as `6ef3a7a`.
 
 ## Codex Availability Log
 
 - 2026-04-23: `codex exec` confirmed available (`codex-cli 0.122.0`) at session start
 - 2026-04-23: Codex invoked for Chunk B round 1 at `codex-cli 0.122.0`; session id `019db814-fc29-7fe1-be1e-3942c4f0f0e1`. Verdict `needs changes`.
-- 2026-04-23: Codex invoked for Chunk B round 2 at `codex-cli 0.123.0` (CLI auto-updated between invocations); session id `019db848-767d-71c0-acc5-3f6d521e6202`. Verdict `approved`. No unavailability events during Phase 3 to date.
+- 2026-04-23: Codex invoked for Chunk B round 2 at `codex-cli 0.123.0` (CLI auto-updated between invocations); session id `019db848-767d-71c0-acc5-3f6d521e6202`. Verdict `approved`.
+- 2026-04-23: Codex invoked for Chunk D1 at `codex-cli 0.123.0`; session id `019db8d7-70f3-74b2-90ed-343d0bc15dd2`. Verdict `approved with nits`. No unavailability events during Phase 3 to date.
 
 ## Backend Exception Log
 
@@ -91,4 +107,4 @@
 
 ## Next Recommended Task
 
-- Ask the planner for Milestone 2 (Bun Frontend Skeleton) chunking: minimally a skeleton Bun + React + TypeScript app scaffold under `apps/frontend/`, a typed API layer consuming the generated TS bindings, and a working dev server that can reach the backend through a dev proxy. Since this milestone will finally introduce non-Rust `apps/frontend` content alongside the Rust crate, the plan must address how the two coexist during the transition (likely Milestone 2 adds the Bun scaffold alongside, Milestone 5 removes the Rust crate). The coordinator should also surface any human decisions the planner raises — for example, Vite vs Bun-native dev server, directory layout inside `apps/frontend/`, and whether to land Chunk C (dev-topology docs) bundled with Milestone 2's first chunk.
+- Dispatch Chunk D2 to a developer Claude subagent using the Developer Delegation Prompt Template. Chunk D2 scope: land `apps/frontend/src/lib/api.ts` as the single typed frontend API layer consuming `components/ui-api-contracts/bindings/*.ts` via the pre-wired `@contracts/*` alias (or a relative import — either is acceptable as long as no contract types are hand-declared); wire `apps/frontend/src/lib/config.ts` to centralise base-URL selection so the same code works in dev (Vite proxy) and prod (same-origin); replace the D1 `/health` placeholder in `apps/frontend/src/App.tsx` with a minimal demo component that fetches `GET /api/v1/source-sessions` and renders a list of `session_key` values; wire a minimal `bun test` harness with exactly one smoke test (fetch-mocked, asserts the client composes the URL correctly and parses a response shape against the generated types); replace the `bun run test` stub script in `package.json` with the real test command; update `docs/dev-commands.md` to remove the "stub" annotation on `bun run test`; update `docs/dependency-rules.md` to note the one-way TS import from `components/ui-api-contracts/bindings/*.ts` into `apps/frontend/src/lib/`. The three-reviewer rule applies. Deliberately avoid `POST /api/v1/source-sessions/import` so the ts-rs `#[serde(default)]` gap does not bite; Milestone 3 will address it either via always-pass-`session_keys:[]` or a follow-up contract-emission chunk.
