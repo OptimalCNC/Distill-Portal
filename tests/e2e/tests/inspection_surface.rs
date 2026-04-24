@@ -1,3 +1,13 @@
+// Typed Rust client hits the real backend HTTP stack (Phase 3, Chunk G2).
+//
+// Pre-G2 this test also bootstrapped `distill_portal_frontend::App` and
+// asserted against the Rust-rendered HTML plus the frontend's proxy
+// endpoint. Milestone 4 moves that end-to-end coverage into the
+// Playwright browser e2e under `apps/frontend/e2e/inspection.spec.ts`;
+// this Rust-side test now only proves that a typed client posting to
+// the backend's `/api/v1/source-sessions/import` endpoint walks through
+// the full `collector-runtime -> raw-session-store -> ingest-service`
+// pipeline and gets back the expected `ImportReport`.
 use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
@@ -6,8 +16,7 @@ use std::{
 
 use bytes::Bytes;
 use distill_portal_backend::App as BackendApp;
-use distill_portal_configuration::{BackendConfig, FrontendConfig};
-use distill_portal_frontend::App as FrontendApp;
+use distill_portal_configuration::BackendConfig;
 use distill_portal_ui_api_contracts::{
     source_key, ImportReport, ImportSourceSessionsRequest, SessionSyncStatus, SourceSessionView,
     StoredSessionView, Tool,
@@ -52,42 +61,19 @@ async fn inspection_surface_works_through_frontend_backend_http_boundary() {
             .unwrap();
     });
 
-    let frontend_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let frontend_addr = frontend_listener.local_addr().unwrap();
-    let frontend = FrontendApp::bootstrap(
-        FrontendConfig::new(frontend_addr, format!("http://{backend_addr}")).unwrap(),
-    )
-    .await
-    .unwrap();
-    let (frontend_shutdown_tx, frontend_shutdown_rx) = oneshot::channel::<()>();
-    let frontend_task = tokio::spawn(async move {
-        frontend
-            .serve_with_shutdown(frontend_listener, async move {
-                let _ = frontend_shutdown_rx.await;
-            })
-            .await
-            .unwrap();
-    });
-
-    wait_for_ok(frontend_addr, "/health").await;
     wait_for_ok(backend_addr, "/health").await;
 
     let backend_root = get_status(backend_addr, "/").await;
     assert_eq!(backend_root, StatusCode::NOT_FOUND);
 
-    let home = get_text(frontend_addr, "/").await;
-    assert!(home.contains("Distill Portal"));
-    assert!(home.contains("Source Sessions"));
-    assert!(home.contains("Stored Sessions"));
-
     let source_sessions: Vec<SourceSessionView> =
-        get_json(frontend_addr, "/api/v1/source-sessions").await;
+        get_json(backend_addr, "/api/v1/source-sessions").await;
     assert_eq!(source_sessions.len(), 1);
     assert_eq!(source_sessions[0].status, SessionSyncStatus::NotStored);
 
     let key = source_key(Tool::ClaudeCode, CLAUDE_SESSION_ID);
     let import_report: ImportReport = post_json(
-        frontend_addr,
+        backend_addr,
         "/api/v1/source-sessions/import",
         &ImportSourceSessionsRequest {
             session_keys: vec![key.clone()],
@@ -97,25 +83,20 @@ async fn inspection_surface_works_through_frontend_backend_http_boundary() {
     assert_eq!(import_report.requested_sessions, 1);
     assert_eq!(import_report.inserted_sessions, 1);
 
-    let stored_sessions: Vec<StoredSessionView> = get_json(frontend_addr, "/api/v1/sessions").await;
+    let stored_sessions: Vec<StoredSessionView> =
+        get_json(backend_addr, "/api/v1/sessions").await;
     assert_eq!(stored_sessions.len(), 1);
     let stored = &stored_sessions[0];
     assert_eq!(stored.status, SessionSyncStatus::UpToDate);
 
-    let refreshed = get_text(frontend_addr, "/").await;
-    assert!(refreshed.contains(&stored.session.session_uid));
-    assert!(refreshed.contains("View Raw"));
-
     let raw = get_bytes(
-        frontend_addr,
+        backend_addr,
         &format!("/api/v1/sessions/{}/raw", stored.session.session_uid),
     )
     .await;
     assert_eq!(raw.as_slice(), CLAUDE_FIXTURE);
 
-    let _ = frontend_shutdown_tx.send(());
     let _ = backend_shutdown_tx.send(());
-    frontend_task.await.unwrap();
     backend_task.await.unwrap();
 }
 
@@ -132,12 +113,6 @@ async fn wait_for_ok(addr: SocketAddr, path: &str) {
 async fn get_status(addr: SocketAddr, path: &str) -> StatusCode {
     let response = request(addr, Method::GET, path, None, None).await;
     response.0
-}
-
-async fn get_text(addr: SocketAddr, path: &str) -> String {
-    let (status, body) = request(addr, Method::GET, path, None, None).await;
-    assert_eq!(status, StatusCode::OK);
-    String::from_utf8(body).unwrap()
 }
 
 async fn get_bytes(addr: SocketAddr, path: &str) -> Vec<u8> {
@@ -217,4 +192,3 @@ fn seed_claude_source(base: &Path, bytes: &[u8]) -> PathBuf {
     std::fs::write(&claude_path, bytes).unwrap();
     claude_root
 }
-

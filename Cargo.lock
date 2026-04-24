@@ -229,7 +229,6 @@ dependencies = [
  "bytes",
  "distill-portal-backend",
  "distill-portal-configuration",
- "distill-portal-frontend",
  "distill-portal-ui-api-contracts",
  "http-body-util",
  "hyper",

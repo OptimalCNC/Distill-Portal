@@ -7,7 +7,6 @@ edition = "2021"
 bytes = "1"
 distill-portal-backend = { path = "../../apps/backend" }
 distill-portal-configuration = { path = "../../components/configuration" }
-distill-portal-frontend = { path = "../../apps/frontend" }
 distill-portal-ui-api-contracts = { path = "../../components/ui-api-contracts" }
 http-body-util = "0.1"
 hyper = { version = "1", features = ["client", "http1"] }

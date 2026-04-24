@@ -44,7 +44,7 @@ bun run test
 
 - `bun run dev` starts the Vite dev server on `http://127.0.0.1:4100` with `strictPort: true` so a port collision fails fast.
 - `bun run build` writes static assets to `apps/frontend/dist/`.
-- `bun run test` runs `bun test`. As of Milestone 2 this covers a single smoke test at `apps/frontend/src/lib/api.test.ts` that fetch-mocks `listSourceSessions()` and asserts the typed client composes the expected URL and parses the generated `SourceSessionView` shape. A broader test harness lands with Milestone 4.
+- `bun run test` runs `bun test src` (the unit suite; browser e2e is `bun run test:e2e`, documented below). After Milestone 4's Chunk G1, the unit suite is 17 tests across three files: a mounted-`App` suite in `apps/frontend/src/App.test.tsx` covering the read-only three-panel render, the rescan + import mutation flows (including an explicit race-window reproducer for the stale-selection bug), and one per-panel independent-error branch; a variant-matrix suite in `apps/frontend/src/components/StatusBadge.test.tsx` covering all four `SessionSyncStatus` values; and a disabled-state truth-table suite in `apps/frontend/src/components/ActionBar.test.tsx` covering the full `pending × selectedCount × lastReport` matrix plus the dispatch-path callback.
 
 ## Dev Topology (Phase 3)
 
@@ -95,6 +95,27 @@ cargo run -p distill-portal-frontend
 ```
 
 Then open the frontend address, not the backend address. This path is retained during the Phase 3 transition and will be removed in Milestone 5.
+
+## Browser E2E (Phase 3, Playwright)
+
+The inspection-surface browser e2e lives under `apps/frontend/e2e/` and
+drives Chromium against the Bun + Vite dev server, which proxies to a
+real Rust backend spawned inside the harness (`e2e/harness/backend.ts`).
+The harness uses `Bun.spawn` per the Bun-first rule, so the suite must
+be run with Bun as the runtime (`bun --bun x playwright test`, wired
+into the `test:e2e` script below).
+
+Commands (run from `apps/frontend/`):
+
+```bash
+bun run test:e2e:install   # one-time: install Chromium via Playwright
+bun run test:e2e           # spawns the backend, starts Vite, runs Chromium
+```
+
+The harness binds the backend to `127.0.0.1:4000` because
+`vite.config.ts` proxies `/api/v1/**` and `/health` to that address;
+tests run serially (`workers: 1`) so the port is never double-bound.
+See `playwright.config.ts` for the full configuration.
 
 ## Targeted Tests
 
