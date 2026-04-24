@@ -1,65 +1,76 @@
 # Distill Portal Docs
 
-Start here when you need to orient yourself in the Distill Portal workspace. `apps/frontend` is a Bun + Vite + React + TypeScript app; the backend remains Rust under `apps/backend`.
+Start here when you need to orient yourself in the Distill Portal workspace. The backend is Rust under `apps/backend`; the frontend is Bun + Vite + React + TypeScript under `apps/frontend`.
 
-This file is both the docs entry point and the practical repo map.
+This file is both the docs entry point and the repo map.
+
+## Start With Your Task
+
+| I want to... | Start here |
+| --- | --- |
+| Modify the inspection UI | [`playbooks/modify-frontend-page.md`](playbooks/modify-frontend-page.md), [`../apps/frontend/README.md`](../apps/frontend/README.md) |
+| Change a backend API or JSON payload | [`playbooks/modify-backend-api.md`](playbooks/modify-backend-api.md), [`dependency-rules.md`](dependency-rules.md) |
+| Change session storage behavior | [`playbooks/modify-session-store.md`](playbooks/modify-session-store.md) |
+| Run or test locally | [`dev-commands.md`](dev-commands.md) |
+| Check dependency boundaries | [`dependency-rules.md`](dependency-rules.md) |
+| Understand a feature | [`features/inspection-surface.md`](features/inspection-surface.md), [`features/session-store.md`](features/session-store.md) |
+| Understand product + architecture intent | [`../PRD.md`](../PRD.md), [`../ARCHITECTURE.md`](../ARCHITECTURE.md) |
+| Audit historical planning or delivery | [`../working/README.md`](../working/README.md), [`../progress/README.md`](../progress/README.md) |
+
+## Apps
+
+- `apps/backend` — Rust backend binary: runtime wiring, scan/ingest/store orchestration, machine-consumable HTTP routes. See [`../apps/backend/README.md`](../apps/backend/README.md).
+- `apps/frontend` — Bun + Vite + React + TypeScript inspection UI. See [`../apps/frontend/README.md`](../apps/frontend/README.md).
+
+## Components
+
+Reusable, app-independent crates. Each owns its own README:
+
+- [`collector-runtime`](../components/collector-runtime/README.md) — source discovery, safe JSONL reads, tool-specific parsers (Claude Code, Codex)
+- [`configuration`](../components/configuration/README.md) — backend runtime config loading
+- [`ingest-service`](../components/ingest-service/README.md) — content-addressed ingest decisions, replace-on-sync
+- [`observability`](../components/observability/README.md) — tracing subscriber bootstrap
+- [`raw-session-store`](../components/raw-session-store/README.md) — SQLite metadata + blob-store persistence
+- [`ui-api-contracts`](../components/ui-api-contracts/README.md) — shared HTTP payload types; source of truth for the Rust → TS bindings
+
+## Feature Guides
+
+- [`features/inspection-surface.md`](features/inspection-surface.md) — page ownership, API touchpoints, and tests for the inspection workflow
+- [`features/session-store.md`](features/session-store.md) — storage ownership, backend touchpoints, and tests for persisted session behavior
+
+## Playbooks
+
+Short recipes for common changes:
+
+- [`playbooks/modify-frontend-page.md`](playbooks/modify-frontend-page.md) — shortest safe path for UI changes
+- [`playbooks/modify-backend-api.md`](playbooks/modify-backend-api.md) — shortest safe path for backend API changes
+- [`playbooks/modify-session-store.md`](playbooks/modify-session-store.md) — shortest safe path for storage changes
+
+## Verification Map
+
+| Surface | Command |
+| --- | --- |
+| Workspace compile | `cargo check --workspace` |
+| Full Rust test suite | `cargo test --workspace` |
+| Backend HTTP API | `cargo test -p distill-portal-backend --test http_api` |
+| Collector parsers | `cargo test -p distill-portal-collector-runtime --test parsers` |
+| Typed Rust-client HTTP smoke | `cargo test -p distill-portal-e2e --test inspection_surface` |
+| TypeScript contract bindings freshness | `cargo test -p distill-portal-ui-api-contracts --features ts-bindings` |
+| Frontend unit tests | `bun run test` (from `apps/frontend/`) |
+| Browser e2e (Playwright) | `bun run test:e2e` (from `apps/frontend/`) |
 
 ## Repo Map
 
-### Top-Level Layout
+- `apps/backend` — backend binary and its tests
+- `apps/frontend` — Bun/React frontend
+- `components/*` — reusable implementation crates
+- `docs/` — this tree (dependency rules, commands, features, playbooks)
+- `tests/e2e` — real HTTP-boundary Rust integration tests
+- `tests/fixtures` — sample Claude Code and Codex sessions used by parser and backend tests
+- `working/` — historical planning specs for completed phases (see [`../working/README.md`](../working/README.md))
+- `progress/` — historical delivery logs for completed phases (see [`../progress/README.md`](../progress/README.md))
 
-- `apps/backend`: backend service binary and library; owns scanning orchestration, ingest wiring, storage wiring, and machine-consumable HTTP routes
-- `apps/frontend`: Bun + Vite + React + TypeScript app that owns the inspection page and talks to the backend over HTTP
-- `components/collector-runtime`: source discovery, safe JSONL reads, and tool-specific adapters
-- `components/configuration`: backend and frontend runtime config loading
-- `components/ingest-service`: content-addressed ingest decisions and replace-on-sync behavior
-- `components/observability`: tracing subscriber bootstrap
-- `components/raw-session-store`: SQLite metadata and blob-store persistence
-- `components/ui-api-contracts`: shared HTTP payload types and cross-app contract enums
-- `docs`: developer-facing dependency rules, commands, feature notes, and playbooks
-- `tests/e2e`: real frontend/backend HTTP-boundary integration tests
-- `tests/fixtures`: sample Claude Code and Codex sessions used by parser and backend tests
-- `working`: implementation plans and accepted architecture targets
-- `progress`: durable execution logs for multi-session implementation work
+## Historical Material
 
-### Frontend And Backend
-
-- Frontend (`apps/frontend`): Bun + Vite + React + TypeScript app. Frontend tests and commands live with this app; see `dev-commands.md`.
-  - Entrypoints: `apps/frontend/package.json`, `apps/frontend/vite.config.ts`, `apps/frontend/index.html`, `apps/frontend/src/main.tsx`, `apps/frontend/src/App.tsx`, and the typed API layer under `apps/frontend/src/lib/` (`api.ts`, `config.ts`, `contracts.ts`)
-- Backend crate: `apps/backend`
-  - entrypoints: `src/main.rs`, `src/app.rs`
-  - JSON and raw-content routes: `src/http_api.rs`
-
-### Implemented Architecture Components
-
-- Collector runtime: `components/collector-runtime`
-- Ingest service: `components/ingest-service`
-- Raw session store: `components/raw-session-store`
-- Configuration: `components/configuration`
-- UI / API contracts: `components/ui-api-contracts`
-- Observability: `components/observability`
-
-### Tests
-
-- Backend API behavior: `apps/backend/tests/http_api.rs`
-- Collector parsing behavior: `components/collector-runtime/tests/parsers.rs`
-- Frontend/backend integration: `tests/e2e/tests/inspection_surface.rs`
-
-## Other Docs
-
-- `dependency-rules.md`: allowed and forbidden dependency directions between apps and components
-- `dev-commands.md`: how to run backend and frontend separately, together, and under verification
-- `features/inspection-surface.md`: page ownership, API touchpoints, and tests for the inspection workflow
-- `features/session-store.md`: storage ownership, backend touchpoints, and tests for persisted session behavior
-- `playbooks/modify-frontend-page.md`: shortest safe path for UI changes
-- `playbooks/modify-backend-api.md`: shortest safe path for backend API changes
-- `playbooks/modify-session-store.md`: shortest safe path for storage changes
-
-Component ownership docs live beside the code:
-
-- `components/collector-runtime/README.md`
-- `components/configuration/README.md`
-- `components/ingest-service/README.md`
-- `components/observability/README.md`
-- `components/raw-session-store/README.md`
-- `components/ui-api-contracts/README.md`
+- [`../working/`](../working/) — frozen planning specs. Not current-state instructions. See [`working/README.md`](../working/README.md).
+- [`../progress/`](../progress/) — frozen delivery logs. Not current-state instructions. See [`progress/README.md`](../progress/README.md).

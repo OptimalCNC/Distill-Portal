@@ -29,7 +29,7 @@ bun run test
 
 - `bun run dev` starts the Vite dev server on `http://127.0.0.1:4100` with `strictPort: true` so a port collision fails fast.
 - `bun run build` writes static assets to `apps/frontend/dist/`.
-- `bun run test` runs `bun test src` (the unit suite; browser e2e is `bun run test:e2e`, documented below). After Milestone 4's Chunk G1, the unit suite is 17 tests across three files: a mounted-`App` suite in `apps/frontend/src/App.test.tsx` covering the read-only three-panel render, the rescan + import mutation flows (including an explicit race-window reproducer for the stale-selection bug), and one per-panel independent-error branch; a variant-matrix suite in `apps/frontend/src/components/StatusBadge.test.tsx` covering all four `SessionSyncStatus` values; and a disabled-state truth-table suite in `apps/frontend/src/components/ActionBar.test.tsx` covering the full `pending × selectedCount × lastReport` matrix plus the dispatch-path callback.
+- `bun run test` runs `bun test src` (the unit suite; browser e2e is `bun run test:e2e`, documented below). The unit suite covers three surfaces: a mounted-`App` suite in `apps/frontend/src/App.test.tsx` for the read-only three-panel render, the rescan and import mutation flows (including an explicit race-window reproducer for the stale-selection bug), and per-panel independent-error behavior; a variant-matrix suite in `apps/frontend/src/components/StatusBadge.test.tsx` covering all four `SessionSyncStatus` values; and an `apps/frontend/src/components/ActionBar.test.tsx` suite covering idle zero/non-zero selection, pending rescan/import disabled states, report rendering for null/rescan/import/error `lastReport`, and the Rescan dispatch callback.
 
 ## Dev Topology
 
@@ -64,7 +64,7 @@ bun run dev
 
 Then open `http://127.0.0.1:4100/` in the browser. The Rust backend must be running for `/health` and `/api/v1/**` to resolve through the Vite proxy.
 
-## Browser E2E (Phase 3, Playwright)
+## Browser E2E (Playwright)
 
 The inspection-surface browser e2e lives under `apps/frontend/e2e/` and
 drives Chromium against the Bun + Vite dev server, which proxies to a

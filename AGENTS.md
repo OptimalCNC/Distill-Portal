@@ -1,28 +1,27 @@
 # AGENTS
 
-This repository is a Rust workspace.
+This repo is a Rust workspace for the backend plus reusable components, with a Bun + Vite + React + TypeScript frontend under `apps/frontend`.
 
-Repository shape:
+## Read First
 
-- `apps/backend` owns backend runtime wiring and machine-consumable HTTP routes
-- `apps/frontend` owns the inspection page and talks to the backend over HTTP
-- `components/ui-api-contracts` owns shared frontend/backend contract types
-- `components/*` own reusable internal implementation boundaries
-- `docs/*` must stay aligned with any structural or command changes
+- `docs/README.md` — task-oriented navigation
+- `docs/dependency-rules.md` — ownership boundaries between apps and components
+- `docs/dev-commands.md` — how to run and test
 
-Working rules:
+## Hard Rules
 
-- Do not reintroduce backend-owned end-user HTML
-- Do not make `apps/frontend` depend directly on storage, ingest, or collector crates
-- Update `components/ui-api-contracts`, both apps, and relevant tests together when changing HTTP payload shapes
-- Keep `docs/README.md`, `docs/dependency-rules.md`, and `docs/dev-commands.md` accurate when layout or commands change
-- Keep `progress/phase-2.progress.md` current for durable handoff when doing Phase 2 coordination work
+- Backend owns machine-consumable HTTP routes; do not reintroduce backend-owned end-user HTML.
+- Frontend talks to the backend only over HTTP and only consumes generated contract types from `components/ui-api-contracts/bindings/*.ts`.
+- `apps/frontend` must not import from `components/collector-runtime`, `components/ingest-service`, or `components/raw-session-store`.
+- HTTP payload changes must update `components/ui-api-contracts`, the Rust and TS sides of both apps, and relevant tests together.
+- Keep docs aligned with any layout, command, dependency, or payload-shape change.
 
-Useful commands:
+## Core Checks
 
 ```bash
 cargo check --workspace
 cargo test --workspace
-cargo test -p distill-portal-backend --test http_api
-cargo test -p distill-portal-e2e --test inspection_surface
+cd apps/frontend && bun run test
 ```
+
+Full command reference: `docs/dev-commands.md`.

@@ -43,7 +43,7 @@
   - `apps/backend/src/http_api.rs`
   - the typed API layer in `apps/frontend/src/lib/` (`api.ts`, `contracts.ts`)
   - any impacted frontend rendering under `apps/frontend/src/App.tsx` or `apps/frontend/src/components/`
-  - the relevant tests in `apps/backend/tests/http_api.rs`, `apps/frontend/src/App.test.tsx`, and `tests/e2e/tests/inspection_surface.rs`
+  - the relevant tests in `apps/backend/tests/http_api.rs`, `apps/frontend/src/App.test.tsx`, `apps/frontend/e2e/inspection.spec.ts`, and `tests/e2e/tests/inspection_surface.rs`
 
 ## Layer Ownership
 
