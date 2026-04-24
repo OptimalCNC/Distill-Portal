@@ -12,28 +12,30 @@ For developers, please read [docs/README.md](docs/README.md) for documentation o
 - Read [ARCHITECTURE.md](ARCHITECTURE.md) for the architecture.
 - Read [docs/README.md](docs/README.md) for the repository structure, component ownership, features, and development commands.
 
-### Verification
+### Hard Rules
+
+- Backend owns machine-consumable HTTP routes; do not reintroduce backend-owned end-user HTML.
+- Frontend talks to the backend only over HTTP and only consumes generated contract types from `components/ui-api-contracts/bindings/*.ts`.
+- `apps/frontend` must not import from `components/collector-runtime`, `components/ingest-service`, or `components/raw-session-store`.
+- HTTP payload changes must update `components/ui-api-contracts`, the Rust and TS sides of both apps, and relevant tests together.
+- Keep docs aligned with any layout, command, dependency, or payload-shape change.
+
+### Quick Checks
+
+Fast checks to run before committing:
 
 ```bash
 cargo check --workspace
 cargo test --workspace
-cargo test -p distill-portal-ui-api-contracts --features ts-bindings
 ```
 
 From `apps/frontend/`:
 
 ```bash
 bun run test
-bun run test:e2e
 ```
 
-Targeted Rust tests:
-
-```bash
-cargo test -p distill-portal-collector-runtime --test parsers
-cargo test -p distill-portal-backend --test http_api
-cargo test -p distill-portal-e2e --test inspection_surface
-```
+See [docs/dev-commands.md](docs/dev-commands.md) for the full reference, including targeted Rust suites, the TypeScript contract-drift check, and the browser e2e suite.
 
 ## Quick Start
 

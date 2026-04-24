@@ -1,0 +1,131 @@
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref so rapid pushes don't pile up.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: Rust workspace
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo check
+        run: cargo check --workspace --all-targets --locked
+
+      - name: cargo test
+        run: cargo test --workspace --locked
+
+      # Fails if the checked-in TS bindings have drifted from the Rust
+      # contract source. See docs/dev-commands.md ("TypeScript Contract
+      # Bindings") for the regeneration command.
+      - name: ts-bindings drift check
+        run: cargo test -p distill-portal-ui-api-contracts --features ts-bindings --locked
+
+  frontend:
+    name: Frontend (apps/frontend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.x
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: bun run test
+        run: bun run test
+
+  e2e:
+    name: E2E (Playwright + backend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # Shares the cache key with the `rust` job (keyed on Cargo.lock),
+      # so the second job to start warms from the first's artifacts.
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
+      # Prebuild the backend so the harness's `cargo run` doesn't race
+      # Playwright's readiness gate on a cold cache.
+      - name: Prebuild backend
+        working-directory: ${{ github.workspace }}
+        run: cargo build -p distill-portal-backend --locked
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.x
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Key the Playwright browser cache on the installed version so
+      # upgrading @playwright/test invalidates the cache cleanly.
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(jq -r .version node_modules/@playwright/test/package.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Chromium + system deps
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: bunx --bun playwright install --with-deps chromium
+
+      # System libs live outside the cached path, so they still need
+      # installing on a browser-cache hit (quick apt-only step).
+      - name: Install Chromium system deps (cache hit)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: bunx --bun playwright install-deps chromium
+
+      - name: Run Playwright
+        run: bun run test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/frontend/playwright-report/
+            apps/frontend/test-results/
+          retention-days: 7
