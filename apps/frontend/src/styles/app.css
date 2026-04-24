@@ -3,10 +3,13 @@
  *
  * Scope: table layout, status-badge variants for the four
  * `SessionSyncStatus` values, and spacing between the three panels.
- * Intentionally plain — the gradient / backdrop-filter / serif-font
- * flourishes from the Rust reference (apps/frontend/src/app.rs) are out
- * of F1 scope. Class names match the Rust reference so copy-pasted
- * markup targets the same selectors.
+ * Intentionally plain — decorative flourishes (gradients,
+ * backdrop-filter, serif fonts, etc.) are out of F1 scope. Class
+ * names used here (`badge`, `.badge.up-to-date`, `.badge.not-stored`,
+ * `.badge.outdated`, `.badge.source-missing`, `panel`, `table-wrap`,
+ * `stack`, `mono`, `muted`, `empty`, `raw-link`, `action-bar`,
+ * `select-col`) are the source of truth for their own selectors — the
+ * Bun components in `src/components/` emit matching markup.
  */
 
 main {

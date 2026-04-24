@@ -2,12 +2,14 @@
 
 ## What This Feature Does
 
-The inspection surface lists discovered source sessions, shows what is already stored, lets the user save selected sessions, and links to stored raw payloads. In Phase 2 the frontend owns the page and talks to the backend only through HTTP plus the shared contracts crate.
+The inspection surface lists discovered source sessions, shows what is already stored, lets the user save selected sessions, and links to stored raw payloads. The Bun + Vite + React frontend owns the page and talks to the backend only through HTTP, consuming typed TypeScript bindings generated from the shared contracts crate.
 
 ## Frontend Files To Modify
 
-- `apps/frontend/src/app.rs`
-- `apps/frontend/src/backend_client.rs`
+- `apps/frontend/src/App.tsx`
+- `apps/frontend/src/components/` (per-panel components)
+- `apps/frontend/src/lib/api.ts`
+- `apps/frontend/src/lib/contracts.ts`
 
 ## Backend Files To Modify
 
@@ -35,3 +37,6 @@ The inspection surface lists discovered source sessions, shows what is already s
 
 - `apps/backend/tests/http_api.rs`
 - `tests/e2e/tests/inspection_surface.rs`
+- `apps/frontend/src/App.test.tsx`
+- `apps/frontend/src/components/*.test.tsx`
+- `apps/frontend/e2e/` (Playwright)

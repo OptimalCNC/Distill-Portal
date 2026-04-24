@@ -17,10 +17,10 @@
 //
 // Fixtures are typed from the generated contract so a Rust-side rename
 // of any `RescanReport` / `ImportReport` field fails the TS compile
-// here. The component renders `No recent mutation.` (ported verbatim
-// from the Rust reference) when `lastReport === null`, so that literal
-// is asserted rather than the "no text at all" shape an earlier G1
-// draft suggested — reading the component's idle branch is authoritative.
+// here. The component renders the literal `No recent mutation.` when
+// `lastReport === null`, so that exact string is asserted rather than
+// the "no text at all" shape an earlier G1 draft suggested — reading
+// the component's idle branch is authoritative.
 import { afterEach, expect, mock, test } from "bun:test";
 import { cleanup, render } from "@testing-library/react";
 import { ActionBar } from "./ActionBar";

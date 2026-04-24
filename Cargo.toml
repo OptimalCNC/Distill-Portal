@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "apps/backend",
-    "apps/frontend",
     "components/collector-runtime",
     "components/configuration",
     "components/ingest-service",

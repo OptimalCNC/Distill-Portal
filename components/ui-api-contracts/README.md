@@ -34,7 +34,8 @@ Owns the shared payload shapes and enums used at the frontend/backend HTTP bound
 
 - `src/lib.rs`
 - `apps/backend/src/http_api.rs`
-- `apps/frontend/src/backend_client.rs`
+- `apps/frontend/src/lib/api.ts`
+- `apps/frontend/src/lib/contracts.ts`
 - `tests/e2e/tests/inspection_surface.rs`
 
 ## Tests

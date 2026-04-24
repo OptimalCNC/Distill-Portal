@@ -9,11 +9,10 @@
   - `components/observability`
   - `components/raw-session-store`
   - `components/ui-api-contracts`
-- `apps/frontend` may depend on:
-  - `components/configuration`
-  - `components/observability`
-  - `components/ui-api-contracts`
-  - external HTTP client crates only for backend communication
+- `apps/frontend` (Bun + Vite + React + TypeScript) may depend on:
+  - `components/ui-api-contracts/bindings/*.ts` (generated TypeScript types; one-way import only)
+  - external npm packages managed via Bun for UI, HTTP fetch, and test tooling
+  - all backend communication is over HTTP to `apps/backend`
 - `components/ingest-service` may depend on:
   - `components/collector-runtime`
   - `components/raw-session-store`
@@ -42,9 +41,9 @@
   - `components/ui-api-contracts/src/lib.rs`
   - `components/ui-api-contracts/bindings/*.ts` (regenerate via `cargo test -p distill-portal-ui-api-contracts --features ts-bindings -- --ignored regenerate_ts_bindings`; see `docs/dev-commands.md`)
   - `apps/backend/src/http_api.rs`
-  - `apps/frontend/src/backend_client.rs`
-  - any impacted frontend page rendering in `apps/frontend/src/app.rs`
-  - the relevant tests in `apps/backend/tests/http_api.rs` and `tests/e2e/tests/inspection_surface.rs`
+  - the typed API layer in `apps/frontend/src/lib/` (`api.ts`, `contracts.ts`)
+  - any impacted frontend rendering under `apps/frontend/src/App.tsx` or `apps/frontend/src/components/`
+  - the relevant tests in `apps/backend/tests/http_api.rs`, `apps/frontend/src/App.test.tsx`, and `tests/e2e/tests/inspection_surface.rs`
 
 ## Layer Ownership
 
@@ -54,8 +53,8 @@
 - Environment variable mapping belongs to `components/configuration`
 - HTTP routes belong to the app crates only
 
-## Frontend Dev-Time Topology (Phase 3)
+## Frontend Dev-Time Topology
 
-- During Phase 3, `apps/frontend/` hosts two apps side by side: the legacy Rust crate (`Cargo.toml`, `src/*.rs`) and the new Bun + React + TypeScript app (`package.json`, `bun.lock`, `vite.config.ts`, `index.html`, `src/*.tsx`). Both still need to coexist until Milestone 5 removes the Rust crate — Cargo only considers the `src/*.rs` files and `Cargo.toml`, so the non-Rust files are inert from Cargo's perspective.
-- Frontend dev-time proxying of `/api/v1/**` and `/health` to the backend belongs in `apps/frontend/vite.config.ts`, not in any application code path. This is the Phase 3 replacement for the Rust frontend's per-route HTTP forwarding.
-- The Bun app must continue to honor the existing frontend-boundary rules above: no direct dependency on `components/collector-runtime`, `components/ingest-service`, or `components/raw-session-store`; all backend communication goes over HTTP to the Rust backend.
+- `apps/frontend/` is a Bun-managed package (`package.json`, `bun.lock`, `vite.config.ts`, `index.html`, `src/*.tsx`).
+- Frontend dev-time proxying of `/api/v1/**` and `/health` to the backend belongs in `apps/frontend/vite.config.ts`, not in any application code path.
+- The Bun app must continue to honor the frontend-boundary rules above: no direct dependency on `components/collector-runtime`, `components/ingest-service`, or `components/raw-session-store`; all backend communication goes over HTTP to the Rust backend.

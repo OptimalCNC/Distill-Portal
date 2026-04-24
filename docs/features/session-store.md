@@ -6,8 +6,10 @@ The session store persists ingested session metadata in SQLite and raw JSONL blo
 
 ## Frontend Files To Modify
 
-- `apps/frontend/src/app.rs`
-- `apps/frontend/src/backend_client.rs`
+- `apps/frontend/src/App.tsx`
+- `apps/frontend/src/components/` (per-panel components)
+- `apps/frontend/src/lib/api.ts`
+- `apps/frontend/src/lib/contracts.ts`
 
 ## Backend Files To Modify
 

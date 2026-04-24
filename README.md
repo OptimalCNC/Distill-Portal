@@ -35,13 +35,16 @@ Run the backend:
 cargo run -p distill-portal-backend
 ```
 
-Run the frontend:
+Run the frontend (from `apps/frontend/`):
 
 ```bash
-cargo run -p distill-portal-frontend
+bun install
+bun run dev
 ```
 
 Then open the frontend address. By default:
 
 - backend: `http://127.0.0.1:4000`
-- frontend: `http://127.0.0.1:4100`
+- frontend (Vite dev server): `http://127.0.0.1:4100`
+
+See `docs/dev-commands.md` for the full list of frontend and test commands.

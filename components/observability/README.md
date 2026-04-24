@@ -24,7 +24,6 @@ Owns tracing subscriber setup shared by the runnable app crates.
 
 - `src/lib.rs`
 - `apps/backend/src/main.rs`
-- `apps/frontend/src/main.rs`
 
 ## Tests
 

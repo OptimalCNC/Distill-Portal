@@ -1,11 +1,9 @@
 // Stored sessions panel table (read-only).
 //
-// Columns match `apps/frontend/src/app.rs` (the Rust reference) exactly:
-// Status, Tool, Title (stacked with source_session_id), Project,
+// Columns: Status, Tool, Title (stacked with source_session_id), Project,
 // Ingested (ingested_at), Source Updated, Session UID (anchor to the
 // metadata endpoint + fingerprint line), Raw (anchor to the raw NDJSON
-// endpoint). Empty-state copy ports the Rust reference's "The store is
-// currently empty." message.
+// endpoint). Empty-state copy: "The store is currently empty."
 //
 // The Raw link uses a same-origin relative path; the Vite dev proxy (see
 // `apps/frontend/vite.config.ts`) forwards `/api/v1/**` to the backend.

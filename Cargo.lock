@@ -240,26 +240,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "distill-portal-frontend"
-version = "0.1.0"
-dependencies = [
- "axum",
- "bytes",
- "distill-portal-configuration",
- "distill-portal-observability",
- "distill-portal-ui-api-contracts",
- "http-body-util",
- "hyper",
- "hyper-util",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tower",
- "tracing",
-]
-
-[[package]]
 name = "distill-portal-ingest-service"
 version = "0.1.0"
 dependencies = [

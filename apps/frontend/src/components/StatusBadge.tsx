@@ -1,10 +1,10 @@
 // Status pill for the four `SessionSyncStatus` variants.
 //
-// Ports the `status_badge` helper from `apps/frontend/src/app.rs` (the Rust
-// reference page). The class names (`badge`, and the variant class with
-// underscores rewritten to dashes) and the human label (underscores
-// rewritten to spaces) match the Rust reference verbatim so the CSS
-// carried over in `styles/app.css` targets the same selectors.
+// Renders `<span class="badge {variant}">{label}</span>` where `variant`
+// is the status with underscores rewritten to dashes (matching the CSS
+// selectors in `styles/app.css`: `.badge.up-to-date`, `.badge.not-stored`,
+// `.badge.outdated`, `.badge.source-missing`) and `label` is the status
+// with underscores rewritten to spaces for human display.
 import type { SessionSyncStatus } from "../lib/contracts";
 
 type StatusBadgeProps = { status: SessionSyncStatus };

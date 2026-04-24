@@ -1,9 +1,7 @@
 // Scan errors panel (read-only).
 //
-// Columns match `apps/frontend/src/app.rs` (the Rust reference) exactly:
-// Tool, Path (source_path), Message, Last Seen (last_seen_at). Empty-state
-// copy ports the Rust reference's "No scan errors are currently recorded."
-// message.
+// Columns: Tool, Path (source_path), Message, Last Seen (last_seen_at).
+// Empty-state copy: "No scan errors are currently recorded."
 import type { PersistedScanError } from "../lib/contracts";
 
 type ScanErrorsPanelProps = { errors: PersistedScanError[] };

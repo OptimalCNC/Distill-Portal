@@ -1,11 +1,9 @@
 // Source sessions panel table.
 //
-// Columns match `apps/frontend/src/app.rs` (the Rust reference) plus a
-// leading select column owned by Chunk F2: Select, Status, Tool, Title
+// Columns: Select (checkbox, added in Chunk F2), Status, Tool, Title
 // (stacked with source_session_id), Project, Updated (source_updated_at),
 // Stored Copy (session_uid + stored_ingested_at), Source Path.
-// Empty-state copy ports the Rust reference's "No source sessions are
-// currently discoverable." message.
+// Empty-state copy: "No source sessions are currently discoverable."
 //
 // Selection is lifted to `App.tsx`: this component is a controlled view of
 // whatever `selected` set the parent owns. `onToggle(sessionKey)` toggles a

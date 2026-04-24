@@ -6,7 +6,6 @@ import react from "@vitejs/plugin-react";
 //   Frontend : http://127.0.0.1:4100  (this Vite dev server)
 // `/api/v1/**` and `/health` are proxied by Vite to the backend so the
 // browser can call backend endpoints using same-origin paths without CORS.
-// The Rust frontend crate also binds 4100 — run one OR the other, not both.
 export default defineConfig({
   plugins: [react()],
   server: {

@@ -1,6 +1,6 @@
 # Distill Portal Docs
 
-Start here when you need to orient yourself in the Distill Portal workspace. Phase 3 is currently migrating the frontend to Bun + React + TypeScript; the legacy Rust frontend crate still coexists under `apps/frontend/` until Milestone 5.
+Start here when you need to orient yourself in the Distill Portal workspace. `apps/frontend` is a Bun + Vite + React + TypeScript app; the backend remains Rust under `apps/backend`.
 
 This file is both the docs entry point and the practical repo map.
 
@@ -9,7 +9,7 @@ This file is both the docs entry point and the practical repo map.
 ### Top-Level Layout
 
 - `apps/backend`: backend service binary and library; owns scanning orchestration, ingest wiring, storage wiring, and machine-consumable HTTP routes
-- `apps/frontend`: during the Phase 3 migration this directory hosts a Bun + React + TypeScript app (the new ownership for the inspection page) alongside the legacy Rust frontend crate; the backend remains Rust and is untouched by Phase 3
+- `apps/frontend`: Bun + Vite + React + TypeScript app that owns the inspection page and talks to the backend over HTTP
 - `components/collector-runtime`: source discovery, safe JSONL reads, and tool-specific adapters
 - `components/configuration`: backend and frontend runtime config loading
 - `components/ingest-service`: content-addressed ingest decisions and replace-on-sync behavior
@@ -24,9 +24,8 @@ This file is both the docs entry point and the practical repo map.
 
 ### Frontend And Backend
 
-- Frontend (`apps/frontend`): in Phase 3 a Bun + React + TypeScript app coexists with the legacy Rust crate under the same directory. Frontend tests and commands live with this app; see `dev-commands.md`.
-  - Bun app entrypoints: `apps/frontend/package.json`, `apps/frontend/vite.config.ts`, `apps/frontend/index.html`, `apps/frontend/src/main.tsx`, `apps/frontend/src/App.tsx`, and the typed API layer under `apps/frontend/src/lib/` (`api.ts`, `config.ts`, `contracts.ts`)
-  - legacy Rust crate entrypoints (still present until Milestone 5): `apps/frontend/src/main.rs`, `apps/frontend/src/app.rs`, backend client `apps/frontend/src/backend_client.rs`
+- Frontend (`apps/frontend`): Bun + Vite + React + TypeScript app. Frontend tests and commands live with this app; see `dev-commands.md`.
+  - Entrypoints: `apps/frontend/package.json`, `apps/frontend/vite.config.ts`, `apps/frontend/index.html`, `apps/frontend/src/main.tsx`, `apps/frontend/src/App.tsx`, and the typed API layer under `apps/frontend/src/lib/` (`api.ts`, `config.ts`, `contracts.ts`)
 - Backend crate: `apps/backend`
   - entrypoints: `src/main.rs`, `src/app.rs`
   - JSON and raw-content routes: `src/http_api.rs`

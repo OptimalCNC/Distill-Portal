@@ -14,24 +14,9 @@ Useful backend env vars:
 - `DISTILL_PORTAL_CLAUDE_ROOTS`
 - `DISTILL_PORTAL_CODEX_ROOTS`
 
-## Run The Frontend (Rust binary, being phased out)
+## Run The Frontend
 
-```bash
-cargo run -p distill-portal-frontend
-```
-
-Useful frontend env vars:
-
-- `DISTILL_PORTAL_FRONTEND_BIND`
-- `DISTILL_PORTAL_BACKEND_URL`
-
-The frontend defaults to `127.0.0.1:4100` and expects the backend at `http://127.0.0.1:4000`.
-
-During the Phase 3 migration, the Rust frontend crate coexists with the new Bun app under `apps/frontend/`. The Rust binary and the Bun dev server below both bind `127.0.0.1:4100` — run one OR the other, not both.
-
-## Run The Frontend (Bun + Vite + React, Phase 3)
-
-The new frontend lives alongside the Rust crate under `apps/frontend/` as a Bun-managed package (`package.json`, `bun.lock`, `vite.config.ts`, `index.html`, `src/*.tsx`).
+The frontend lives under `apps/frontend/` as a Bun-managed package (`package.json`, `bun.lock`, `vite.config.ts`, `index.html`, `src/*.tsx`).
 
 Commands (run from `apps/frontend/`):
 
@@ -46,7 +31,7 @@ bun run test
 - `bun run build` writes static assets to `apps/frontend/dist/`.
 - `bun run test` runs `bun test src` (the unit suite; browser e2e is `bun run test:e2e`, documented below). After Milestone 4's Chunk G1, the unit suite is 17 tests across three files: a mounted-`App` suite in `apps/frontend/src/App.test.tsx` covering the read-only three-panel render, the rescan + import mutation flows (including an explicit race-window reproducer for the stale-selection bug), and one per-panel independent-error branch; a variant-matrix suite in `apps/frontend/src/components/StatusBadge.test.tsx` covering all four `SessionSyncStatus` values; and a disabled-state truth-table suite in `apps/frontend/src/components/ActionBar.test.tsx` covering the full `pending × selectedCount × lastReport` matrix plus the dispatch-path callback.
 
-## Dev Topology (Phase 3)
+## Dev Topology
 
 ```
 browser
@@ -62,9 +47,8 @@ http://127.0.0.1:4000  <-- Rust backend (cargo run -p distill-portal-backend)
 - Backend: `127.0.0.1:4000` (Rust, `cargo run -p distill-portal-backend`).
 - Frontend dev server: `127.0.0.1:4100` (Bun + Vite, `bun run dev` under `apps/frontend/`).
 - Vite proxies `/api/v1/**` and `/health` to the backend so browser code can use same-origin paths without ad hoc CORS setup. Dev-time proxy config lives in `apps/frontend/vite.config.ts`, not in application code.
-- The Rust frontend binary (`cargo run -p distill-portal-frontend`) also listens on `127.0.0.1:4100`. Run the Bun dev server OR the Rust frontend, never both at once.
 
-## Run Both Together (Phase 3, Bun frontend)
+## Run Both Together
 
 Terminal 1:
 
@@ -79,22 +63,6 @@ bun run dev
 ```
 
 Then open `http://127.0.0.1:4100/` in the browser. The Rust backend must be running for `/health` and `/api/v1/**` to resolve through the Vite proxy.
-
-## Run Both Together (legacy Rust frontend)
-
-Terminal 1:
-
-```bash
-cargo run -p distill-portal-backend
-```
-
-Terminal 2:
-
-```bash
-cargo run -p distill-portal-frontend
-```
-
-Then open the frontend address, not the backend address. This path is retained during the Phase 3 transition and will be removed in Milestone 5.
 
 ## Browser E2E (Phase 3, Playwright)
 
