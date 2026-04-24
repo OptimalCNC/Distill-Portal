@@ -1,11 +1,10 @@
-// Inspection-surface browser e2e (Chunk G2).
+// Inspection-surface browser e2e.
 //
 // Drives the real React app against the real Rust backend through the
-// Vite dev proxy. Closes Milestone 4 DoD item 2: "browser e2e covers
-// the inspection workflow against the Rust backend". The Rust-level
-// typed-client coverage moves into
-// `tests/e2e/tests/inspection_surface.rs` (narrowed to hit the backend
-// directly) per DoD item 3.
+// Vite dev proxy. Covers the full inspection workflow (render, import,
+// rescan, raw payload retrieval). The companion Rust-level typed-client
+// coverage lives at `tests/e2e/tests/inspection_surface.rs` (backend
+// HTTP stack directly, no browser).
 //
 // Topology during this spec:
 //   chromium -> http://127.0.0.1:4100 (Vite dev server, webServer hook)

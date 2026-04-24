@@ -17,9 +17,17 @@ For developers, please read [docs/README.md](docs/README.md) for documentation o
 ```bash
 cargo check --workspace
 cargo test --workspace
+cargo test -p distill-portal-ui-api-contracts --features ts-bindings
 ```
 
-Targeted tests:
+From `apps/frontend/`:
+
+```bash
+bun run test
+bun run test:e2e
+```
+
+Targeted Rust tests:
 
 ```bash
 cargo test -p distill-portal-collector-runtime --test parsers

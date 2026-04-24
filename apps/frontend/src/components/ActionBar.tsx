@@ -1,4 +1,4 @@
-// Action bar for the Source Sessions panel (Chunk F2).
+// Action bar for the Source Sessions panel.
 //
 // Renders the two mutation buttons — "Rescan" and "Import selected (N)" —
 // plus a textual summary of the most recent mutation result. The summary

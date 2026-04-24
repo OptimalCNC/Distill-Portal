@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// Phase 3 dev topology (see docs/dev-commands.md):
+// Dev topology (see docs/dev-commands.md):
 //   Backend  : http://127.0.0.1:4000  (Rust, must be running separately)
 //   Frontend : http://127.0.0.1:4100  (this Vite dev server)
 // `/api/v1/**` and `/health` are proxied by Vite to the backend so the

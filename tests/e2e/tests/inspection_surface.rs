@@ -1,13 +1,11 @@
-// Typed Rust client hits the real backend HTTP stack (Phase 3, Chunk G2).
+// Typed Rust client against the real backend HTTP stack.
 //
-// Pre-G2 this test also bootstrapped `distill_portal_frontend::App` and
-// asserted against the Rust-rendered HTML plus the frontend's proxy
-// endpoint. Milestone 4 moves that end-to-end coverage into the
-// Playwright browser e2e under `apps/frontend/e2e/inspection.spec.ts`;
-// this Rust-side test now only proves that a typed client posting to
-// the backend's `/api/v1/source-sessions/import` endpoint walks through
-// the full `collector-runtime -> raw-session-store -> ingest-service`
-// pipeline and gets back the expected `ImportReport`.
+// Proves that a typed client posting to `/api/v1/source-sessions/import`
+// walks through the full
+// `collector-runtime -> raw-session-store -> ingest-service` pipeline and
+// gets back the expected `ImportReport`. Browser-level coverage of the
+// inspection workflow (render, interact, proxy) lives in the Playwright
+// suite under `apps/frontend/e2e/inspection.spec.ts`.
 use std::{
     net::SocketAddr,
     path::{Path, PathBuf},

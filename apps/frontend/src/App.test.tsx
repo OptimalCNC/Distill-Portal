@@ -1,13 +1,13 @@
-// Mounted-App Bun smoke tests for the Phase 3 inspection surface.
+// Mounted-App Bun smoke tests for the inspection surface.
 //
-// Three test functions cover the F1 + F2 surface:
+// Three test functions:
 //
-//   (1) read-only three-panel fetch (F1): three initial GETs settle
+//   (1) read-only three-panel fetch: three initial GETs settle
 //       independently and render their fixtures into the three panels;
-//   (2) rescan flow (F2): clicking "Rescan" posts to the backend, renders
+//   (2) rescan flow: clicking "Rescan" posts to the backend, renders
 //       the typed RescanReport summary, and triggers a three-panel
 //       refetch so the inspection view reflects the mutation;
-//   (3) import flow (F2): selecting a source session checkbox and
+//   (3) import flow: selecting a source session checkbox and
 //       clicking "Import selected (1)" posts the typed
 //       ImportSourceSessionsRequest body (exact JSON-stringified shape),
 //       renders the typed ImportReport summary, clears the selection,

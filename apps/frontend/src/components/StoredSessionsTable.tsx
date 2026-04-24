@@ -7,7 +7,8 @@
 //
 // The Raw link uses a same-origin relative path; the Vite dev proxy (see
 // `apps/frontend/vite.config.ts`) forwards `/api/v1/**` to the backend.
-// F1 stays read-only: no selection checkbox, no mutation handlers.
+// The panel is intentionally read-only: no selection checkbox, no mutation
+// handlers.
 import type { StoredSessionView } from "../lib/contracts";
 import { StatusBadge } from "./StatusBadge";
 

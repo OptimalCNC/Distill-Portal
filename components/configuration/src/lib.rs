@@ -67,31 +67,6 @@ impl BackendConfig {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct FrontendConfig {
-    pub bind_addr: SocketAddr,
-    pub backend_base_url: String,
-}
-
-impl FrontendConfig {
-    pub fn new(
-        bind_addr: SocketAddr,
-        backend_base_url: impl Into<String>,
-    ) -> Result<Self, ConfigurationError> {
-        Ok(Self {
-            bind_addr,
-            backend_base_url: normalize_backend_base_url(backend_base_url.into())?,
-        })
-    }
-
-    pub fn load() -> Result<Self, ConfigurationError> {
-        let bind_addr = read_socket_addr(&["DISTILL_PORTAL_FRONTEND_BIND"], "127.0.0.1:4100")?;
-        let backend_base_url = env::var("DISTILL_PORTAL_BACKEND_URL")
-            .unwrap_or_else(|_| "http://127.0.0.1:4000".to_string());
-        Self::new(bind_addr, backend_base_url)
-    }
-}
-
 fn read_socket_addr(keys: &[&str], default: &str) -> Result<SocketAddr, ConfigurationError> {
     let raw = keys
         .iter()
@@ -99,15 +74,6 @@ fn read_socket_addr(keys: &[&str], default: &str) -> Result<SocketAddr, Configur
         .unwrap_or_else(|| default.to_string());
     raw.parse()
         .map_err(|_| ConfigurationError::InvalidBindAddr(raw))
-}
-
-fn normalize_backend_base_url(raw: String) -> Result<String, ConfigurationError> {
-    let trimmed = raw.trim().trim_end_matches('/').to_string();
-    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-        Ok(trimmed)
-    } else {
-        Err(ConfigurationError::InvalidBackendUrl(raw))
-    }
 }
 
 fn read_path_list(key: &str) -> Option<Vec<PathBuf>> {
@@ -126,6 +92,4 @@ pub enum ConfigurationError {
     InvalidBindAddr(String),
     #[error("invalid DISTILL_PORTAL_POLL_INTERVAL_SECS: {0}")]
     InvalidPollInterval(String),
-    #[error("invalid frontend backend URL: {0}")]
-    InvalidBackendUrl(String),
 }

@@ -1,15 +1,15 @@
-// Inspection page (Phase 3, Chunks F1 + F2).
+// Inspection page.
 //
-// F1 orchestrates three parallel fetches — source sessions, stored
-// sessions, scan errors — via `Promise.allSettled` so each panel settles
+// Orchestrates three parallel fetches — source sessions, stored sessions,
+// scan errors — via `Promise.allSettled` so each panel settles
 // independently. A failure on one panel does not block the others. Each
 // panel owns its own `{ loading, data, error }` slice of state.
 //
-// F2 adds selection (lifted into this component) and two mutations: a
-// backend rescan (`POST /api/v1/admin/rescan`) and a source-session import
+// Selection is lifted into this component and drives two mutations:
+// backend rescan (`POST /api/v1/admin/rescan`) and source-session import
 // (`POST /api/v1/source-sessions/import`). The `ActionBar` owns the
-// mutation-button UI but remains stateless; `SourceSessionsTable` is now
-// a controlled view of the `selected` set below. After each mutation
+// mutation-button UI but remains stateless; `SourceSessionsTable` is a
+// controlled view of the `selected` set below. After each mutation
 // resolves we refetch the three panels unconditionally — no optimistic
 // updates — to keep the inspection surface consistent with the backend.
 import { useCallback, useEffect, useRef, useState } from "react";

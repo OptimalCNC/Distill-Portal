@@ -1,4 +1,4 @@
-// Backend spawn harness for Playwright e2e (Chunk G2).
+// Backend spawn harness for Playwright e2e.
 //
 // Launches `cargo run -p distill-portal-backend` as a child process and
 // returns a handle whose `.stop()` terminates it and cleans up the temp

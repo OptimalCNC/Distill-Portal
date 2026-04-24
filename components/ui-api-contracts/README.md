@@ -49,16 +49,16 @@ The frontend app consumes these contracts from TypeScript. To avoid a hand-maint
 
 ### Tool choice
 
-Phase 3 uses [`ts-rs`](https://github.com/Aleph-Alpha/ts-rs) `12.0.1` (pinned in `Cargo.toml`) as the codegen tool.
+The contracts crate uses [`ts-rs`](https://github.com/Aleph-Alpha/ts-rs) `12.0.1` (pinned in `Cargo.toml`) as the codegen tool.
 
 Rationale, compared to the main alternative, [`typeshare`](https://github.com/1Password/typeshare):
 
 - **`ts-rs` is derive-driven and stays inside the Rust toolchain.** A `cargo test` invocation regenerates the bindings; no external CLI install step is required. `typeshare` ships codegen as a separate `typeshare-cli` binary that contributors would need to install and keep on the right version, and the CI image would need to carry.
-- **`ts-rs` understands serde attributes via its default `serde-compat` feature**, though coverage is partial and Phase 3 leans on that understanding only where it matches the JSON wire shape. Concretely: `#[serde(rename_all = "snake_case")]` on enums is reflected — `Tool` emits `"claude_code" | "codex"`, matching the JSON wire shape. `#[serde(flatten)]` on `StoredSessionView.session` is reflected via the explicit companion `#[ts(flatten)]` attribute, so the generated TS type inlines the `StoredSessionRecord` fields, again matching the JSON wire shape. `#[serde(default)]` on `ImportSourceSessionsRequest.session_keys` is **not** reflected in the TS type: the Rust side accepts an omitted `session_keys` field on the wire, but the generated TS keeps the field required (`session_keys: Array<string>`), so TS consumers must still pass it. Frontend code that wants to omit the field would need to be adjusted, or the TS emission would need additional work — that is out of Chunk B scope. `typeshare` has a narrower serde surface and historically has gaps around flattened structs, so for the attributes that do matter to Phase 3's contract shapes, `ts-rs` is the closer match.
+- **`ts-rs` understands the serde attributes we depend on.** `#[serde(rename_all = "snake_case")]` on enums is reflected — `Tool` emits `"claude_code" | "codex"`, matching the JSON wire shape. `#[serde(flatten)]` on `StoredSessionView.session` is reflected via the companion `#[ts(flatten)]` attribute, so the generated TS type inlines the `StoredSessionRecord` fields. `typeshare` has a narrower serde surface and historically has gaps around flattened structs, so for the attributes that matter to our contract shapes, `ts-rs` is the closer match.
 - **Generated output is stable.** Each run of the generator produces byte-identical files, so the staleness check can compare against a fresh temp-dir regeneration with a simple `assert_eq!`.
 - **The codegen dependency is kept out of the backend build.** `ts-rs` is listed as an *optional* dependency behind the `ts-bindings` feature, which is off by default. Backend and workspace builds never compile `ts-rs` unless a developer explicitly opts in.
 
-`typeshare` remains a reasonable fallback if Phase 3 ever needs to emit Kotlin/Swift alongside TypeScript. For a single TS target, the in-tree, cargo-native ergonomics of `ts-rs` are the better match.
+`typeshare` remains a reasonable fallback if the project ever needs to emit Kotlin/Swift alongside TypeScript. For a single TS target, the in-tree, cargo-native ergonomics of `ts-rs` are the better match.
 
 ### Where the generated files live
 

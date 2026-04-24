@@ -1,6 +1,6 @@
 // Source sessions panel table.
 //
-// Columns: Select (checkbox, added in Chunk F2), Status, Tool, Title
+// Columns: Select (checkbox), Status, Tool, Title
 // (stacked with source_session_id), Project, Updated (source_updated_at),
 // Stored Copy (session_uid + stored_ingested_at), Source Path.
 // Empty-state copy: "No source sessions are currently discoverable."

@@ -1,9 +1,9 @@
-// Playwright config for the Phase 3 inspection-surface e2e (Chunk G2).
+// Playwright config for the inspection-surface browser e2e.
 //
-// Chromium-only per G2 scope — no Firefox/WebKit, no visual-regression
-// snapshots, no CI wiring. Tests run serially (`workers: 1`) because the
-// harness binds the Rust backend to port 4000, matching the Vite dev
-// proxy in `vite.config.ts`; parallel workers would collide.
+// Chromium-only — no Firefox/WebKit, no visual-regression snapshots, no
+// CI wiring. Tests run serially (`workers: 1`) because the harness binds
+// the Rust backend to port 4000, matching the Vite dev proxy in
+// `vite.config.ts`; parallel workers would collide.
 //
 // Intentional omission: the backend is NOT declared as a `webServer`
 // here. The spec's `test.beforeAll` starts it via

@@ -1,4 +1,4 @@
-// Variant-matrix coverage for the StatusBadge pill (Chunk G1).
+// Variant-matrix coverage for the StatusBadge pill.
 //
 // StatusBadge is a pure presentational component that maps a
 // `SessionSyncStatus` enum value (four variants) onto a `<span>` with two

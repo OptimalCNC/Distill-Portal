@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Owns environment-variable mapping and runtime config models for the backend and frontend apps.
+Owns environment-variable mapping and runtime config models for the backend app. (The Bun frontend has its own config under `apps/frontend/src/lib/config.ts`.)
 
 ## Owned Files
 
@@ -11,7 +11,6 @@ Owns environment-variable mapping and runtime config models for the backend and 
 ## Public API / Entry Points
 
 - `BackendConfig`
-- `FrontendConfig`
 
 ## Important Internal Files
 
