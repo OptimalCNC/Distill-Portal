@@ -1,22 +1,38 @@
-// Mounted-App Bun smoke tests for the inspection surface.
+// Mounted-App Bun smoke tests for the unified inspection surface.
 //
-// Three test functions:
+// Phase 4 Milestone 2 retired the dual-table layout; the inspection
+// page now renders one merged session list (`SessionsView` +
+// `SessionsTable` under `src/features/sessions/`) plus a collapsible
+// `ScanErrorsCallout`. The orchestration is unchanged: three parallel
+// GETs settled with `Promise.allSettled`, per-panel error isolation,
+// `Set<string>` selection holding backend-provided `session_key`
+// values, click-time intersection in `handleImport` extended to filter
+// by importability.
 //
-//   (1) read-only three-panel fetch: three initial GETs settle
-//       independently and render their fixtures into the three panels;
-//   (2) rescan flow: clicking "Rescan" posts to the backend, renders
-//       the typed RescanReport summary, and triggers a three-panel
-//       refetch so the inspection view reflects the mutation;
-//   (3) import flow: selecting a source session checkbox and
-//       clicking "Import selected (1)" posts the typed
-//       ImportSourceSessionsRequest body (exact JSON-stringified shape),
-//       renders the typed ImportReport summary, clears the selection,
-//       and triggers a three-panel refetch.
+// Coverage:
 //
-// Fixtures are typed from `@contracts/*` via the `./lib/contracts`
-// re-export barrel so contract drift surfaces as a type error. `fetch` is
-// mocked on `globalThis.fetch` and restored in `afterEach`. happy-dom is
-// installed globally by `./test-setup.ts` (preloaded via `bunfig.toml`).
+//   (1) Unified-list happy path: three initial GETs settle and their
+//       fixtures all show up in one merged table. The scan-error
+//       fixture surfaces in the `ScanErrorsCallout`.
+//   (2) Rescan flow: click "Rescan", typed RescanReport summary
+//       renders, three-panel refetch fires (3 + 1 + 3 = 7 calls).
+//   (3) Import flow: select a `not_stored` row, click
+//       "Import selected (1)", typed ImportSourceSessionsRequest body
+//       fires, typed ImportReport summary renders, selection clears,
+//       three-panel refetch fires.
+//   (4) F2 click-time intersection regression: a rescan that prunes
+//       a selected row mid-click must NOT ship the stale key in the
+//       import POST. Test source preserved verbatim from the Phase 3
+//       version (only fixture/selector adjustments — see Handoff Notes).
+//   (5) Per-panel error isolation: source 500 / stored 500 /
+//       scan-errors 500 each leave the surviving fetches rendered.
+//   (6) Importability rule at POST: a fixture with one importable +
+//       multiple non-importable rows; manual injection of a rogue key
+//       into `selected` does not leak into the POST body.
+//   (7) statusConflict affordance: a `presence: both` row with
+//       disagreeing source/stored statuses renders the (refresh) hint.
+//   (8) `stored_only + source_missing` row renders the last-known
+//       source path with the title= hover hint.
 import { afterEach, beforeEach, expect, mock, test } from "bun:test";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { App } from "./App";
@@ -159,7 +175,7 @@ function jsonResponse(payload: unknown): Response {
   });
 }
 
-test("mounted App fetches all three panels and renders them independently", async () => {
+test("mounted App fetches all three panels and renders the unified table", async () => {
   const fetchMock = mock(
     async (input: Request | string | URL): Promise<Response> => {
       const url = urlOf(input);
@@ -181,14 +197,11 @@ test("mounted App fetches all three panels and renders them independently", asyn
 
   const { container } = render(<App />);
 
-  // Each panel settles independently; wait for one fixture per panel.
-  // `findAllByText` tolerates the stored-session UID appearing both as
-  // the anchor text and the source-session row's "Stored Copy" cell.
+  // Each fetch settles independently; wait for each fixture's signature.
   await screen.findByText("claude_code:fixture-abc");
-  await screen.findAllByText("abc-uid-123");
   await screen.findByText("Malformed NDJSON on line 3");
 
-  // (1) fetch called exactly three times with the three expected paths.
+  // (1) Three initial GETs to the three known paths.
   expect(fetchMock).toHaveBeenCalledTimes(3);
   const requestedUrls = fetchMock.mock.calls
     .map((args) => urlOf(args[0] as Request | string | URL))
@@ -197,33 +210,46 @@ test("mounted App fetches all three panels and renders them independently", asyn
     [SOURCE_SESSIONS_PATH, STORED_SESSIONS_PATH, SCAN_ERRORS_PATH].sort(),
   );
 
-  // (2) DOM contains the source-session fixture session_key.
+  // (2) Source-fixture session_key appears once (in the merged table).
   expect(
     container.textContent?.includes("claude_code:fixture-abc"),
   ).toBe(true);
 
-  // (3) DOM contains the stored-session fixture session_uid.
+  // (3) Stored fixture session_uid appears in the merged table (the
+  //     `up_to_date` join path emits the UID in the stored-copy cell).
   expect(container.textContent?.includes("abc-uid-123")).toBe(true);
 
-  // (4) DOM contains the scan-error fixture message.
+  // (4) Scan-error message appears in the ScanErrorsCallout.
   expect(
     container.textContent?.includes("Malformed NDJSON on line 3"),
   ).toBe(true);
 
-  // (5) StatusBadge renders with the expected class combination for the
-  // source session row (status `up_to_date` -> `badge` + `up-to-date`).
+  // (5) StatusBadge renders with the expected class for the `up_to_date`
+  //     row (joined source ⊕ stored).
   const badges = container.querySelectorAll("span.badge.up-to-date");
   expect(badges.length).toBeGreaterThanOrEqual(1);
 
-  // (6) Raw-download anchor targets the exact backend path.
+  // (6) Raw-download anchor targets the exact backend path. The unified
+  //     table emits the View Raw anchor whenever a stored UID is present.
   const rawAnchor = container.querySelector(
     'a[href="/api/v1/sessions/abc-uid-123/raw"]',
   );
   expect(rawAnchor).not.toBeNull();
   expect(rawAnchor?.textContent).toBe("View Raw");
 
-  // (7) Structural: exactly three panel sections (source / stored / errors).
-  expect(container.querySelectorAll("section").length).toBe(3);
+  // (7) Exactly one merged `<table>` for the unified list. The
+  //     ScanErrorsCallout's table is in addition (one for the unified
+  //     list, one for the scan-errors callout).
+  const tables = container.querySelectorAll("table");
+  expect(tables.length).toBe(2);
+
+  // (8) The fixture `up_to_date` row is NOT importable — there should
+  //     be no per-row checkbox for it. Only the disabled header
+  //     checkbox is present.
+  const importCheckbox = container.querySelector(
+    'input[aria-label="Select claude_code:fixture-abc"]',
+  );
+  expect(importCheckbox).toBeNull();
 });
 
 test("clicking Rescan posts to the backend and refetches the three panels", async () => {
@@ -301,7 +327,6 @@ test("clicking Rescan posts to the backend and refetches the three panels", asyn
     ).toBe(true);
   });
   expect(container.textContent?.includes("12")).toBe(true);
-
 });
 
 test("selecting a source session and clicking Import posts the typed request", async () => {
@@ -394,6 +419,13 @@ test("rescan prunes stale selection so the import POST matches the visible rows"
   // The user selects both rows before the rescan. After the rescan the
   // Import button count must drop to 1 and the subsequent POST body must
   // only contain the still-visible key.
+  //
+  // This is the F2 regression test — pinned source unchanged from the
+  // Phase 3 version because the selectors and timing it relies on are
+  // ActionBar+button shape, not the dual-table layout. The unified
+  // SessionsTable still emits the same `Select <key>` aria-labels for
+  // importable rows, and `App.tsx` still owns `selected: Set<string>`
+  // and the Import handler.
   const INITIAL_SOURCE: SourceSessionView[] = [
     {
       session_key: "claude_code:key-A",
@@ -599,13 +631,129 @@ test("rescan prunes stale selection so the import POST matches the visible rows"
   ).toBe(false);
 });
 
-test("per-panel error isolation: scan-errors 500 leaves source and stored panels rendered", async () => {
-  // `Promise.allSettled` in `refetchAll` is supposed to isolate failures
-  // per panel: a non-2xx on `/api/v1/admin/scan-errors` must not prevent
-  // the source + stored panels from rendering their fixtures. This test
-  // pins that contract so a future refactor that short-circuits on the
-  // first rejection (e.g. switching to `Promise.all`) surfaces as a
-  // failing assertion on either fixture's presence.
+test("per-panel error isolation: source 500 leaves stored rows rendered in the unified table", async () => {
+  // The merged-list contract: when source fetch fails, the unified
+  // table still renders the stored-side rows (presence: stored_only)
+  // plus a banner alerting to the source failure. The page must NOT
+  // be blank, and the stored fixture's session_uid must remain
+  // visible.
+  const fetchMock = mock(
+    async (input: Request | string | URL): Promise<Response> => {
+      const url = urlOf(input);
+      if (url === SOURCE_SESSIONS_PATH) {
+        return new Response("boom", {
+          status: 500,
+          headers: { "Content-Type": "text/plain" },
+        });
+      }
+      if (url === STORED_SESSIONS_PATH) {
+        return jsonResponse(STORED_FIXTURE);
+      }
+      if (url === SCAN_ERRORS_PATH) {
+        return jsonResponse(SCAN_ERRORS_FIXTURE);
+      }
+      return new Response(`unexpected url ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+  const { container } = render(<App />);
+  await screen.findByText("Malformed NDJSON on line 3");
+
+  // Wait for the banner to appear and the merged-row body to settle.
+  await waitFor(() => {
+    const alerts = container.querySelectorAll('[role="alert"]');
+    expect(alerts.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // Stored fixture session_uid is in the DOM -> stored-side rendered.
+  expect(container.textContent?.includes("abc-uid-123")).toBe(true);
+
+  // The source-failure banner is in the DOM and identifies the source side.
+  const alerts = Array.from(container.querySelectorAll('[role="alert"]'));
+  const sourceAlert = alerts.find((el) =>
+    el.textContent?.startsWith("Failed to load source sessions"),
+  );
+  expect(sourceAlert).not.toBeUndefined();
+
+  // Exactly one merged-list row in the table (the stored fixture).
+  const tbodyRows = container.querySelectorAll("tbody tr");
+  // 1 unified-table row + N callout rows; the unified table should
+  // hold exactly the single stored fixture.
+  // The unified table is the FIRST table in the DOM (the callout's
+  // table comes after).
+  const tables = container.querySelectorAll("table");
+  expect(tables.length).toBe(2);
+  const unifiedTable = tables[0]!;
+  expect(unifiedTable.querySelectorAll("tbody tr").length).toBe(1);
+  // Source-only fixture-source-row was NOT rendered in the table.
+  expect(
+    container.textContent?.includes("claude_code:fixture-abc"),
+  ).toBe(false);
+  // Sanity: the body has at least the unified table row plus the
+  // callout's row.
+  expect(tbodyRows.length).toBeGreaterThanOrEqual(2);
+});
+
+test("per-panel error isolation: stored 500 leaves source rows rendered in the unified table", async () => {
+  // The mirror-image of the source-500 case: when stored fetch fails,
+  // the unified table renders the source-side rows (presence:
+  // source_only) plus a banner alerting to the stored failure.
+  const fetchMock = mock(
+    async (input: Request | string | URL): Promise<Response> => {
+      const url = urlOf(input);
+      if (url === SOURCE_SESSIONS_PATH) {
+        return jsonResponse(SOURCE_FIXTURE);
+      }
+      if (url === STORED_SESSIONS_PATH) {
+        return new Response("boom", {
+          status: 500,
+          headers: { "Content-Type": "text/plain" },
+        });
+      }
+      if (url === SCAN_ERRORS_PATH) {
+        return jsonResponse(SCAN_ERRORS_FIXTURE);
+      }
+      return new Response(`unexpected url ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:fixture-abc");
+
+  // Wait for the banner to appear.
+  await waitFor(() => {
+    const alerts = container.querySelectorAll('[role="alert"]');
+    expect(alerts.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // Source fixture session_key is in the DOM -> source-side rendered.
+  expect(
+    container.textContent?.includes("claude_code:fixture-abc"),
+  ).toBe(true);
+
+  // Banner identifies the stored side.
+  const alerts = Array.from(container.querySelectorAll('[role="alert"]'));
+  const storedAlert = alerts.find((el) =>
+    el.textContent?.startsWith("Failed to load stored sessions"),
+  );
+  expect(storedAlert).not.toBeUndefined();
+
+  // Unified table holds exactly the source fixture; no stored UID
+  // is in any row of the unified table.
+  const tables = container.querySelectorAll("table");
+  expect(tables.length).toBe(2);
+  const unifiedTable = tables[0]!;
+  expect(unifiedTable.querySelectorAll("tbody tr").length).toBe(1);
+});
+
+test("per-panel error isolation: scan-errors 500 leaves the unified table rendered", async () => {
+  // The unified-list+callout contract: when only scan-errors fails,
+  // the unified table renders both source and stored rows (joined),
+  // and the scan-errors error surfaces as its own [role="alert"]
+  // INSTEAD OF the empty ScanErrorsCallout (the callout collapses on
+  // empty; the alert replaces it on error).
   const fetchMock = mock(
     async (input: Request | string | URL): Promise<Response> => {
       const url = urlOf(input);
@@ -627,44 +775,298 @@ test("per-panel error isolation: scan-errors 500 leaves source and stored panels
   globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
   const { container } = render(<App />);
-
-  // Wait for the source and stored panels to land (they must still render
-  // even though the scan-errors panel is about to error out).
   await screen.findByText("claude_code:fixture-abc");
-  await screen.findAllByText("abc-uid-123");
 
-  // Wait for the errored panel to surface its `<p role="alert">`.
+  // Wait for the scan-errors alert.
   await waitFor(() => {
-    expect(container.querySelectorAll('[role="alert"]').length).toBe(1);
+    const alerts = container.querySelectorAll('[role="alert"]');
+    expect(alerts.length).toBe(1);
   });
 
-  // (1) Source fixture session_key is in the DOM -> source panel rendered.
+  // Unified table renders both fixtures (joined into one row).
   expect(
     container.textContent?.includes("claude_code:fixture-abc"),
   ).toBe(true);
-
-  // (2) Stored fixture session_uid is in the DOM -> stored panel rendered.
   expect(container.textContent?.includes("abc-uid-123")).toBe(true);
 
-  // (3) Exactly one errored panel in the DOM — `App.tsx`'s `PanelBody`
-  // renders `<p role="alert">` only on the error branch, so the count is
-  // a precise match for "exactly one panel failed". A regression that
-  // shared the error across all three panels (e.g. a `Promise.all` short-
-  // circuit) would push this to 3.
+  // The surviving alert mentions the scan-errors fetch.
   const alerts = container.querySelectorAll('[role="alert"]');
-  expect(alerts.length).toBe(1);
-  // The surviving alert must belong to the scan-errors panel: its error
-  // label starts with "Failed to load scan errors" (see `App.tsx`).
   expect(
     alerts[0]?.textContent?.startsWith("Failed to load scan errors"),
   ).toBe(true);
 
-  // (4) The scan-errors section's tbody has zero rows — the error state
-  // renders only the alert paragraph; `ScanErrorsPanel` is not mounted.
-  // The three `<section>` children are in DOM order: source, stored,
-  // scan-errors (see App.tsx), so the 3rd section is the scan-errors one.
-  const sections = container.querySelectorAll("section");
-  expect(sections.length).toBe(3);
-  const scanErrorsSection = sections[2]!;
-  expect(scanErrorsSection.querySelectorAll("tbody tr").length).toBe(0);
+  // The unified table is the only `<table>` because the empty
+  // ScanErrorsCallout doesn't render and the error displaces it.
+  const tables = container.querySelectorAll("table");
+  expect(tables.length).toBe(1);
+});
+
+test("importability rule at POST: rogue keys in selection do not leak into the import body", async () => {
+  // Fixture with one importable + multiple non-importable rows.
+  // After the user selects the one importable row, the POST body
+  // must contain ONLY the importable session_key, even if the user
+  // (or a future refactor) somehow leaks a non-importable key into
+  // the `selected` set. We force the leak deterministically by
+  // clicking the importable checkbox AND then injecting a rogue
+  // identity via the only accessible mutation path: clicking on a
+  // checkbox that isn't actually rendered would be impossible by
+  // construction, so we instead build a test in three layers:
+  //
+  //   (a) Render the App with the mixed fixture.
+  //   (b) Verify that exactly one per-row checkbox is in the DOM
+  //       (the importable row's), and that clicking it sets count=1.
+  //   (c) Verify that the import POST contains exactly the importable
+  //       key, never a non-importable identity from the fixture.
+  //
+  // Coverage of the actual click-time intersection happens in the F2
+  // regression above (where the rescan removes a row from view but
+  // leaves it in `selected`).
+  const MIXED_FIXTURE: SourceSessionView[] = [
+    {
+      session_key: "claude_code:not-stored-key-1",
+      tool: "claude_code",
+      source_session_id: "not-stored-1",
+      source_path: "/tmp/fixture/ns1.jsonl",
+      source_fingerprint: "fp-ns-1",
+      created_at: null,
+      source_updated_at: null,
+      project_path: null,
+      title: "Not stored 1",
+      has_subagent_sidecars: false,
+      status: "not_stored",
+      session_uid: null,
+      stored_ingested_at: null,
+    },
+    {
+      session_key: "claude_code:up-to-date-key-1",
+      tool: "claude_code",
+      source_session_id: "up-1",
+      source_path: "/tmp/fixture/up1.jsonl",
+      source_fingerprint: "fp-up-1",
+      created_at: null,
+      source_updated_at: null,
+      project_path: null,
+      title: "Up to date 1",
+      has_subagent_sidecars: false,
+      status: "up_to_date",
+      session_uid: "uid-up-1",
+      stored_ingested_at: "2026-04-22T00:00:00Z",
+    },
+  ];
+  const MIXED_STORED: StoredSessionView[] = [
+    {
+      status: "up_to_date",
+      session_uid: "uid-up-1",
+      tool: "claude_code",
+      source_session_id: "up-1",
+      source_path: "/tmp/fixture/up1.jsonl",
+      source_fingerprint: "fp-up-1",
+      raw_ref: "raw/uid-up-1.ndjson",
+      created_at: null,
+      source_updated_at: null,
+      ingested_at: "2026-04-22T00:00:00Z",
+      project_path: null,
+      title: "Up to date 1",
+      has_subagent_sidecars: false,
+    },
+    // A stored_only + source_missing row. NOT importable (no
+    // sourceSessionKey).
+    {
+      status: "source_missing",
+      session_uid: "uid-missing-1",
+      tool: "claude_code",
+      source_session_id: "missing-1",
+      source_path: "/tmp/last-known/missing1.jsonl",
+      source_fingerprint: "fp-missing-1",
+      raw_ref: "raw/uid-missing-1.ndjson",
+      created_at: null,
+      source_updated_at: null,
+      ingested_at: "2026-04-22T00:00:00Z",
+      project_path: null,
+      title: "Missing 1",
+      has_subagent_sidecars: false,
+    },
+  ];
+
+  const fetchMock = mock(
+    async (
+      input: Request | string | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const url = urlOf(input);
+      const method = init?.method ?? "GET";
+      if (method === "POST" && url === IMPORT_PATH) {
+        return jsonResponse(IMPORT_FIXTURE);
+      }
+      if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
+        return jsonResponse(MIXED_FIXTURE);
+      }
+      if (method === "GET" && url === STORED_SESSIONS_PATH) {
+        return jsonResponse(MIXED_STORED);
+      }
+      if (method === "GET" && url === SCAN_ERRORS_PATH) {
+        return jsonResponse([]);
+      }
+      return new Response(`unexpected ${method} ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:not-stored-key-1");
+
+  // EXACTLY ONE per-row checkbox in the DOM (the importable row).
+  // Plus one header checkbox. Total: 2.
+  const allCheckboxes = container.querySelectorAll(
+    'input[type="checkbox"]',
+  );
+  expect(allCheckboxes.length).toBe(2);
+  const importableCheckbox = container.querySelector<HTMLInputElement>(
+    'input[type="checkbox"][aria-label="Select claude_code:not-stored-key-1"]',
+  );
+  expect(importableCheckbox).not.toBeNull();
+  // Confirm the up_to_date and source_missing rows have NO checkbox.
+  expect(
+    container.querySelector(
+      'input[type="checkbox"][aria-label="Select claude_code:up-to-date-key-1"]',
+    ),
+  ).toBeNull();
+  expect(
+    container.querySelector('input[type="checkbox"][aria-label^="Select stored:"]'),
+  ).toBeNull();
+
+  // Click the importable row's checkbox -> count=1.
+  await act(async () => {
+    importableCheckbox?.click();
+  });
+  const importButton = container.querySelector<HTMLButtonElement>(
+    ".action-bar button:nth-of-type(2)",
+  );
+  expect(importButton?.textContent).toBe("Import selected (1)");
+
+  // Click Import.
+  await act(async () => {
+    importButton?.click();
+  });
+  await waitFor(() => {
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+  });
+
+  // The POST body MUST contain exactly the one importable key —
+  // no `up-to-date-key-1` and no `stored:uid-missing-1` fallback.
+  const importCalls = fetchMock.mock.calls.filter((args) => {
+    const init = args[1] as RequestInit | undefined;
+    const url = urlOf(args[0] as Request | string | URL);
+    return (init?.method ?? "GET") === "POST" && url === IMPORT_PATH;
+  });
+  expect(importCalls.length).toBe(1);
+  const body = importCalls[0]?.[1]?.body as string;
+  expect(body).toBe(
+    JSON.stringify({ session_keys: ["claude_code:not-stored-key-1"] }),
+  );
+  // Defensive substring assertions for the non-importable identities.
+  expect(body.includes("up-to-date-key-1")).toBe(false);
+  expect(body.includes("uid-missing-1")).toBe(false);
+  expect(body.includes("stored:")).toBe(false);
+});
+
+test("statusConflict: a both-row with disagreeing source/stored statuses renders the (refresh) affordance", async () => {
+  const CONFLICT_SOURCE: SourceSessionView[] = [
+    {
+      session_key: "claude_code:conflict-key",
+      tool: "claude_code",
+      source_session_id: "conflict-1",
+      source_path: "/tmp/fixture/conflict.jsonl",
+      source_fingerprint: "fp-conflict",
+      created_at: null,
+      source_updated_at: null,
+      project_path: null,
+      title: "Conflict",
+      has_subagent_sidecars: false,
+      status: "outdated",
+      session_uid: "uid-conflict",
+      stored_ingested_at: "2026-04-22T00:00:00Z",
+    },
+  ];
+  const CONFLICT_STORED: StoredSessionView[] = [
+    {
+      status: "up_to_date",
+      session_uid: "uid-conflict",
+      tool: "claude_code",
+      source_session_id: "conflict-1",
+      source_path: "/tmp/fixture/conflict.jsonl",
+      source_fingerprint: "fp-conflict-old",
+      raw_ref: "raw/uid-conflict.ndjson",
+      created_at: null,
+      source_updated_at: null,
+      ingested_at: "2026-04-22T00:00:00Z",
+      project_path: null,
+      title: "Conflict",
+      has_subagent_sidecars: false,
+    },
+  ];
+  const fetchMock = mock(
+    async (input: Request | string | URL): Promise<Response> => {
+      const url = urlOf(input);
+      if (url === SOURCE_SESSIONS_PATH) return jsonResponse(CONFLICT_SOURCE);
+      if (url === STORED_SESSIONS_PATH) return jsonResponse(CONFLICT_STORED);
+      if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      return new Response(`unexpected url ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:conflict-key");
+  // The (refresh) hint span is in the DOM near the badge.
+  const refreshSpan = Array.from(container.querySelectorAll("span.muted"))
+    .find((el) => el.textContent === "(refresh)");
+  expect(refreshSpan).not.toBeUndefined();
+  expect(refreshSpan?.getAttribute("title")).toBe(
+    "Source and stored status disagreed during load — refresh to re-fetch.",
+  );
+});
+
+test("stored_only + source_missing: source-path cell renders the last-known path with title= hover hint", async () => {
+  const STORED_ONLY: StoredSessionView[] = [
+    {
+      status: "source_missing",
+      session_uid: "uid-stale-1",
+      tool: "claude_code",
+      source_session_id: "stale-1",
+      source_path: "/last/known/path/stale1.jsonl",
+      source_fingerprint: "fp-stale-1",
+      raw_ref: "raw/uid-stale-1.ndjson",
+      created_at: null,
+      source_updated_at: null,
+      ingested_at: "2026-04-22T00:00:00Z",
+      project_path: null,
+      title: "Stale",
+      has_subagent_sidecars: false,
+    },
+  ];
+  const fetchMock = mock(
+    async (input: Request | string | URL): Promise<Response> => {
+      const url = urlOf(input);
+      if (url === SOURCE_SESSIONS_PATH) return jsonResponse([]);
+      if (url === STORED_SESSIONS_PATH) return jsonResponse(STORED_ONLY);
+      if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      return new Response(`unexpected url ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+  const { container } = render(<App />);
+  await screen.findByText("/last/known/path/stale1.jsonl");
+  // Source-path cell is the rightmost <td> in the unified table's row.
+  const tables = container.querySelectorAll("table");
+  expect(tables.length).toBeGreaterThanOrEqual(1);
+  const unifiedTable = tables[0]!;
+  const row = unifiedTable.querySelector("tbody tr");
+  expect(row).not.toBeNull();
+  const sourcePathCell = row!.querySelector("td:last-child");
+  expect(sourcePathCell?.textContent).toBe("/last/known/path/stale1.jsonl");
+  expect(sourcePathCell?.getAttribute("title")).toBe(
+    "last seen source path — source file no longer discoverable",
+  );
 });

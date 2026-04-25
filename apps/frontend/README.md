@@ -10,8 +10,9 @@ Bun + Vite + React + TypeScript inspection UI. Surfaces source sessions, stored 
 - `vite.config.ts` — dev server + `/api/v1/**` and `/health` proxy to the backend
 - `index.html` — Vite HTML shell
 - `src/main.tsx` — React root bootstrap
-- `src/App.tsx` — inspection-page orchestration (three panels, import/rescan mutations)
-- `src/components/` — per-panel React components
+- `src/App.tsx` — inspection-page orchestration (data fetching, import/rescan mutations, selection state)
+- `src/features/sessions/` — unified session list (view, table, merge, types)
+- `src/components/` — shared React primitives (action bar, status badge, scan-errors callout)
 - `src/lib/api.ts` — typed HTTP client
 - `src/lib/config.ts` — frontend runtime config (`VITE_API_BASE` override)
 - `src/lib/contracts.ts` — re-export barrel for generated contract types

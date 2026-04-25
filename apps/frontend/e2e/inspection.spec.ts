@@ -78,7 +78,8 @@ test.describe.serial("inspection surface end-to-end", () => {
     ).toBeVisible();
 
     // 3. Select the fixture's row by its aria-label
-    //    (`Select claude_code:<uuid>` — see SourceSessionsTable.tsx).
+    //    (`Select claude_code:<uuid>` — emitted by the unified
+    //    `SessionsTable` for any importable row).
     const rowCheckbox = page.getByLabel(`Select ${FIXTURE_SESSION_KEY}`);
     await rowCheckbox.click();
     await expect(rowCheckbox).toBeChecked();

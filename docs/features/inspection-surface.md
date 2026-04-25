@@ -7,7 +7,8 @@ The inspection surface lists discovered source sessions, shows what is already s
 ## Frontend Files To Modify
 
 - `apps/frontend/src/App.tsx`
-- `apps/frontend/src/components/` (per-panel components)
+- `apps/frontend/src/features/sessions/` (unified session list — `SessionsView`, `SessionsTable`, `mergeSessions`, `types`, plus per-feature tests)
+- `apps/frontend/src/components/` (shared primitives — `ActionBar`, `StatusBadge`, `ScanErrorsCallout`, plus per-component tests)
 - `apps/frontend/src/lib/api.ts`
 - `apps/frontend/src/lib/contracts.ts`
 
@@ -38,5 +39,6 @@ The inspection surface lists discovered source sessions, shows what is already s
 - `apps/backend/tests/http_api.rs`
 - `tests/e2e/tests/inspection_surface.rs`
 - `apps/frontend/src/App.test.tsx`
-- `apps/frontend/src/components/*.test.tsx`
+- `apps/frontend/src/features/sessions/` test files: `*.test.tsx` for the table component, `*.test.ts` for the pure `mergeSessions` join
+- `apps/frontend/src/components/*.test.tsx` (shared-primitive tests)
 - `apps/frontend/e2e/` (Playwright)

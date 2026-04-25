@@ -2,16 +2,17 @@
 //
 // Orchestrates three parallel fetches — source sessions, stored sessions,
 // scan errors — via `Promise.allSettled` so each panel settles
-// independently. A failure on one panel does not block the others. Each
-// panel owns its own `{ loading, data, error }` slice of state.
+// independently. A failure on one panel does not blank the others.
+// Each panel owns its own `{ loading, ok, error }` slice of state.
 //
-// Selection is lifted into this component and drives two mutations:
-// backend rescan (`POST /api/v1/admin/rescan`) and source-session import
-// (`POST /api/v1/source-sessions/import`). The `ActionBar` owns the
-// mutation-button UI but remains stateless; `SourceSessionsTable` is a
-// controlled view of the `selected` set below. After each mutation
-// resolves we refetch the three panels unconditionally — no optimistic
-// updates — to keep the inspection surface consistent with the backend.
+// As of Phase 4 Milestone 2 the inspection surface renders a unified
+// session list joined from the source + stored fetches (the dual-table
+// layout is retired; see `src/features/sessions/`). The orchestration
+// shape is unchanged: same three GETs, same `Promise.allSettled`
+// per-panel error isolation, same `selected: Set<string>` selection
+// model holding backend-provided `session_key` values, same import
+// click-time intersection rule (now extended to filter by
+// importability — see `handleImport`).
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ApiError,
@@ -29,14 +30,10 @@ import type {
   StoredSessionView,
 } from "./lib/contracts";
 import { ActionBar, type LastReport } from "./components/ActionBar";
-import { SourceSessionsTable } from "./components/SourceSessionsTable";
-import { StoredSessionsTable } from "./components/StoredSessionsTable";
-import { ScanErrorsPanel } from "./components/ScanErrorsPanel";
-
-type PanelState<T> =
-  | { kind: "loading" }
-  | { kind: "ok"; data: T }
-  | { kind: "error"; message: string };
+import { ScanErrorsCallout } from "./components/ScanErrorsCallout";
+import { SessionsView, type PanelState } from "./features/sessions/SessionsView";
+import { mergeSessions } from "./features/sessions/mergeSessions";
+import { isImportable } from "./features/sessions/types";
 
 export function App() {
   const [sourceState, setSourceState] = useState<PanelState<SourceSessionView[]>>(
@@ -89,6 +86,12 @@ export function App() {
   // action-bar count and the import POST body stay in sync. The
   // `changed ? next : prev` guard keeps the reference stable when nothing
   // was pruned so downstream consumers don't re-render unnecessarily.
+  //
+  // Importability is INTENTIONALLY not checked here: a row that's still
+  // visible but no longer importable (e.g. just got ingested via a
+  // separate flow) should remain in the raw set so the user can see
+  // their stale selection in the count. The click-time intersection in
+  // `handleImport` is the authoritative POST-time filter.
   useEffect(() => {
     if (sourceState.kind !== "ok") return;
     const visibleKeys = new Set(sourceState.data.map((s) => s.session_key));
@@ -120,18 +123,28 @@ export function App() {
 
   const handleToggleAll = useCallback(() => {
     setSelected((prev) => {
-      if (sourceState.kind !== "ok") {
-        return prev;
+      // Compute the importable keys from the current merged-row set,
+      // not just the source-side keys. A `both`-with-`up_to_date` row
+      // has a sourceSessionKey but is NOT importable, and the bulk
+      // toggle must skip it.
+      const sourceData = sourceState.kind === "ok" ? sourceState.data : [];
+      const storedData = storedState.kind === "ok" ? storedState.data : [];
+      const rows = mergeSessions(sourceData, storedData);
+      const importableKeys: string[] = [];
+      for (const row of rows) {
+        if (isImportable(row) && row.sourceSessionKey !== null) {
+          importableKeys.push(row.sourceSessionKey);
+        }
       }
-      const allKeys = sourceState.data.map((s) => s.session_key);
       const allSelected =
-        allKeys.length > 0 && allKeys.every((k) => prev.has(k));
+        importableKeys.length > 0 &&
+        importableKeys.every((k) => prev.has(k));
       if (allSelected) {
         return new Set();
       }
-      return new Set(allKeys);
+      return new Set(importableKeys);
     });
-  }, [sourceState]);
+  }, [sourceState, storedState]);
 
   const handleRescan = useCallback(async () => {
     setPending("rescan");
@@ -151,18 +164,30 @@ export function App() {
 
   const handleImport = useCallback(async () => {
     setPending("import");
-    // Derive the import payload from the currently-visible source sessions at
-    // click time. If a rescan has just pruned a row from the backend but the
-    // `selected`-reconciliation `useEffect` has not yet flushed, the raw
-    // `selected` set can still contain the stale key. Filtering here
-    // guarantees the POST body matches what the user sees, independent of
-    // effect-flush timing.
-    const visibleSessionKeys =
-      sourceState.kind === "ok"
-        ? new Set(sourceState.data.map((s) => s.session_key))
-        : new Set<string>();
+    // Derive the import payload at click time from the currently-merged
+    // rows that are still importable. Two defenses bake into one
+    // expression:
+    //   (a) F2 visible-intersection: a rescan that has just pruned a
+    //       row from the source list won't ship its key, even if the
+    //       reconciliation `useEffect` has not yet flushed.
+    //   (b) M2 importability: a row that has ALWAYS had a non-null
+    //       `sourceSessionKey` but is `up_to_date` (i.e. visible but
+    //       not eligible for import) won't ship either, even if the
+    //       UI somehow leaked a stale identity into `selected`.
+    // The same `isImportable` helper used by SessionsTable governs
+    // both checks, so the rendered checkbox set and the POST body
+    // cannot drift apart.
+    const sourceData = sourceState.kind === "ok" ? sourceState.data : [];
+    const storedData = storedState.kind === "ok" ? storedState.data : [];
+    const rows = mergeSessions(sourceData, storedData);
+    const visibleImportableKeys = new Set<string>();
+    for (const row of rows) {
+      if (isImportable(row) && row.sourceSessionKey !== null) {
+        visibleImportableKeys.add(row.sourceSessionKey);
+      }
+    }
     const keysToImport = Array.from(selected).filter((k) =>
-      visibleSessionKeys.has(k),
+      visibleImportableKeys.has(k),
     );
     try {
       const report: ImportReport = await importSourceSessions(keysToImport);
@@ -177,20 +202,29 @@ export function App() {
     } finally {
       setPending(null);
     }
-  }, [selected, sourceState, refetchAll]);
+  }, [selected, sourceState, storedState, refetchAll]);
 
-  const sourceSessions =
-    sourceState.kind === "ok" ? sourceState.data : [];
-  const selectedCount = sourceSessions.reduce(
-    (acc, s) => (selected.has(s.session_key) ? acc + 1 : acc),
-    0,
-  );
+  // Selected count for the action bar mirrors the same intersection
+  // the import POST will use, so "Import selected (N)" always names
+  // the exact set that would ship if clicked now.
+  const sourceData = sourceState.kind === "ok" ? sourceState.data : [];
+  const storedData = storedState.kind === "ok" ? storedState.data : [];
+  const visibleImportableSet = new Set<string>();
+  for (const row of mergeSessions(sourceData, storedData)) {
+    if (isImportable(row) && row.sourceSessionKey !== null) {
+      visibleImportableSet.add(row.sourceSessionKey);
+    }
+  }
+  let selectedCount = 0;
+  for (const k of selected) {
+    if (visibleImportableSet.has(k)) selectedCount += 1;
+  }
 
   return (
     <main>
       <h1>Distill Portal</h1>
       <section className="panel">
-        <h2>Source Sessions</h2>
+        <h2>Sessions</h2>
         <ActionBar
           selectedCount={selectedCount}
           pending={pending}
@@ -198,66 +232,28 @@ export function App() {
           onRescan={handleRescan}
           onImport={handleImport}
         />
-        <PanelBody
-          state={sourceState}
-          render={(data) => (
-            <SourceSessionsTable
-              sessions={data}
-              selected={selected}
-              onToggle={handleToggle}
-              onToggleAll={handleToggleAll}
-            />
-          )}
-          loadingLabel="Loading source sessions..."
-          errorLabel="Failed to load source sessions"
+        <SessionsView
+          sourceState={sourceState}
+          storedState={storedState}
+          selected={selected}
+          onToggle={handleToggle}
+          onToggleAll={handleToggleAll}
+          onRetry={() => {
+            void refetchAll();
+          }}
         />
       </section>
-      <section className="panel">
-        <h2>Stored Sessions</h2>
-        <PanelBody
-          state={storedState}
-          render={(data) => <StoredSessionsTable sessions={data} />}
-          loadingLabel="Loading stored sessions..."
-          errorLabel="Failed to load stored sessions"
+      {errorsState.kind === "error" ? (
+        <p role="alert">
+          Failed to load scan errors: {errorsState.message}
+        </p>
+      ) : (
+        <ScanErrorsCallout
+          errors={errorsState.kind === "ok" ? errorsState.data : []}
         />
-      </section>
-      <section className="panel">
-        <h2>Scan Errors</h2>
-        <PanelBody
-          state={errorsState}
-          render={(data) => <ScanErrorsPanel errors={data} />}
-          loadingLabel="Loading scan errors..."
-          errorLabel="Failed to load scan errors"
-        />
-      </section>
+      )}
     </main>
   );
-}
-
-type PanelBodyProps<T> = {
-  state: PanelState<T>;
-  render: (data: T) => React.ReactNode;
-  loadingLabel: string;
-  errorLabel: string;
-};
-
-function PanelBody<T>({
-  state,
-  render,
-  loadingLabel,
-  errorLabel,
-}: PanelBodyProps<T>) {
-  if (state.kind === "loading") {
-    return <p>{loadingLabel}</p>;
-  }
-  if (state.kind === "error") {
-    return (
-      <p role="alert">
-        {errorLabel}: {state.message}
-      </p>
-    );
-  }
-  return <>{render(state.data)}</>;
 }
 
 function toPanelState<T>(
