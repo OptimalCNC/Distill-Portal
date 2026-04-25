@@ -34,7 +34,14 @@
 //   (8) `stored_only + source_missing` row renders the last-known
 //       source path with the title= hover hint.
 import { afterEach, beforeEach, expect, mock, test } from "bun:test";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { App } from "./App";
 import {
   IMPORT_PATH,
@@ -801,6 +808,92 @@ test("per-panel error isolation: scan-errors 500 leaves the unified table render
   expect(tables.length).toBe(1);
 });
 
+test("scan-errors error path: Retry button refetches all three panels", async () => {
+  // Per the M3 partial-fetch-failure contract, every panel-error
+  // surface must offer a Retry/refetch affordance. The scan-errors
+  // alert is the third such surface (the source/stored alerts inside
+  // SessionsView already have one). After the initial 500 the user
+  // clicks Retry; the click invokes `refetchAll`, which fires three
+  // fresh GETs (source + stored + scan-errors). On the second pass
+  // we serve the scan-errors fixture so the alert is replaced by the
+  // ScanErrorsCallout — proving the refetch landed.
+  let scanErrorsCallCount = 0;
+  const fetchMock = mock(
+    async (input: Request | string | URL): Promise<Response> => {
+      const url = urlOf(input);
+      if (url === SOURCE_SESSIONS_PATH) return jsonResponse(SOURCE_FIXTURE);
+      if (url === STORED_SESSIONS_PATH) return jsonResponse(STORED_FIXTURE);
+      if (url === SCAN_ERRORS_PATH) {
+        scanErrorsCallCount += 1;
+        if (scanErrorsCallCount === 1) {
+          return new Response("boom", {
+            status: 500,
+            headers: { "Content-Type": "text/plain" },
+          });
+        }
+        return jsonResponse(SCAN_ERRORS_FIXTURE);
+      }
+      return new Response(`unexpected url ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+  const { container } = render(<App />);
+
+  // Wait for the initial render: the unified table renders + the
+  // scan-errors alert appears.
+  await screen.findByText("claude_code:fixture-abc");
+  await waitFor(() => {
+    const alerts = Array.from(
+      container.querySelectorAll('[role="alert"]'),
+    );
+    const scanAlert = alerts.find((el) =>
+      el.textContent?.startsWith("Failed to load scan errors"),
+    );
+    expect(scanAlert).not.toBeUndefined();
+  });
+  // Three initial GETs (source + stored + scan-errors).
+  const initialCallCount = fetchMock.mock.calls.length;
+  expect(initialCallCount).toBe(3);
+
+  // The Retry button lives inside the scan-errors alert (NOT inside
+  // SessionsView's per-section banners, which fire only when source
+  // or stored fail).
+  const alerts = Array.from(
+    container.querySelectorAll('[role="alert"]'),
+  );
+  const scanAlert = alerts.find((el) =>
+    el.textContent?.startsWith("Failed to load scan errors"),
+  );
+  expect(scanAlert).not.toBeUndefined();
+  const retryButton = scanAlert!.querySelector<HTMLButtonElement>(
+    "button",
+  );
+  expect(retryButton).not.toBeNull();
+  expect(retryButton!.textContent).toBe("Retry");
+
+  // Click Retry -> refetchAll() fires three fresh GETs.
+  await act(async () => {
+    retryButton!.click();
+  });
+  await waitFor(() => {
+    expect(fetchMock.mock.calls.length).toBe(initialCallCount + 3);
+  });
+  // After the refetch, scan-errors returned the fixture so the alert
+  // is gone and the ScanErrorsCallout renders the message instead.
+  await waitFor(() => {
+    expect(
+      container.textContent?.includes("Malformed NDJSON on line 3"),
+    ).toBe(true);
+  });
+  const remainingScanAlerts = Array.from(
+    container.querySelectorAll('[role="alert"]'),
+  ).filter((el) =>
+    el.textContent?.startsWith("Failed to load scan errors"),
+  );
+  expect(remainingScanAlerts.length).toBe(0);
+});
+
 test("importability rule at POST: rogue keys in selection do not leak into the import body", async () => {
   // Fixture with one importable + multiple non-importable rows.
   // After the user selects the one importable row, the POST body
@@ -1069,4 +1162,540 @@ test("stored_only + source_missing: source-path cell renders the last-known path
   expect(sourcePathCell?.getAttribute("title")).toBe(
     "last seen source path — source file no longer discoverable",
   );
+});
+
+// ---------- Phase 4 Milestone 3 additions ----------
+//
+// (a) FILTER-only click-time intersection regression — direct mirror of
+//     the F2 regression above, but the racing event is a FILTER mutation
+//     rather than a rescan. Two not_stored rows are loaded; the user
+//     selects both via per-row checkboxes; the user then sets
+//     `tool=codex` (which hides the claude_code row). Without the
+//     filter-window extension to the click-time intersection, the
+//     import POST would still ship both selected keys (the raw
+//     `selected` set is unchanged across filter mutations per spec).
+//     With the extension, the POST body must contain only the visible
+//     codex key.
+// (b) Multi-filter integration — render with mixed fixtures, apply
+//     three filter axes, assert exactly the matching subset renders.
+// (c) Four empty-state branches — distinct copy + working affordances.
+
+test("M3: filter mutation + click-time intersection — POST contains only the visible-after-filter key", async () => {
+  // Mixed-tool fixture: one claude_code + one codex; both not_stored
+  // (so both render checkboxes). After the user selects both, applying
+  // a `tool=codex` filter must hide the claude_code row from the POST.
+  const SOURCE: SourceSessionView[] = [
+    {
+      session_key: "claude_code:filter-A",
+      tool: "claude_code",
+      source_session_id: "filter-A",
+      source_path: "/tmp/fixture/a.jsonl",
+      source_fingerprint: "fp-a",
+      created_at: "2026-04-22T00:00:00Z",
+      source_updated_at: "2026-04-22T00:00:00Z",
+      project_path: "/tmp/fixture",
+      title: "Filter A (claude)",
+      has_subagent_sidecars: false,
+      status: "not_stored",
+      session_uid: null,
+      stored_ingested_at: null,
+    },
+    {
+      session_key: "codex:filter-B",
+      tool: "codex",
+      source_session_id: "filter-B",
+      source_path: "/tmp/fixture/b.jsonl",
+      source_fingerprint: "fp-b",
+      created_at: "2026-04-22T00:00:00Z",
+      source_updated_at: "2026-04-22T00:00:00Z",
+      project_path: "/tmp/fixture",
+      title: "Filter B (codex)",
+      has_subagent_sidecars: false,
+      status: "not_stored",
+      session_uid: null,
+      stored_ingested_at: null,
+    },
+  ];
+
+  const fetchMock = mock(
+    async (
+      input: Request | string | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const url = urlOf(input);
+      const method = init?.method ?? "GET";
+      if (method === "POST" && url === IMPORT_PATH) {
+        return jsonResponse(IMPORT_FIXTURE);
+      }
+      if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
+        return jsonResponse(SOURCE);
+      }
+      if (method === "GET" && url === STORED_SESSIONS_PATH) {
+        return jsonResponse([]);
+      }
+      if (method === "GET" && url === SCAN_ERRORS_PATH) {
+        return jsonResponse([]);
+      }
+      return new Response(`unexpected ${method} ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+  const { container } = render(<App />);
+
+  // Wait for both rows to render.
+  await screen.findByText("claude_code:filter-A");
+  await screen.findByText("codex:filter-B");
+
+  // Select both per-row checkboxes.
+  const checkboxA = container.querySelector<HTMLInputElement>(
+    'input[type="checkbox"][aria-label="Select claude_code:filter-A"]',
+  );
+  const checkboxB = container.querySelector<HTMLInputElement>(
+    'input[type="checkbox"][aria-label="Select codex:filter-B"]',
+  );
+  expect(checkboxA).not.toBeNull();
+  expect(checkboxB).not.toBeNull();
+  await act(async () => {
+    checkboxA?.click();
+  });
+  await act(async () => {
+    checkboxB?.click();
+  });
+
+  // Sanity: import button reads count=2 (two visible importable +
+  // two selected). zero hidden by filter at this point.
+  const importButton = container.querySelector<HTMLButtonElement>(
+    ".action-bar button:nth-of-type(2)",
+  );
+  expect(importButton?.textContent).toBe("Import selected (2)");
+
+  // Apply tool=codex filter via the chip; the claude_code row drops
+  // out of the FILTER window. The selection set is unchanged
+  // (per spec: filter changes do not clear raw selection); the
+  // action-bar count drops to 1 and the +1 hidden by filters caption
+  // appears.
+  const codexChip = Array.from(
+    container.querySelectorAll<HTMLButtonElement>("button.chip"),
+  ).find((el) => el.textContent === "Codex");
+  expect(codexChip).not.toBeUndefined();
+  await act(async () => {
+    codexChip!.click();
+  });
+
+  // Action-bar count is now 1 (only codex:filter-B is in the filter
+  // window's importable set); +1 hidden by filters caption is in DOM.
+  expect(importButton?.textContent).toBe("Import selected (1)");
+  const hiddenCaption = container.querySelector(".action-bar-hidden-caption");
+  expect(hiddenCaption?.textContent).toBe("+1 hidden by filters");
+
+  // Click Import.
+  await act(async () => {
+    importButton?.click();
+  });
+  await waitFor(() => {
+    expect(fetchMock).toHaveBeenCalledTimes(7); // 3 initial + 1 POST + 3 refetch
+  });
+
+  // The POST body MUST contain ONLY the codex key — the click-time
+  // intersection drops the hidden claude_code key.
+  const importCalls = fetchMock.mock.calls.filter((args) => {
+    const init = args[1] as RequestInit | undefined;
+    const url = urlOf(args[0] as Request | string | URL);
+    return (init?.method ?? "GET") === "POST" && url === IMPORT_PATH;
+  });
+  expect(importCalls.length).toBe(1);
+  const body = importCalls[0]?.[1]?.body as string;
+  expect(body).toBe(
+    JSON.stringify({ session_keys: ["codex:filter-B"] }),
+  );
+  // Defensive substring assertion: the hidden key cannot appear under
+  // any future serialization.
+  expect(body.includes("claude_code:filter-A")).toBe(false);
+});
+
+test("M3: multi-filter combination renders only the matching subset", async () => {
+  // 4 source rows, distinct on (tool, status, project_path). Apply
+  // filters that should pin to exactly one row: tool=claude_code,
+  // status=outdated, project=/p/alpha.
+  const SOURCE: SourceSessionView[] = [
+    {
+      session_key: "claude_code:match-1",
+      tool: "claude_code",
+      source_session_id: "match-1",
+      source_path: "/srv/match-1.jsonl",
+      source_fingerprint: "fp-m1",
+      created_at: null,
+      source_updated_at: "2026-04-22T01:00:00Z",
+      project_path: "/p/alpha",
+      title: "Match 1",
+      has_subagent_sidecars: false,
+      status: "outdated",
+      session_uid: "uid-m1",
+      stored_ingested_at: "2026-04-22T01:00:00Z",
+    },
+    {
+      session_key: "codex:wrong-tool",
+      tool: "codex",
+      source_session_id: "wrong-tool",
+      source_path: "/srv/wt.jsonl",
+      source_fingerprint: "fp-wt",
+      created_at: null,
+      source_updated_at: "2026-04-22T01:00:00Z",
+      project_path: "/p/alpha",
+      title: "Wrong tool",
+      has_subagent_sidecars: false,
+      status: "outdated",
+      session_uid: "uid-wt",
+      stored_ingested_at: "2026-04-22T01:00:00Z",
+    },
+    {
+      session_key: "claude_code:wrong-status",
+      tool: "claude_code",
+      source_session_id: "wrong-status",
+      source_path: "/srv/ws.jsonl",
+      source_fingerprint: "fp-ws",
+      created_at: null,
+      source_updated_at: "2026-04-22T01:00:00Z",
+      project_path: "/p/alpha",
+      title: "Wrong status",
+      has_subagent_sidecars: false,
+      status: "not_stored",
+      session_uid: null,
+      stored_ingested_at: null,
+    },
+    {
+      session_key: "claude_code:wrong-project",
+      tool: "claude_code",
+      source_session_id: "wrong-project",
+      source_path: "/srv/wp.jsonl",
+      source_fingerprint: "fp-wp",
+      created_at: null,
+      source_updated_at: "2026-04-22T01:00:00Z",
+      project_path: "/p/beta",
+      title: "Wrong project",
+      has_subagent_sidecars: false,
+      status: "outdated",
+      session_uid: "uid-wp",
+      stored_ingested_at: "2026-04-22T01:00:00Z",
+    },
+  ];
+
+  const fetchMock = mock(
+    async (input: Request | string | URL): Promise<Response> => {
+      const url = urlOf(input);
+      if (url === SOURCE_SESSIONS_PATH) return jsonResponse(SOURCE);
+      if (url === STORED_SESSIONS_PATH) return jsonResponse([]);
+      if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      return new Response(`unexpected url ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:match-1");
+
+  // Apply tool=claude_code chip.
+  const claudeChip = Array.from(
+    container.querySelectorAll<HTMLButtonElement>("button.chip"),
+  ).find((el) => el.textContent === "Claude Code");
+  await act(async () => {
+    claudeChip!.click();
+  });
+  // Apply status=outdated chip.
+  const outdatedChip = Array.from(
+    container.querySelectorAll<HTMLButtonElement>("button.chip"),
+  ).find((el) => el.textContent === "Outdated");
+  await act(async () => {
+    outdatedChip!.click();
+  });
+  // Type project=/p/alpha into the project input.
+  const projectInput = container.querySelector<HTMLInputElement>(
+    "#session-filters-project",
+  );
+  await act(async () => {
+    fireEvent.change(projectInput!, { target: { value: "/p/alpha" } });
+  });
+
+  // After all three filters, the unified table holds exactly the
+  // match-1 row. The wrong-tool / wrong-status / wrong-project rows
+  // are absent from the rendered DOM.
+  await waitFor(() => {
+    expect(
+      container.textContent?.includes("claude_code:match-1"),
+    ).toBe(true);
+  });
+  expect(container.textContent?.includes("codex:wrong-tool")).toBe(false);
+  expect(
+    container.textContent?.includes("claude_code:wrong-status"),
+  ).toBe(false);
+  expect(
+    container.textContent?.includes("claude_code:wrong-project"),
+  ).toBe(false);
+});
+
+test("M3 empty state — No sessions at all (both fetches resolve empty)", async () => {
+  const fetchMock = mock(
+    async (input: Request | string | URL): Promise<Response> => {
+      const url = urlOf(input);
+      if (url === SOURCE_SESSIONS_PATH) return jsonResponse([]);
+      if (url === STORED_SESSIONS_PATH) return jsonResponse([]);
+      if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      return new Response(`unexpected url ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+  const { container } = render(<App />);
+  await waitFor(() => {
+    expect(
+      container.textContent?.includes(
+        "No sessions have been discovered or stored yet.",
+      ),
+    ).toBe(true);
+  });
+  // Affordance: a Rescan button is rendered inside the empty-state
+  // block (in addition to the action-bar Rescan).
+  const rescanButtons = Array.from(
+    container.querySelectorAll<HTMLButtonElement>("button"),
+  ).filter((b) => b.textContent === "Rescan");
+  expect(rescanButtons.length).toBeGreaterThanOrEqual(2);
+});
+
+test("M3 empty state — No matches after filter/search (Clear filters resets)", async () => {
+  // Non-empty fixtures, but a search filter selects nothing.
+  const SOURCE: SourceSessionView[] = [
+    {
+      session_key: "claude_code:has-row",
+      tool: "claude_code",
+      source_session_id: "has-row",
+      source_path: "/srv/x.jsonl",
+      source_fingerprint: "fp-x",
+      created_at: null,
+      source_updated_at: null,
+      project_path: null,
+      title: "Has row",
+      has_subagent_sidecars: false,
+      status: "not_stored",
+      session_uid: null,
+      stored_ingested_at: null,
+    },
+  ];
+  const fetchMock = mock(
+    async (input: Request | string | URL): Promise<Response> => {
+      const url = urlOf(input);
+      if (url === SOURCE_SESSIONS_PATH) return jsonResponse(SOURCE);
+      if (url === STORED_SESSIONS_PATH) return jsonResponse([]);
+      if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      return new Response(`unexpected url ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:has-row");
+  // Apply a search filter that matches nothing.
+  const searchInput = container.querySelector<HTMLInputElement>(
+    "#session-filters-search",
+  );
+  await act(async () => {
+    fireEvent.change(searchInput!, { target: { value: "no-such-needle" } });
+  });
+  await waitFor(() => {
+    expect(
+      container.textContent?.includes("No sessions match the current filter."),
+    ).toBe(true);
+  });
+  // Clear filters affordance.
+  const clearBtn = Array.from(
+    container.querySelectorAll<HTMLButtonElement>("button"),
+  ).find((b) => b.textContent === "Clear filters");
+  expect(clearBtn).not.toBeUndefined();
+  await act(async () => {
+    clearBtn!.click();
+  });
+  // After clear: the row is back in the DOM.
+  await waitFor(() => {
+    expect(
+      container.textContent?.includes("claude_code:has-row"),
+    ).toBe(true);
+  });
+});
+
+test("M3 empty state — Nothing to import in current filter (Show importable only flips the boolean)", async () => {
+  // Per `working/phase-4.md` §Filter, Sort, Search → Empty States
+  // (lines 381–386), the "Nothing to import in the current filter"
+  // empty state fires when matching rows EXIST (filteredRows > 0)
+  // but every visible row is non-importable (`up_to_date` or
+  // `source_missing`). The empty-state copy + a "Show importable
+  // only" affordance render alongside the table (the table is
+  // informative; rows describe what the user CAN see). Clicking
+  // the affordance flips `importableOnly` to `true`.
+  //
+  // Fixture: one `up_to_date` row (joined source ⊕ stored) and zero
+  // `not_stored` / `outdated` rows. No filter is active on mount,
+  // so the filter pipeline returns the same one row; `isImportable`
+  // is false for it, so the branch fires.
+  const SOURCE: SourceSessionView[] = [
+    {
+      session_key: "claude_code:up-1",
+      tool: "claude_code",
+      source_session_id: "up-1",
+      source_path: "/srv/u.jsonl",
+      source_fingerprint: "fp-u",
+      created_at: null,
+      source_updated_at: null,
+      project_path: null,
+      title: "Up-to-date 1",
+      has_subagent_sidecars: false,
+      status: "up_to_date",
+      session_uid: "uid-u",
+      stored_ingested_at: "2026-04-22T00:00:00Z",
+    },
+  ];
+  const STORED: StoredSessionView[] = [
+    {
+      status: "up_to_date",
+      session_uid: "uid-u",
+      tool: "claude_code",
+      source_session_id: "up-1",
+      source_path: "/srv/u.jsonl",
+      source_fingerprint: "fp-u",
+      raw_ref: "raw/uid-u.ndjson",
+      created_at: null,
+      source_updated_at: null,
+      ingested_at: "2026-04-22T00:00:00Z",
+      project_path: null,
+      title: "Up-to-date 1",
+      has_subagent_sidecars: false,
+    },
+  ];
+  const fetchMock = mock(
+    async (input: Request | string | URL): Promise<Response> => {
+      const url = urlOf(input);
+      if (url === SOURCE_SESSIONS_PATH) return jsonResponse(SOURCE);
+      if (url === STORED_SESSIONS_PATH) return jsonResponse(STORED);
+      if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      return new Response(`unexpected url ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:up-1");
+  // The spec-mandated empty-state copy renders.
+  await waitFor(() => {
+    expect(
+      container.textContent?.includes(
+        "Nothing to import in the current filter.",
+      ),
+    ).toBe(true);
+  });
+  // The empty-state affordance is a button that says "Show
+  // importable only" and lives inside the .empty block (NOT to be
+  // confused with the SessionFilters chip of the same aria-label,
+  // which always renders in the filter bar).
+  const emptyBlock = container.querySelector("div.empty");
+  expect(emptyBlock).not.toBeNull();
+  const showOnlyButton = Array.from(
+    emptyBlock!.querySelectorAll<HTMLButtonElement>("button"),
+  ).find((b) => b.textContent === "Show importable only");
+  expect(showOnlyButton).not.toBeUndefined();
+  // Capture the importable-only chip in the filter bar to verify
+  // its aria-pressed state flips after the affordance click. The
+  // chip owns the live boolean; the empty-state button merely calls
+  // setImportableOnly(true) on its behalf.
+  const importableChip = container.querySelector<HTMLButtonElement>(
+    'button.chip[aria-label="Show importable only"]',
+  );
+  expect(importableChip).not.toBeNull();
+  expect(importableChip!.getAttribute("aria-pressed")).toBe("false");
+  // Click the empty-state affordance -> flips importableOnly to true.
+  await act(async () => {
+    showOnlyButton!.click();
+  });
+  await waitFor(() => {
+    const refreshedChip = container.querySelector<HTMLButtonElement>(
+      'button.chip[aria-label="Show importable only"]',
+    );
+    expect(refreshedChip!.getAttribute("aria-pressed")).toBe("true");
+  });
+  // After the toggle, importableOnly === true narrows the effective
+  // status set to ["not_stored", "outdated"], dropping the lone
+  // up_to_date row — so we now hit the "No sessions match the
+  // current filter." branch (a filter is active).
+  await waitFor(() => {
+    expect(
+      container.textContent?.includes(
+        "No sessions match the current filter.",
+      ),
+    ).toBe(true);
+  });
+});
+
+test("M3 empty state — Partial fetch failure (source 500) preserves stored rows", async () => {
+  // Mirrors the M2 per-panel error isolation test, but verifies M3
+  // didn't regress the behavior. Source-fetch fails; stored fetch
+  // succeeds with one stored_only row; the unified table still
+  // renders that row + the per-section banner.
+  const STORED: StoredSessionView[] = [
+    {
+      status: "up_to_date",
+      session_uid: "uid-survived",
+      tool: "claude_code",
+      source_session_id: "survived-1",
+      source_path: "/srv/survived.jsonl",
+      source_fingerprint: "fp-survived",
+      raw_ref: "raw/uid-survived.ndjson",
+      created_at: null,
+      source_updated_at: null,
+      ingested_at: "2026-04-22T00:00:00Z",
+      project_path: null,
+      title: "Survived",
+      has_subagent_sidecars: false,
+    },
+  ];
+  const fetchMock = mock(
+    async (input: Request | string | URL): Promise<Response> => {
+      const url = urlOf(input);
+      if (url === SOURCE_SESSIONS_PATH) {
+        return new Response("boom", {
+          status: 500,
+          headers: { "Content-Type": "text/plain" },
+        });
+      }
+      if (url === STORED_SESSIONS_PATH) return jsonResponse(STORED);
+      if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      return new Response(`unexpected url ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await screen.findByText("uid-survived");
+  // The per-section banner is present.
+  const alerts = Array.from(container.querySelectorAll('[role="alert"]'));
+  const sourceAlert = alerts.find((el) =>
+    el.textContent?.startsWith("Failed to load source sessions"),
+  );
+  expect(sourceAlert).not.toBeUndefined();
+  // The stored-only survivor row is in the DOM (i.e. the table renders).
+  expect(container.textContent?.includes("uid-survived")).toBe(true);
+});
+
+test("M3: SessionFilters control bar is rendered above the table", async () => {
+  // Smoke check that the filter bar is actually wired into
+  // SessionsView and not still hidden behind a feature flag etc.
+  const fetchMock = mock(
+    async (input: Request | string | URL): Promise<Response> => {
+      const url = urlOf(input);
+      if (url === SOURCE_SESSIONS_PATH) return jsonResponse(SOURCE_FIXTURE);
+      if (url === STORED_SESSIONS_PATH) return jsonResponse(STORED_FIXTURE);
+      if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      return new Response(`unexpected url ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:fixture-abc");
+  expect(
+    container.querySelector('[role="group"][aria-label="Session filters"]'),
+  ).not.toBeNull();
 });

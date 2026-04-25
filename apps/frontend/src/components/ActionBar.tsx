@@ -1,13 +1,20 @@
-// Action bar for the Source Sessions panel.
+// Action bar for the unified session inspection list.
 //
 // Renders the two mutation buttons — "Rescan" and "Import selected (N)" —
-// plus a textual summary of the most recent mutation result. The summary
-// consumes the typed `RescanReport` / `ImportReport` contracts directly so
-// the DOM copy stays in sync with whatever fields the backend reports.
+// plus a textual summary of the most recent mutation result. As of
+// Phase 4 Milestone 3 the bar also surfaces:
+//   - a `+K hidden by filters` caption when the user's raw selection
+//     contains keys that are still importable in the merged set but
+//     fell out of the current filter window
+//   - a `Clear hidden` button that drops only the hidden-by-filter
+//     keys (leaves the visible-importable selection intact)
+//   - a `Clear selection` button that drops EVERY selected key
+//     (visible AND hidden)
 //
-// State (which mutation is in flight, latest report, selected count) is
-// owned by `App.tsx` and passed down as props. This component does not
-// own any state of its own.
+// The bar still consumes typed `RescanReport` / `ImportReport`
+// contracts directly so the DOM copy stays in sync with whatever
+// fields the backend reports. State is owned by `App.tsx` and passed
+// down as props; this component is stateless.
 import type { ImportReport, RescanReport } from "../lib/contracts";
 
 export type LastReport =
@@ -17,21 +24,37 @@ export type LastReport =
 
 type ActionBarProps = {
   selectedCount: number;
+  /** Per spec §Action Bar and Mutation UX: when the user's raw
+   *  selection contains keys hidden by the current filter, surface a
+   *  `+K hidden by filters` caption. Defaults to 0 (M2 callers can
+   *  omit this prop without changing behavior). */
+  hiddenByFilterCount?: number;
   pending: "rescan" | "import" | null;
   lastReport: LastReport | null;
   onRescan: () => void;
   onImport: () => void;
+  /** Drop only the hidden-by-filter keys from `selected` (leaves the
+   *  visible-importable selection intact). Optional for M2 callers. */
+  onClearHidden?: () => void;
+  /** Drop every key from `selected` (visible AND hidden). Optional
+   *  for M2 callers. */
+  onClearSelection?: () => void;
 };
 
 export function ActionBar({
   selectedCount,
+  hiddenByFilterCount = 0,
   pending,
   lastReport,
   onRescan,
   onImport,
+  onClearHidden,
+  onClearSelection,
 }: ActionBarProps) {
   const rescanDisabled = pending !== null;
   const importDisabled = pending !== null || selectedCount === 0;
+  const showClearAffordances =
+    selectedCount > 0 || hiddenByFilterCount > 0;
   return (
     <div className="action-bar">
       <div className="action-bar-buttons">
@@ -51,6 +74,29 @@ export function ActionBar({
             ? `Importing ${selectedCount}...`
             : `Import selected (${selectedCount})`}
         </button>
+        {hiddenByFilterCount > 0 ? (
+          <span className="muted action-bar-hidden-caption">
+            +{hiddenByFilterCount} hidden by filters
+          </span>
+        ) : null}
+        {showClearAffordances && onClearHidden && hiddenByFilterCount > 0 ? (
+          <button
+            type="button"
+            className="action-bar-clear"
+            onClick={onClearHidden}
+          >
+            Clear hidden
+          </button>
+        ) : null}
+        {showClearAffordances && onClearSelection ? (
+          <button
+            type="button"
+            className="action-bar-clear"
+            onClick={onClearSelection}
+          >
+            Clear selection
+          </button>
+        ) : null}
       </div>
       <p className="action-bar-report" role="status">
         {renderReport(lastReport)}

@@ -1,15 +1,16 @@
 // Presentational table for the unified inspection list.
 //
-// Receives the merged `SessionRow[]` (already joined by `mergeSessions`)
-// plus the `selected` set + toggle handlers from the parent. Selection
-// keys are always backend-provided `sourceSessionKey` strings — never
-// the React-only `rowKey` fallback for `stored_only` rows. The table
-// renders a checkbox ONLY on importable rows (`isImportable(row) === true`)
-// so non-importable rows cannot enter the import POST.
+// Receives the merged + filtered + sorted `SessionRow[]` plus the
+// `selected` set + toggle handlers from the parent. Selection keys are
+// always backend-provided `sourceSessionKey` strings — never the
+// React-only `rowKey` fallback for `stored_only` rows. The table
+// renders a checkbox ONLY on importable rows
+// (`isImportable(row) === true`) so non-importable rows cannot enter
+// the import POST.
 //
 // Per `working/phase-4.md` §Action Bar and Mutation UX, the bulk-select
-// affordance toggles ALL importable rows. Non-importable rows are
-// invisible to the bulk action.
+// affordance toggles ALL importable rows in the current filter window.
+// Non-importable rows are invisible to the bulk action.
 //
 // Per spec §Data Model in the Browser, a row whose `statusConflict` is
 // true gets a small "(refresh)" affordance next to its `StatusBadge` —
@@ -17,14 +18,21 @@
 // hint. The full conflict badge UI lands in M4's drawer.
 //
 // Per spec, a row whose `sourcePathIsStale` is true labels its
-// source-path cell with a `title=` hover hint clarifying that the path
-// is the last-known location, not currently discoverable.
+// source-path cell with a `title=` hover hint clarifying that the
+// path is the last-known location, not currently discoverable.
+//
+// As of M3 the "Updated" cell renders a relative-time string against
+// a single `now` captured at refetch time in `App.tsx` (passed in as a
+// prop) so the page does not ticker-update. The full ISO timestamp
+// stays available via the `title=` hover hint for users who need the
+// absolute value.
 //
 // Reuses the structural CSS selectors set by M1 (`.table-wrap`,
 // `.empty`, `.muted`, `.mono`, `.stack`, `.select-col`, `.raw-link`,
-// `.badge.*` via StatusBadge). No feature-local CSS in this chunk; the
-// M1 `app.css` slimming decision is "selectors stay until M6".
+// `.badge.*` via StatusBadge). M3 introduces no new selectors here;
+// the filter-bar CSS lives alongside SessionFilters in `app.css`.
 import { StatusBadge } from "../../components/StatusBadge";
+import { relativeTimeFrom } from "./relativeTime";
 import { isImportable, type SessionRow } from "./types";
 
 export type SessionsTableProps = {
@@ -35,6 +43,8 @@ export type SessionsTableProps = {
   onToggle: (sourceSessionKey: string) => void;
   /** Toggle all importable rows: if any importable row is unchecked, select all; otherwise clear. */
   onToggleAll: () => void;
+  /** Pinned-`now` ISO string used by the relative-time cell renderer. */
+  now: string;
 };
 
 export function SessionsTable({
@@ -42,6 +52,7 @@ export function SessionsTable({
   selected,
   onToggle,
   onToggleAll,
+  now,
 }: SessionsTableProps) {
   if (rows.length === 0) {
     return (
@@ -155,7 +166,12 @@ export function SessionsTable({
                   <span className="muted mono">{row.rowKey}</span>
                 </td>
                 <td>{row.projectPath ?? "—"}</td>
-                <td className="mono">{row.sourceUpdatedAt ?? "—"}</td>
+                <td
+                  className="mono"
+                  title={row.sourceUpdatedAt ?? undefined}
+                >
+                  {relativeTimeFrom(now, row.sourceUpdatedAt)}
+                </td>
                 <td className="stack">
                   {metadataHref !== null ? (
                     <a className="raw-link mono" href={metadataHref}>

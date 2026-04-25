@@ -19,6 +19,9 @@ import { cleanup, render } from "@testing-library/react";
 import { SessionsTable } from "./SessionsTable";
 import type { SessionRow } from "./types";
 
+// Pinned `now` for deterministic relative-time rendering across tests.
+const NOW = "2026-04-25T12:00:00Z";
+
 afterEach(() => {
   cleanup();
 });
@@ -56,6 +59,7 @@ test("SessionsTable: empty rows renders empty-state copy and no <table>", () => 
       selected={new Set()}
       onToggle={onToggle}
       onToggleAll={onToggleAll}
+      now={NOW}
     />,
   );
   expect(container.querySelector("table")).toBeNull();
@@ -143,6 +147,7 @@ test("SessionsTable: per-row checkboxes ONLY on importable rows", () => {
       selected={new Set()}
       onToggle={onToggle}
       onToggleAll={onToggleAll}
+      now={NOW}
     />,
   );
   // Header checkbox plus per-row checkboxes; importable rows = 2.
@@ -189,6 +194,7 @@ test("SessionsTable: header checkbox click fires onToggleAll exactly once", () =
       selected={new Set()}
       onToggle={onToggle}
       onToggleAll={onToggleAll}
+      now={NOW}
     />,
   );
   const headerCheckbox = container.querySelector<HTMLInputElement>(
@@ -223,6 +229,7 @@ test("SessionsTable: header checkbox is disabled when zero rows are importable",
       selected={new Set()}
       onToggle={onToggle}
       onToggleAll={onToggleAll}
+      now={NOW}
     />,
   );
   const headerCheckbox = container.querySelector<HTMLInputElement>(
@@ -263,6 +270,7 @@ test("SessionsTable: statusConflict=true renders the (refresh) affordance; false
       selected={new Set()}
       onToggle={onToggle}
       onToggleAll={onToggleAll}
+      now={NOW}
     />,
   );
   // Exactly one (refresh) affordance in the DOM.
@@ -306,6 +314,7 @@ test("SessionsTable: sourcePathIsStale=true puts a title= hover hint on the sour
       selected={new Set()}
       onToggle={onToggle}
       onToggleAll={onToggleAll}
+      now={NOW}
     />,
   );
   // Locate each row's last cell (source-path column is the rightmost).
@@ -339,6 +348,7 @@ test("SessionsTable: clicking a per-row checkbox calls onToggle with the sourceS
       selected={new Set()}
       onToggle={onToggle}
       onToggleAll={onToggleAll}
+      now={NOW}
     />,
   );
   const rowCheckbox = container.querySelector<HTMLInputElement>(
@@ -348,4 +358,55 @@ test("SessionsTable: clicking a per-row checkbox calls onToggle with the sourceS
   rowCheckbox?.click();
   expect(onToggle).toHaveBeenCalledTimes(1);
   expect(onToggle.mock.calls[0]?.[0]).toBe("claude_code:click-1");
+});
+
+test("SessionsTable: Updated cell renders relative time against the pinned `now` with absolute on hover", () => {
+  // Pinned `now` is 12:00 UTC; this row's source_updated_at is 11:55
+  // UTC — exactly 5 minutes earlier. Relative form: "5m ago".
+  const rows: SessionRow[] = [
+    buildRow({
+      rowKey: "claude_code:relative-1",
+      sourceSessionKey: "claude_code:relative-1",
+      sourceUpdatedAt: "2026-04-25T11:55:00Z",
+    }),
+    // Null sourceUpdatedAt -> em-dash.
+    buildRow({
+      rowKey: "stored:uid-null-update",
+      sourceSessionKey: null,
+      sourceUpdatedAt: null,
+      status: "source_missing",
+      presence: "stored_only",
+      sourcePathIsStale: true,
+      storedSessionUid: "uid-null-update",
+      storedRawRef: "raw/uid-null-update.ndjson",
+      ingestedAt: "2026-04-22T00:00:00Z",
+    }),
+  ];
+  const onToggle = mock(() => {});
+  const onToggleAll = mock(() => {});
+  const { container } = render(
+    <SessionsTable
+      rows={rows}
+      selected={new Set()}
+      onToggle={onToggle}
+      onToggleAll={onToggleAll}
+      now={NOW}
+    />,
+  );
+  const rowEls = container.querySelectorAll("tbody tr");
+  expect(rowEls.length).toBe(2);
+  // The "Updated" column is the 6th <td> (after select / status /
+  // tool / title / project). Look for it by its `title` attribute
+  // for robustness against future column reorders.
+  const updatedCells = container.querySelectorAll(
+    'td[title="2026-04-25T11:55:00Z"]',
+  );
+  expect(updatedCells.length).toBe(1);
+  expect(updatedCells[0]?.textContent).toBe("5m ago");
+  // Null updated -> em-dash; no title attribute.
+  const dashCells = Array.from(
+    container.querySelectorAll("tbody td.mono"),
+  ).filter((el) => el.textContent === "—");
+  // At least one em-dash cell exists for the null row's Updated column.
+  expect(dashCells.length).toBeGreaterThanOrEqual(1);
 });

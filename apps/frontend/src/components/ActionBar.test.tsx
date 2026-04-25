@@ -202,3 +202,94 @@ test("ActionBar dispatches onRescan exactly once when Rescan is clicked", () => 
   expect(onRescan).toHaveBeenCalledTimes(1);
   expect(onImport).toHaveBeenCalledTimes(0);
 });
+
+test("ActionBar: hiddenByFilterCount > 0 renders the +K caption (M3)", () => {
+  const { container } = render(
+    <ActionBar
+      selectedCount={2}
+      hiddenByFilterCount={3}
+      pending={null}
+      lastReport={null}
+      onRescan={() => {}}
+      onImport={() => {}}
+      onClearHidden={() => {}}
+      onClearSelection={() => {}}
+    />,
+  );
+  const caption = container.querySelector(".action-bar-hidden-caption");
+  expect(caption).not.toBeNull();
+  expect(caption?.textContent).toBe("+3 hidden by filters");
+});
+
+test("ActionBar: hiddenByFilterCount === 0 (or omitted) does NOT render the caption", () => {
+  const { container } = render(
+    <ActionBar
+      selectedCount={2}
+      pending={null}
+      lastReport={null}
+      onRescan={() => {}}
+      onImport={() => {}}
+    />,
+  );
+  expect(container.querySelector(".action-bar-hidden-caption")).toBeNull();
+});
+
+test("ActionBar: Clear hidden button shown when hiddenByFilterCount > 0 + onClearHidden provided", () => {
+  const onClearHidden = mock(() => {});
+  const { container } = render(
+    <ActionBar
+      selectedCount={2}
+      hiddenByFilterCount={3}
+      pending={null}
+      lastReport={null}
+      onRescan={() => {}}
+      onImport={() => {}}
+      onClearHidden={onClearHidden}
+      onClearSelection={() => {}}
+    />,
+  );
+  const clearHidden = Array.from(
+    container.querySelectorAll<HTMLButtonElement>(".action-bar-clear"),
+  ).find((btn) => btn.textContent === "Clear hidden");
+  expect(clearHidden).not.toBeUndefined();
+  clearHidden!.click();
+  expect(onClearHidden).toHaveBeenCalledTimes(1);
+});
+
+test("ActionBar: Clear selection button shown when selectedCount > 0", () => {
+  const onClearSelection = mock(() => {});
+  const { container } = render(
+    <ActionBar
+      selectedCount={2}
+      pending={null}
+      lastReport={null}
+      onRescan={() => {}}
+      onImport={() => {}}
+      onClearSelection={onClearSelection}
+    />,
+  );
+  const clearSelection = Array.from(
+    container.querySelectorAll<HTMLButtonElement>(".action-bar-clear"),
+  ).find((btn) => btn.textContent === "Clear selection");
+  expect(clearSelection).not.toBeUndefined();
+  clearSelection!.click();
+  expect(onClearSelection).toHaveBeenCalledTimes(1);
+});
+
+test("ActionBar: zero selection AND zero hidden -> no Clear affordances", () => {
+  const { container } = render(
+    <ActionBar
+      selectedCount={0}
+      hiddenByFilterCount={0}
+      pending={null}
+      lastReport={null}
+      onRescan={() => {}}
+      onImport={() => {}}
+      onClearHidden={() => {}}
+      onClearSelection={() => {}}
+    />,
+  );
+  expect(
+    container.querySelectorAll(".action-bar-clear").length,
+  ).toBe(0);
+});

@@ -2,14 +2,19 @@
  * Structural CSS for the inspection page.
  *
  * Scope: table layout, status-badge variants for the four
- * `SessionSyncStatus` values, and spacing between the three panels.
- * Intentionally plain — decorative flourishes (gradients, backdrop-
- * filter, serif fonts, etc.) are intentionally out of scope. Class
- * names used here (`badge`, `.badge.up-to-date`, `.badge.not-stored`,
- * `.badge.outdated`, `.badge.source-missing`, `panel`, `table-wrap`,
- * `stack`, `mono`, `muted`, `empty`, `raw-link`, `action-bar`,
- * `select-col`) are the source of truth for their own selectors — the
- * components in `src/components/` emit matching markup.
+ * `SessionSyncStatus` values, the M3 filter-chip vocabulary
+ * (`.session-filters`, `.chip`, `.chip.active`, `.filter-row`,
+ * `.filter-label`, `.action-bar-hidden-caption`, `.action-bar-clear`),
+ * and spacing between the three panels. Intentionally plain —
+ * decorative flourishes (gradients, backdrop-filter, serif fonts,
+ * etc.) are intentionally out of scope. Class names used here
+ * (`badge`, `.badge.up-to-date`, `.badge.not-stored`, `.badge.outdated`,
+ * `.badge.source-missing`, `panel`, `table-wrap`, `stack`, `mono`,
+ * `muted`, `empty`, `raw-link`, `action-bar`, `select-col`,
+ * `.session-filters`, `.chip`, `.chip.active`, `.filter-row`,
+ * `.filter-label`) are the source of truth for their own selectors —
+ * the components in `src/components/` and
+ * `src/features/sessions/` emit matching markup.
  *
  * Phase 4 Milestone 1 token policy:
  *   - Token-driven: all color values (foreground, background, border,
@@ -24,7 +29,8 @@
  *     `min-width: 720px` (horizontal-overflow trigger),
  *     `.select-col`'s `width: 2.25rem` (checkbox column),
  *     `.badge`'s `border-radius: 999px` (full pill — `--radius-*` only
- *     defines sm/md/lg, no "full"), and the `letter-spacing: 0.06em`
+ *     defines sm/md/lg, no "full"; the same literal is reused for
+ *     `.chip` for the same reason), and the `letter-spacing: 0.06em`
  *     used on `th` and `.badge` for uppercase tracking. The spec's
  *     quantized scales do not cover these discrete one-off values, and
  *     resolving them would require either adding new tokens (banned by
@@ -40,6 +46,22 @@
  * semantic tokens fail AA against a 15%-tinted surface for accent,
  * success, and warn; see Handoff Notes). The Phase 4 browser target
  * is Chromium-only, where `color-mix()` is universally supported.
+ *
+ * Phase 4 Milestone 3 additions:
+ *   - `.session-filters` lays out the filter chip groups, search
+ *     input, project autocomplete (via native `<input list>` +
+ *     `<datalist>`), and sort selects above the table.
+ *   - `.chip` is a small pill-shaped button used for tool / storage /
+ *     status / "Importable only" toggles. `.chip.active` reuses the
+ *     M1 badge recipe (accent 15% background, accent 70% foreground)
+ *     so it inherits the same WCAG AA contrast guarantee — both
+ *     light and dark modes measured at ≥ 6.2 against the active
+ *     pair (see chunk evidence pack).
+ *   - `.action-bar-hidden-caption` surfaces the "+K hidden by filters"
+ *     count next to the Import button when the user's selection
+ *     contains keys that fell out of the current filter window.
+ *   - `.action-bar-clear` styles the `Clear hidden` and `Clear
+ *     selection` text-style buttons.
  */
 
 main {
@@ -200,4 +222,88 @@ td.select-col {
   width: 2.25rem;
   padding-right: var(--space-1);
   text-align: center;
+}
+
+/* ---------- Filter / sort / search bar (M3) ---------- */
+
+.session-filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.filter-label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  min-width: 4rem;
+}
+
+.chip {
+  display: inline-block;
+  padding: var(--space-1) var(--space-3);
+  border-radius: 999px;
+  font-size: var(--text-sm);
+  font-family: var(--font-sans);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+}
+
+.chip.active {
+  /* Same recipe as `.badge.not-stored` so the active chip clears WCAG
+   * AA 4.5:1 against its tinted background in both modes (measured
+   * at light 6.237 / dark 6.949 — see chunk evidence pack). */
+  background: color-mix(in srgb, var(--color-accent) 15%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-accent) 70%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-surface));
+}
+
+.session-filters input,
+.session-filters select {
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+.session-filters input[type="text"],
+.session-filters input[type="search"] {
+  min-width: 18rem;
+}
+
+.action-bar-hidden-caption {
+  font-size: var(--text-sm);
+}
+
+.action-bar-clear {
+  font: inherit;
+  font-size: var(--text-sm);
+  background: transparent;
+  border: 0;
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.action-bar-clear:hover {
+  color: var(--color-accent-hover);
 }
