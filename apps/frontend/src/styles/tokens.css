@@ -1,0 +1,67 @@
+/*
+ * Design tokens for the inspection surface.
+ *
+ * The single source of truth for color, spacing, radius, typography, and
+ * shadow values used anywhere else in the frontend. Hex literals are
+ * permitted only inside this file; every other CSS file consumes these
+ * tokens via `var(--…)` references (see working/phase-4.md §Design
+ * Tokens).
+ *
+ * Dark mode is handled by redefining the same color variables under
+ * `prefers-color-scheme: dark`. Spacing, radius, typography, and shadow
+ * values are not redefined per scheme.
+ */
+
+:root {
+  --color-bg: #ffffff;
+  --color-surface: #f8f9fb;
+  --color-surface-raised: #ffffff;
+  --color-border: #e3e5ea;
+  --color-border-strong: #c8ccd4;
+  --color-text: #14161a;
+  --color-text-muted: #5a606b;
+  --color-accent: #2864d4;
+  --color-accent-hover: #1d4fa8;
+  --color-success: #1f7a4a;
+  --color-warn: #b86b07;
+  --color-error: #b13838;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --text-xs: 0.72rem;
+  --text-sm: 0.85rem;
+  --text-base: 0.95rem;
+  --text-lg: 1.15rem;
+  --text-xl: 1.35rem;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0f1115;
+    --color-surface: #151821;
+    --color-surface-raised: #1b1f2a;
+    --color-border: #262b36;
+    --color-border-strong: #3a404d;
+    --color-text: #e8eaef;
+    --color-text-muted: #9098a6;
+    --color-accent: #6da5ff;
+    --color-accent-hover: #8bbbff;
+    --color-success: #5fb68a;
+    --color-warn: #e0a75a;
+    --color-error: #e57d7d;
+  }
+}

@@ -1,5 +1,5 @@
 /*
- * Minimal structural CSS for the inspection page.
+ * Structural CSS for the inspection page.
  *
  * Scope: table layout, status-badge variants for the four
  * `SessionSyncStatus` values, and spacing between the three panels.
@@ -10,15 +10,45 @@
  * `stack`, `mono`, `muted`, `empty`, `raw-link`, `action-bar`,
  * `select-col`) are the source of truth for their own selectors — the
  * components in `src/components/` emit matching markup.
+ *
+ * Phase 4 Milestone 1 token policy:
+ *   - Token-driven: all color values (foreground, background, border,
+ *     shadow tints), spacing for padding/margin/gap (`--space-*`),
+ *     border-radius for panel/table/empty-state corners (`--radius-*`),
+ *     font-family (`--font-sans`, `--font-mono`), and font-size
+ *     (`--text-*`) read from `tokens.css`. No raw hex literals appear
+ *     anywhere in this file (verified by
+ *     `rg -n '#[0-9a-fA-F]{3,8}'`).
+ *   - Intentionally NOT token-driven (structural literals): `main`'s
+ *     `max-width: 1400px` (page column cap), `table`'s
+ *     `min-width: 720px` (horizontal-overflow trigger),
+ *     `.select-col`'s `width: 2.25rem` (checkbox column),
+ *     `.badge`'s `border-radius: 999px` (full pill — `--radius-*` only
+ *     defines sm/md/lg, no "full"), and the `letter-spacing: 0.06em`
+ *     used on `th` and `.badge` for uppercase tracking. The spec's
+ *     quantized scales do not cover these discrete one-off values, and
+ *     resolving them would require either adding new tokens (banned by
+ *     the §Risks design-balloon mitigation) or restructuring the
+ *     layout (out of scope for M1).
+ *
+ * Badge backgrounds use `color-mix(in srgb, <semantic-token> 15%,
+ * var(--color-surface))` so the four pastel pairs the original Phase 3
+ * file carried derive from the existing semantic palette in both light
+ * and dark modes. Foregrounds are darkened/lightened toward
+ * `var(--color-text)` at a 70/30 ratio so all four variants clear
+ * WCAG AA 4.5:1 against the pale background in both modes (the bare
+ * semantic tokens fail AA against a 15%-tinted surface for accent,
+ * success, and warn; see Handoff Notes). The Phase 4 browser target
+ * is Chromium-only, where `color-mix()` is universally supported.
  */
 
 main {
   max-width: 1400px;
-  margin: 1.5rem auto 3rem;
-  padding: 0 1rem;
+  margin: var(--space-6) auto var(--space-8);
+  padding: 0 var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--space-6);
 }
 
 h1 {
@@ -28,18 +58,18 @@ h1 {
 .panel {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .panel h2 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: var(--text-xl);
 }
 
 .table-wrap {
   overflow-x: auto;
-  border: 1px solid #d6c7b3;
-  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
 
 table {
@@ -50,19 +80,19 @@ table {
 
 th,
 td {
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #e6dcc9;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
   text-align: left;
   vertical-align: top;
-  font-size: 0.9rem;
+  font-size: var(--text-base);
 }
 
 th {
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #6f6659;
-  background: #f5eede;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
 }
 
 tr:last-child td {
@@ -70,87 +100,87 @@ tr:last-child td {
 }
 
 .muted {
-  color: #6f6659;
+  color: var(--color-text-muted);
 }
 
 .mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.85rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
 }
 
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: var(--space-1);
 }
 
 .empty {
-  padding: 0.75rem 1rem;
-  border: 1px dashed #d6c7b3;
-  border-radius: 6px;
-  color: #6f6659;
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
 }
 
 .badge {
   display: inline-block;
-  padding: 0.15rem 0.5rem;
+  padding: var(--space-1) var(--space-2);
   border-radius: 999px;
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   border: 1px solid transparent;
   white-space: nowrap;
 }
 
 .badge.up-to-date {
-  background: #e2efe8;
-  color: #2a6b4f;
-  border-color: #bcd7c7;
+  background: color-mix(in srgb, var(--color-success) 15%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-success) 70%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-success) 35%, var(--color-surface));
 }
 
 .badge.not-stored {
-  background: #f4dfd8;
-  color: #9f3b24;
-  border-color: #e3b7ab;
+  background: color-mix(in srgb, var(--color-accent) 15%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-accent) 70%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-surface));
 }
 
 .badge.outdated {
-  background: #f0e3c6;
-  color: #8a5b10;
-  border-color: #d9c190;
+  background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-warn) 70%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
 }
 
 .badge.source-missing {
-  background: #efd6d6;
-  color: #8e2f2f;
-  border-color: #d4a8a8;
+  background: color-mix(in srgb, var(--color-error) 15%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-error) 70%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-error) 35%, var(--color-surface));
 }
 
 .raw-link {
-  color: #9f3b24;
+  color: var(--color-accent);
 }
 
 .action-bar {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .action-bar-buttons {
   display: flex;
   flex-direction: row;
-  gap: 0.5rem;
+  gap: var(--space-2);
   align-items: center;
 }
 
 .action-bar button {
   font: inherit;
-  padding: 0.35rem 0.9rem;
-  border: 1px solid #d6c7b3;
-  border-radius: 4px;
-  background: #f5eede;
-  color: #1d1a16;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
   cursor: pointer;
 }
 
@@ -161,13 +191,13 @@ tr:last-child td {
 
 .action-bar-report {
   margin: 0;
-  color: #6f6659;
-  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
 }
 
 th.select-col,
 td.select-col {
   width: 2.25rem;
-  padding-right: 0.25rem;
+  padding-right: var(--space-1);
   text-align: center;
 }

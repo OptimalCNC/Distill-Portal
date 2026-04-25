@@ -1,0 +1,24 @@
+/*
+ * Minimal CSS reset.
+ *
+ * Intentionally tiny: only the rules needed so token-driven styles
+ * downstream do not have to fight browser defaults. Any token reference
+ * here would be a layering violation — this file loads before
+ * `tokens.css` so the cascade orders well-known browser defaults below
+ * everything else. Token-driven body/font rules live in `global.css`,
+ * which loads after `tokens.css`.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+}

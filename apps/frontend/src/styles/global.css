@@ -1,18 +1,26 @@
-:root {
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  color-scheme: light dark;
-}
+/*
+ * Token-driven global rules.
+ *
+ * Loaded after `reset.css` and `tokens.css` so the cascade resolves:
+ * browser defaults → reset → tokens → global → component (app.css).
+ * Every value here is a token reference; no hex literals, no raw
+ * spacing values. Component-specific layout (panels, tables, badges,
+ * action bar) lives in `app.css`.
+ *
+ * The `<main>` width rule deliberately lives in `app.css` (1400px for
+ * the dual-table layout) — defining it here would conflict.
+ */
 
 body {
-  margin: 0;
-  padding: 1.5rem;
+  padding: var(--space-6);
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 
-main {
-  max-width: 48rem;
-  margin: 0 auto;
-}
-
-code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--font-mono);
 }

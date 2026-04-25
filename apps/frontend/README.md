@@ -15,7 +15,10 @@ Bun + Vite + React + TypeScript inspection UI. Surfaces source sessions, stored 
 - `src/lib/api.ts` — typed HTTP client
 - `src/lib/config.ts` — frontend runtime config (`VITE_API_BASE` override)
 - `src/lib/contracts.ts` — re-export barrel for generated contract types
-- `src/styles/app.css` — structural CSS
+- `src/styles/tokens.css` — design tokens (color, spacing, radius, typography); only file allowed to define hex literals; redefines colors under `prefers-color-scheme: dark`
+- `src/styles/reset.css` — minimal CSS reset (box-sizing, body margin, `color-scheme`)
+- `src/styles/global.css` — token-driven body and code font rules
+- `src/styles/app.css` — structural CSS for panels, tables, badges, action bar; consumes tokens via `var(--…)`
 - `e2e/` — Playwright browser e2e harness and specs
 
 ## Backend Access
