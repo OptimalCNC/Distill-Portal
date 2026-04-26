@@ -33,7 +33,7 @@
 //       disagreeing source/stored statuses renders the (refresh) hint.
 //   (8) `stored_only + source_missing` row renders the last-known
 //       source path with the title= hover hint.
-import { afterEach, beforeEach, expect, mock, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, expect, mock, test } from "bun:test";
 import {
   act,
   cleanup,
@@ -158,6 +158,24 @@ const IMPORT_SOURCE_FIXTURE: SourceSessionView[] = [
 
 let originalFetch: typeof globalThis.fetch | undefined;
 
+// happy-dom installs `localStorage` on `window` but not on the bare
+// `globalThis` object that test-setup.ts initializes. App reads via
+// `globalThis.localStorage` (through `readLastRescan` /
+// `useSessionFilters`). Promote it once so the M5 caption tests
+// can pre-seed the key. Mirrors the pattern in
+// `useSessionFilters.test.ts` and `lastRescan.test.ts`.
+beforeAll(() => {
+  const windowAny = (globalThis as unknown as { window?: { localStorage?: Storage } })
+    .window;
+  if (windowAny?.localStorage && !globalThis.localStorage) {
+    Object.defineProperty(globalThis, "localStorage", {
+      value: windowAny.localStorage,
+      configurable: true,
+      writable: true,
+    });
+  }
+});
+
 beforeEach(() => {
   originalFetch = globalThis.fetch;
 });
@@ -166,6 +184,15 @@ afterEach(() => {
   cleanup();
   if (originalFetch) {
     globalThis.fetch = originalFetch;
+  }
+  // Clear persisted filter blob + last-rescan timestamp between
+  // tests so leftover state from a prior test (e.g. importableOnly
+  // set to true in the M3 empty-state test) doesn't bleed forward
+  // and break the next render's defaults.
+  try {
+    globalThis.localStorage?.clear();
+  } catch {
+    // ignore — some tests deliberately disable storage.
   }
 });
 
@@ -326,13 +353,18 @@ test("clicking Rescan posts to the backend and refetches the three panels", asyn
   const [, rescanInit] = rescanCall!;
   expect(rescanInit?.body).toBe(JSON.stringify({}));
 
-  // After the refetch, the report summary text should appear in the DOM
-  // and include at least one of the typed RescanReport numeric fields.
+  // After the refetch, the rescan-success toast lands. M5 swapped the
+  // M3-era inline `lastReport` text for a Toast queue; the title +
+  // plain-language summary go in the toast body and the typed count
+  // names live inside the `<details>` disclosure (textContent walks
+  // into closed `<details>` elements, so the typed names are still
+  // findable in `container.textContent`).
   await waitFor(() => {
     expect(
-      container.textContent?.includes("discovered_files"),
+      container.textContent?.includes("Rescan complete"),
     ).toBe(true);
   });
+  expect(container.textContent?.includes("discovered_files")).toBe(true);
   expect(container.textContent?.includes("12")).toBe(true);
 });
 
@@ -406,13 +438,20 @@ test("selecting a source session and clicking Import posts the typed request", a
     JSON.stringify({ session_keys: ["claude_code:selected-key-1"] }),
   );
 
-  // After import resolves, the ImportReport summary must render in the DOM.
+  // After import resolves, the import-success toast lands. M5 swapped
+  // the M3-era inline `lastReport` text for a Toast queue; the title
+  // + plain-language summary go in the toast body and the typed
+  // count names live inside the `<details>` disclosure (textContent
+  // walks closed `<details>` blocks, so the typed names remain
+  // findable).
   await waitFor(() => {
     expect(
-      container.textContent?.includes("requested_sessions"),
+      container.textContent?.includes("Import complete"),
     ).toBe(true);
   });
-  expect(container.textContent?.includes("Import:")).toBe(true);
+  expect(
+    container.textContent?.includes("requested_sessions"),
+  ).toBe(true);
 
   // Selection is cleared: the Import button is back to count 0 and disabled.
   await waitFor(() => {
@@ -1698,4 +1737,1008 @@ test("M3: SessionFilters control bar is rendered above the table", async () => {
   expect(
     container.querySelector('[role="group"][aria-label="Session filters"]'),
   ).not.toBeNull();
+});
+
+// ---------- Phase 4 Milestone 5 (Chunk F) additions ----------
+//
+// (a) 500-row layout — pagination renders 50 rows per page; the
+//     pagination caption reads "Page 1 of 10".
+// (b) Pagination-cross-page CLICK-TIME INTERSECTION REGRESSION —
+//     a row selected on page 1 that gets pruned by a rescan must
+//     NOT ship in the import POST when the user is viewing page 2.
+//     Mirrors the F2 + M3 microtask choreography. The temp-revert
+//     exercise is described in the chunk handoff: temporarily
+//     scoping handleImport's eligible set to `pageRows + isImportable`
+//     instead of `filteredRows + isImportable` makes this test fail
+//     (POST body becomes empty, since the stale key was on page 1
+//     and we're now on page 2). Restoring filteredRows-scoped
+//     derivation makes it pass.
+// (c) Cross-page bulk-select — the header checkbox in SessionsTable
+//     now operates on the full FILTER window (M3 wiring intact under
+//     pagination); selecting all on page 1 should put cross-page
+//     keys into the POST body too.
+// (d) Page-reset on filter change — after paging through to page 3,
+//     applying any filter resets pageIndex to 0.
+// (e) Page-reset RECOMPUTE on pageSize change — keeps the first
+//     visible row visible (page 2 with size 50 -> rows 50-99;
+//     change to size 100 -> page 1 -> rows 0-99 -> still includes
+//     row 50).
+// (f) Toast queue tests — rescan success / import success / rescan
+//     error with Retry that succeeds on second attempt.
+// (g) Last-rescan caption — initially "—"; after rescan success
+//     renders the relative-time form; after rescan ERROR, the
+//     caption does NOT update.
+
+// Helper: build N synthetic SourceSessionView rows. Status alternates
+// every 1 row so all rows are importable (important for the cross-page
+// regression and the bulk-select test).
+function manySource(n: number): SourceSessionView[] {
+  const rows: SourceSessionView[] = [];
+  for (let i = 0; i < n; i++) {
+    rows.push({
+      session_key: `claude_code:row-${i.toString().padStart(4, "0")}`,
+      tool: "claude_code",
+      source_session_id: `row-${i.toString().padStart(4, "0")}`,
+      source_path: `/srv/r${i}.jsonl`,
+      source_fingerprint: `fp-r-${i}`,
+      // Spaced timestamps so the descending-by-source_updated_at
+      // default sort produces a deterministic order: row-0 newest.
+      created_at: `2026-04-22T00:00:00Z`,
+      source_updated_at: `2026-04-22T00:${(99 - Math.floor(i / 60))
+        .toString()
+        .padStart(2, "0")}:${(60 - (i % 60))
+        .toString()
+        .padStart(2, "0")}Z`,
+      project_path: "/p/x",
+      title: `Row ${i}`,
+      has_subagent_sidecars: false,
+      status: "not_stored",
+      session_uid: null,
+      stored_ingested_at: null,
+    });
+  }
+  return rows;
+}
+
+test("M5: 500-row layout renders 50 rows on page 1 with 'Page 1 of 10' caption", async () => {
+  const SOURCE = manySource(500);
+  const fetchMock = mock(
+    async (input: Request | string | URL): Promise<Response> => {
+      const url = urlOf(input);
+      if (url === SOURCE_SESSIONS_PATH) return jsonResponse(SOURCE);
+      if (url === STORED_SESSIONS_PATH) return jsonResponse([]);
+      if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      return new Response(`unexpected url ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  // Wait for one of the high-id rows we know lands on the deterministic
+  // first page (row-0000 is the most recent under the default
+  // descending sort, so it's on page 1).
+  await screen.findByText("claude_code:row-0000");
+
+  // Exactly 50 body rows in the unified table (the table is the first
+  // <table> in the DOM; the second is the ScanErrorsCallout, which is
+  // empty so it doesn't render). With an empty scan-errors fixture
+  // there is only one table.
+  const tables = container.querySelectorAll("table");
+  expect(tables.length).toBe(1);
+  const tbodyRows = tables[0]!.querySelectorAll("tbody tr");
+  expect(tbodyRows.length).toBe(50);
+
+  // Pagination caption renders "Page 1 of 10".
+  const caption = container.querySelector(".pagination-caption");
+  expect(caption?.textContent).toBe("Page 1 of 10");
+});
+
+test("M5: pagination-cross-page click-time intersection — pruned page-1 key drops; surviving page-1 keys stay (cross-page accumulation)", async () => {
+  // Setup: 51 importable rows. Default pageSize is 50, so:
+  //   - page 1 has 50 rows (row-0000 .. row-0049)
+  //   - page 2 has 1 row (row-0050)
+  // The user selects two keys on page 1 (row-0000 and row-0010), then
+  // pages to page 2. A rescan fires that prunes row-0010 from the
+  // source list. The test then triggers the import via the F2 + M3
+  // microtask choreography (text-node setter hook + queueMicrotask
+  // scheduled click during a setSelected commit). The POST body must
+  // contain row-0000 (still present in the filter window) but NOT
+  // row-0010 (pruned by the rescan).
+  //
+  // The choreography: install the setter hook on the Import button's
+  // text node; flip IS_REACT_ACT_ENVIRONMENT to false; click Rescan
+  // (without `act()`); when React commits "Import selected (1)" the
+  // setter fires, microtask-schedules a click on Import. The click
+  // fires before React's reconciliation `useEffect` flushes, so
+  // `selected` still contains row-0010. The handler's click-time
+  // intersection (over filteredRows + isImportable) drops row-0010.
+  const INITIAL = manySource(51); // 51 rows; pages 1 + 2
+  // After the rescan, row-0010 is pruned (returns 50 rows excluding
+  // row-0010).
+  const AFTER_RESCAN = INITIAL.filter(
+    (r) => r.session_key !== "claude_code:row-0010",
+  );
+
+  let rescanned = false;
+  const fetchMock = mock(
+    async (
+      input: Request | string | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const url = urlOf(input);
+      const method = init?.method ?? "GET";
+      if (method === "POST" && url === RESCAN_PATH) {
+        rescanned = true;
+        return jsonResponse(RESCAN_FIXTURE);
+      }
+      if (method === "POST" && url === IMPORT_PATH) {
+        return jsonResponse(IMPORT_FIXTURE);
+      }
+      if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
+        return jsonResponse(rescanned ? AFTER_RESCAN : INITIAL);
+      }
+      if (method === "GET" && url === STORED_SESSIONS_PATH) {
+        return jsonResponse([]);
+      }
+      if (method === "GET" && url === SCAN_ERRORS_PATH) {
+        return jsonResponse([]);
+      }
+      return new Response(`unexpected ${method} ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+
+  // Wait for page 1 to settle.
+  await screen.findByText("claude_code:row-0000");
+
+  // Select row-0000 and row-0010 (both on page 1 under default sort).
+  const cb0000 = container.querySelector<HTMLInputElement>(
+    'input[type="checkbox"][aria-label="Select claude_code:row-0000"]',
+  );
+  const cb0010 = container.querySelector<HTMLInputElement>(
+    'input[type="checkbox"][aria-label="Select claude_code:row-0010"]',
+  );
+  expect(cb0000).not.toBeNull();
+  expect(cb0010).not.toBeNull();
+  await act(async () => {
+    cb0000?.click();
+  });
+  await act(async () => {
+    cb0010?.click();
+  });
+
+  // Sanity: action-bar count is 2.
+  const importButton = container.querySelector<HTMLButtonElement>(
+    ".action-bar button:nth-of-type(2)",
+  );
+  expect(importButton?.textContent).toBe("Import selected (2)");
+
+  // Page to page 2 by clicking Next.
+  const nextButton = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Next page"]',
+  );
+  expect(nextButton).not.toBeNull();
+  await act(async () => {
+    nextButton!.click();
+  });
+
+  // Confirm we're on page 2: row-0050 is visible, row-0000 is NOT
+  // visible in the table body (it's still in `filteredRows` but
+  // pagination has windowed it off).
+  await waitFor(() => {
+    expect(
+      container.textContent?.includes("claude_code:row-0050"),
+    ).toBe(true);
+  });
+  // Sanity: the action-bar count is STILL 2 because selection is
+  // filter-window scoped, not page-window scoped.
+  expect(importButton?.textContent).toBe("Import selected (2)");
+
+  // Install the text-node setter hook on the Import button. When
+  // React commits the post-rescan "Import selected (1)" label
+  // (because row-0010 was pruned and the reconciliation useEffect
+  // dropped it from `selected`), microtask-schedule a click on
+  // Import. The click fires BEFORE handleImport's commit-time
+  // re-derivation reads the post-prune state — but the click-time
+  // intersection in `handleImport` defends against that race: the
+  // FRESH re-derivation inside the handler reads the latest
+  // sourceState/storedState/filters, so row-0010 is dropped
+  // regardless of timing.
+  let clicked = false;
+  const findDescriptor = (
+    node: object,
+    prop: string,
+  ): PropertyDescriptor | undefined => {
+    let p: object | null = Object.getPrototypeOf(node);
+    while (p !== null) {
+      const d = Object.getOwnPropertyDescriptor(p, prop);
+      if (d) return d;
+      p = Object.getPrototypeOf(p);
+    }
+    return undefined;
+  };
+  const textNode = importButton!.firstChild;
+  if (textNode) {
+    const descriptor = findDescriptor(textNode, "data");
+    if (descriptor?.set && descriptor.get) {
+      const { set: originalSet, get: originalGet } = descriptor;
+      Object.defineProperty(textNode, "data", {
+        configurable: true,
+        get() {
+          return originalGet.call(this);
+        },
+        set(value: string) {
+          originalSet.call(this, value);
+          if (!clicked && value === "Import selected (1)") {
+            clicked = true;
+            queueMicrotask(() => {
+              importButton!.click();
+            });
+          }
+        },
+      });
+    }
+  }
+
+  // Click Rescan WITHOUT `act()` so React's passive-effect macrotask
+  // does not run inside our click. Same pattern as the F2 + M3
+  // regression tests.
+  const originalActEnv = (globalThis as unknown as {
+    IS_REACT_ACT_ENVIRONMENT?: boolean;
+  }).IS_REACT_ACT_ENVIRONMENT;
+  (globalThis as unknown as {
+    IS_REACT_ACT_ENVIRONMENT: boolean;
+  }).IS_REACT_ACT_ENVIRONMENT = false;
+  const rescanButton = container.querySelector<HTMLButtonElement>(
+    ".action-bar button:nth-of-type(1)",
+  );
+  rescanButton?.click();
+
+  // Wait for the microtask-scheduled Import click to land.
+  await waitFor(() => {
+    expect(clicked).toBe(true);
+  });
+
+  (globalThis as unknown as {
+    IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+  }).IS_REACT_ACT_ENVIRONMENT = originalActEnv;
+
+  // Wait for the import POST + its refetch cycle.
+  // 3 initial GETs + 1 rescan POST + 3 refetch GETs + 1 import POST
+  // + 3 post-import refetch GETs = 11.
+  await waitFor(() => {
+    expect(fetchMock).toHaveBeenCalledTimes(11);
+  });
+
+  // Exactly one Import POST. Body MUST include row-0000 (still in the
+  // filter window after the rescan). MUST NOT include row-0010 (pruned).
+  const importCalls = fetchMock.mock.calls.filter((args) => {
+    const init = args[1] as RequestInit | undefined;
+    const url = urlOf(args[0] as Request | string | URL);
+    return (init?.method ?? "GET") === "POST" && url === IMPORT_PATH;
+  });
+  expect(importCalls.length).toBe(1);
+  const body = importCalls[0]?.[1]?.body as string;
+  expect(body.includes("claude_code:row-0000")).toBe(true);
+  expect(body.includes("claude_code:row-0010")).toBe(false);
+});
+
+test("M5: cross-page bulk-select — header checkbox selects ALL importable rows across all pages", async () => {
+  // 150 importable rows -> 3 pages at default pageSize 50. Click the
+  // header checkbox on page 1; assert action-bar count is 150 (NOT
+  // 50); click Import; assert POST body contains all 150 keys.
+  const SOURCE = manySource(150);
+  const fetchMock = mock(
+    async (
+      input: Request | string | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const url = urlOf(input);
+      const method = init?.method ?? "GET";
+      if (method === "POST" && url === IMPORT_PATH) {
+        return jsonResponse(IMPORT_FIXTURE);
+      }
+      if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
+        return jsonResponse(SOURCE);
+      }
+      if (method === "GET" && url === STORED_SESSIONS_PATH) {
+        return jsonResponse([]);
+      }
+      if (method === "GET" && url === SCAN_ERRORS_PATH) {
+        return jsonResponse([]);
+      }
+      return new Response(`unexpected ${method} ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:row-0000");
+
+  // The header checkbox is the first input[type=checkbox] inside the
+  // <thead>. It does not carry an aria-label that names a key.
+  const headerCheckbox = container.querySelector<HTMLInputElement>(
+    'thead input[type="checkbox"]',
+  );
+  expect(headerCheckbox).not.toBeNull();
+  await act(async () => {
+    headerCheckbox!.click();
+  });
+
+  // Action-bar count is 150 (cross-page selection).
+  const importButton = container.querySelector<HTMLButtonElement>(
+    ".action-bar button:nth-of-type(2)",
+  );
+  expect(importButton?.textContent).toBe("Import selected (150)");
+
+  // Click Import.
+  await act(async () => {
+    importButton?.click();
+  });
+  await waitFor(() => {
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+  });
+
+  // POST body must contain all 150 keys.
+  const importCalls = fetchMock.mock.calls.filter((args) => {
+    const init = args[1] as RequestInit | undefined;
+    const url = urlOf(args[0] as Request | string | URL);
+    return (init?.method ?? "GET") === "POST" && url === IMPORT_PATH;
+  });
+  expect(importCalls.length).toBe(1);
+  const body = importCalls[0]?.[1]?.body as string;
+  // The 0000, 0050 (page 2), and 0149 (page 3 last) keys are all
+  // present.
+  expect(body.includes("claude_code:row-0000")).toBe(true);
+  expect(body.includes("claude_code:row-0050")).toBe(true);
+  expect(body.includes("claude_code:row-0149")).toBe(true);
+  // Sanity: parse the body to count keys.
+  const parsed = JSON.parse(body) as { session_keys: string[] };
+  expect(parsed.session_keys.length).toBe(150);
+});
+
+test("M5: page-reset on filter change — paging to page 3 then changing a filter resets pageIndex to 0", async () => {
+  const SOURCE = manySource(150); // 3 pages
+  const fetchMock = mock(
+    async (input: Request | string | URL): Promise<Response> => {
+      const url = urlOf(input);
+      if (url === SOURCE_SESSIONS_PATH) return jsonResponse(SOURCE);
+      if (url === STORED_SESSIONS_PATH) return jsonResponse([]);
+      if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      return new Response(`unexpected url ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:row-0000");
+
+  // Page through to page 3.
+  const next = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Next page"]',
+  );
+  await act(async () => {
+    next!.click();
+  });
+  await act(async () => {
+    next!.click();
+  });
+  await waitFor(() => {
+    expect(
+      container.querySelector(".pagination-caption")?.textContent,
+    ).toBe("Page 3 of 3");
+  });
+
+  // Apply a search filter (any non-empty string; we don't care if it
+  // matches — only that it triggers the page-reset effect).
+  const searchInput = container.querySelector<HTMLInputElement>(
+    "#session-filters-search",
+  );
+  await act(async () => {
+    fireEvent.change(searchInput!, { target: { value: "Row 7" } });
+  });
+
+  // After the filter change, pagination should reset to page 1 of N
+  // (the search "Row 7" matches Row 7, Row 70..79 — exactly 11 rows
+  // on a single page).
+  await waitFor(() => {
+    const caption = container
+      .querySelector(".pagination-caption")
+      ?.textContent;
+    expect(caption?.startsWith("Page 1 of ")).toBe(true);
+  });
+});
+
+test("M5: page-reset RECOMPUTE on pageSize change — keeps the first visible row visible", async () => {
+  // With 500 rows + pageSize 50 + pageIndex 2, the user sees rows 100-149.
+  // Switching to pageSize 100 must put pageIndex at 1 (rows 100-199 —
+  // row 100 still visible).
+  const SOURCE = manySource(500);
+  const fetchMock = mock(
+    async (input: Request | string | URL): Promise<Response> => {
+      const url = urlOf(input);
+      if (url === SOURCE_SESSIONS_PATH) return jsonResponse(SOURCE);
+      if (url === STORED_SESSIONS_PATH) return jsonResponse([]);
+      if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      return new Response(`unexpected url ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:row-0000");
+
+  // Page to pageIndex=2 (Page 3 of 10).
+  const next = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Next page"]',
+  );
+  await act(async () => {
+    next!.click();
+  });
+  await act(async () => {
+    next!.click();
+  });
+  await waitFor(() => {
+    expect(
+      container.querySelector(".pagination-caption")?.textContent,
+    ).toBe("Page 3 of 10");
+  });
+
+  // Confirm row-0100 is the first row on this page.
+  const tbody = container.querySelector("tbody");
+  const firstRowText = tbody!.querySelectorAll("tr")[0]!.textContent;
+  expect(firstRowText?.includes("row-0100")).toBe(true);
+
+  // Change pageSize to 100 via the Pagination select.
+  const pageSizeSelect = container.querySelector<HTMLSelectElement>(
+    'select[aria-label="Page size"]',
+  );
+  expect(pageSizeSelect).not.toBeNull();
+  await act(async () => {
+    pageSizeSelect!.value = "100";
+    pageSizeSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  // After the pageSize change: pageIndex should be 1 (Page 2 of 5),
+  // and row-0100 should still be the first row on the current page.
+  await waitFor(() => {
+    expect(
+      container.querySelector(".pagination-caption")?.textContent,
+    ).toBe("Page 2 of 5");
+  });
+  const tbodyAfter = container.querySelector("tbody");
+  const firstRowTextAfter = tbodyAfter!.querySelectorAll("tr")[0]!.textContent;
+  expect(firstRowTextAfter?.includes("row-0100")).toBe(true);
+});
+
+test("M5: rescan success pushes a 'Rescan complete' toast + plain-language summary + structured details", async () => {
+  const fetchMock = mock(
+    async (
+      input: Request | string | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const url = urlOf(input);
+      const method = init?.method ?? "GET";
+      if (method === "POST" && url === RESCAN_PATH) {
+        return jsonResponse(RESCAN_FIXTURE);
+      }
+      if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
+        return jsonResponse(SOURCE_FIXTURE);
+      }
+      if (method === "GET" && url === STORED_SESSIONS_PATH) {
+        return jsonResponse(STORED_FIXTURE);
+      }
+      if (method === "GET" && url === SCAN_ERRORS_PATH) {
+        return jsonResponse([]);
+      }
+      return new Response(`unexpected ${method} ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:fixture-abc");
+
+  const rescanButton = container.querySelector<HTMLButtonElement>(
+    ".action-bar button:nth-of-type(1)",
+  );
+  await act(async () => {
+    rescanButton?.click();
+  });
+
+  // The success toast lands; assert the title + the plain-language
+  // summary copy are both visible.
+  await waitFor(() => {
+    expect(container.textContent?.includes("Rescan complete")).toBe(true);
+  });
+  // Plain-language: "Discovered 12 files, parsed 11 sessions, 2 not yet stored."
+  expect(container.textContent?.includes("Discovered 12 files")).toBe(true);
+  expect(container.textContent?.includes("parsed 11 sessions")).toBe(true);
+  // Structured details (inside <details>): the typed names from the
+  // RescanReport contract are findable via textContent (which walks
+  // closed <details> blocks).
+  expect(container.textContent?.includes("discovered_files")).toBe(true);
+  expect(container.textContent?.includes("scan_errors")).toBe(true);
+  // Toast root carries the success class + role=status.
+  const toast = container.querySelector(".toast.success");
+  expect(toast).not.toBeNull();
+  expect(toast!.getAttribute("role")).toBe("status");
+});
+
+test("M5: import success pushes an 'Import complete' toast + plain-language summary + structured details", async () => {
+  const fetchMock = mock(
+    async (
+      input: Request | string | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const url = urlOf(input);
+      const method = init?.method ?? "GET";
+      if (method === "POST" && url === IMPORT_PATH) {
+        return jsonResponse(IMPORT_FIXTURE);
+      }
+      if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
+        return jsonResponse(IMPORT_SOURCE_FIXTURE);
+      }
+      if (method === "GET" && url === STORED_SESSIONS_PATH) {
+        return jsonResponse([]);
+      }
+      if (method === "GET" && url === SCAN_ERRORS_PATH) {
+        return jsonResponse([]);
+      }
+      return new Response(`unexpected ${method} ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:selected-key-1");
+
+  const cb = container.querySelector<HTMLInputElement>(
+    'input[type="checkbox"][aria-label="Select claude_code:selected-key-1"]',
+  );
+  await act(async () => {
+    cb?.click();
+  });
+  const importButton = container.querySelector<HTMLButtonElement>(
+    ".action-bar button:nth-of-type(2)",
+  );
+  await act(async () => {
+    importButton?.click();
+  });
+
+  await waitFor(() => {
+    expect(container.textContent?.includes("Import complete")).toBe(true);
+  });
+  // Plain-language summary: "Requested 1 session, 1 updated."
+  expect(container.textContent?.includes("Requested 1 session")).toBe(true);
+  expect(container.textContent?.includes("1 updated")).toBe(true);
+  // Structured details: typed names findable.
+  expect(container.textContent?.includes("requested_sessions")).toBe(true);
+  expect(container.textContent?.includes("inserted_sessions")).toBe(true);
+});
+
+test("M5: rescan ERROR pushes an error toast with Retry; clicking Retry succeeds on the second attempt", async () => {
+  let rescanCalls = 0;
+  const fetchMock = mock(
+    async (
+      input: Request | string | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const url = urlOf(input);
+      const method = init?.method ?? "GET";
+      if (method === "POST" && url === RESCAN_PATH) {
+        rescanCalls += 1;
+        if (rescanCalls === 1) {
+          return new Response("boom", {
+            status: 500,
+            headers: { "Content-Type": "text/plain" },
+          });
+        }
+        return jsonResponse(RESCAN_FIXTURE);
+      }
+      if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
+        return jsonResponse(SOURCE_FIXTURE);
+      }
+      if (method === "GET" && url === STORED_SESSIONS_PATH) {
+        return jsonResponse(STORED_FIXTURE);
+      }
+      if (method === "GET" && url === SCAN_ERRORS_PATH) {
+        return jsonResponse([]);
+      }
+      return new Response(`unexpected ${method} ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:fixture-abc");
+
+  // First Rescan -> 500 -> error toast lands.
+  const rescanButton = container.querySelector<HTMLButtonElement>(
+    ".action-bar button:nth-of-type(1)",
+  );
+  await act(async () => {
+    rescanButton?.click();
+  });
+  await waitFor(() => {
+    expect(container.textContent?.includes("Rescan failed")).toBe(true);
+  });
+  // The error toast carries role=alert + a Retry button.
+  const errorToast = container.querySelector(".toast.error");
+  expect(errorToast).not.toBeNull();
+  expect(errorToast!.getAttribute("role")).toBe("alert");
+  const retryButton = errorToast!.querySelector<HTMLButtonElement>(
+    ".toast-retry",
+  );
+  expect(retryButton).not.toBeNull();
+  expect(retryButton!.textContent).toBe("Retry");
+
+  // Click Retry -> second rescan call -> success.
+  await act(async () => {
+    retryButton!.click();
+  });
+  await waitFor(() => {
+    expect(container.textContent?.includes("Rescan complete")).toBe(true);
+  });
+  // Both attempts were made.
+  expect(rescanCalls).toBe(2);
+});
+
+test("M5: last-rescan caption is em-dash on first render, then renders relative-time after success", async () => {
+  // Make sure no leftover blob lingers from a previous test run.
+  try {
+    globalThis.localStorage?.removeItem("distill-portal:last-manual-rescan:v1");
+  } catch {
+    // ignore
+  }
+  const fetchMock = mock(
+    async (
+      input: Request | string | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const url = urlOf(input);
+      const method = init?.method ?? "GET";
+      if (method === "POST" && url === RESCAN_PATH) {
+        return jsonResponse(RESCAN_FIXTURE);
+      }
+      if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
+        return jsonResponse(SOURCE_FIXTURE);
+      }
+      if (method === "GET" && url === STORED_SESSIONS_PATH) {
+        return jsonResponse(STORED_FIXTURE);
+      }
+      if (method === "GET" && url === SCAN_ERRORS_PATH) {
+        return jsonResponse([]);
+      }
+      return new Response(`unexpected ${method} ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:fixture-abc");
+
+  // Caption initially reads em-dash (no rescan has fired in this
+  // browser yet).
+  const caption = container.querySelector(".action-bar-last-rescan");
+  expect(caption?.textContent).toBe(
+    "last rescan from this browser —",
+  );
+
+  // Click Rescan -> success path writes the timestamp + setLastRescanAt
+  // -> caption updates to a relative-time form ("just now" within the
+  // 30-second window after the click).
+  const rescanButton = container.querySelector<HTMLButtonElement>(
+    ".action-bar button:nth-of-type(1)",
+  );
+  await act(async () => {
+    rescanButton?.click();
+  });
+  await waitFor(() => {
+    const c = container.querySelector(".action-bar-last-rescan");
+    // The caption is no longer the em-dash form; it should match the
+    // relative-time renderer's output (likely "just now").
+    expect(c?.textContent !== "last rescan from this browser —").toBe(
+      true,
+    );
+  });
+  const updated = container
+    .querySelector(".action-bar-last-rescan")
+    ?.textContent;
+  expect(updated?.startsWith("last rescan from this browser ")).toBe(true);
+});
+
+test("M5: last-rescan caption does NOT update on rescan ERROR", async () => {
+  // Pre-seed a known timestamp so we can assert it stays unchanged
+  // after the failed rescan.
+  const seed = new Date(Date.now() - 5 * 60_000).toISOString(); // 5 min ago
+  try {
+    globalThis.localStorage?.setItem(
+      "distill-portal:last-manual-rescan:v1",
+      JSON.stringify(seed),
+    );
+  } catch {
+    // ignore — the in-memory fallback path is also acceptable.
+  }
+  const fetchMock = mock(
+    async (
+      input: Request | string | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const url = urlOf(input);
+      const method = init?.method ?? "GET";
+      if (method === "POST" && url === RESCAN_PATH) {
+        return new Response("boom", {
+          status: 500,
+          headers: { "Content-Type": "text/plain" },
+        });
+      }
+      if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
+        return jsonResponse(SOURCE_FIXTURE);
+      }
+      if (method === "GET" && url === STORED_SESSIONS_PATH) {
+        return jsonResponse(STORED_FIXTURE);
+      }
+      if (method === "GET" && url === SCAN_ERRORS_PATH) {
+        return jsonResponse([]);
+      }
+      return new Response(`unexpected ${method} ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:fixture-abc");
+
+  // Capture the caption text AND the title= ISO before the rescan.
+  const beforeCaption = container
+    .querySelector(".action-bar-last-rescan")
+    ?.textContent;
+  const beforeTitle = container
+    .querySelector(".action-bar-last-rescan")
+    ?.getAttribute("title");
+  expect(beforeTitle).toBe(seed);
+
+  const rescanButton = container.querySelector<HTMLButtonElement>(
+    ".action-bar button:nth-of-type(1)",
+  );
+  await act(async () => {
+    rescanButton?.click();
+  });
+  // Wait for the error toast.
+  await waitFor(() => {
+    expect(container.textContent?.includes("Rescan failed")).toBe(true);
+  });
+
+  // The caption text + title MUST equal the pre-rescan values (the
+  // failure path does NOT write a new timestamp).
+  const afterCaption = container
+    .querySelector(".action-bar-last-rescan")
+    ?.textContent;
+  const afterTitle = container
+    .querySelector(".action-bar-last-rescan")
+    ?.getAttribute("title");
+  expect(afterCaption).toBe(beforeCaption);
+  expect(afterTitle).toBe(seed);
+});
+
+test("M5: import-error Retry uses the LATEST handleImport (rescan-between-attempts re-derives at click time)", async () => {
+  // Codex round-1 finding (Chunk F fix-up): the import-error toast's
+  // `onRetry` closure captured the `handleImport` reference from the
+  // render that pushed the toast. If a rescan landed BETWEEN the
+  // failure and the Retry click, the click invoked the stale
+  // handleImport — its closure-captured `selected` / `sourceState` /
+  // `storedState` / `filters` did NOT see the post-rescan state, so
+  // the POST body could re-ship a key the rescan had pruned.
+  //
+  // The fix wraps both handlers in refs (`handleImportRef`,
+  // `handleRescanRef`) that an effect keeps pointed at the LATEST
+  // identity each render. The toast onRetry captures the ref, not
+  // the handler, so a Retry click always invokes the most recent
+  // handleImport — and that handler's useCallback closure reads the
+  // current state.
+  //
+  // Test choreography (deterministic; no commit-window race needed):
+  //   1. Mount with two importable rows {A, B}; user selects both.
+  //   2. Make the IMPORT mock return 500 on the first call -> error
+  //      toast lands with Retry.
+  //   3. Switch the SOURCE mock to return only [A] (so the next
+  //      refetch prunes B).
+  //   4. Click Rescan -> rescan POST + refetch -> sourceState
+  //      becomes [A] -> reconciliation useEffect prunes `selected`
+  //      to {A} -> a new handleImport is created (its useCallback
+  //      deps include `selected` and `sourceState`).
+  //   5. Click Retry on the import-error toast.
+  //   6. Assert: the second IMPORT POST body excludes the pruned
+  //      `key-B` and contains only `key-A`.
+  //
+  // Temp-revert exercise (proves the test catches the bug):
+  //   - In App.tsx, change the import error onRetry from
+  //     `void handleImportRef.current()` back to `void handleImport()`
+  //     and remove the matching ref-sync useEffect for `handleImport`.
+  //   - This test then fails: the second POST body contains BOTH
+  //     `key-A` AND `key-B`, because the stale handleImport's
+  //     closure captured `selected = {A, B}` and
+  //     `sourceState = [A, B]`, so its click-time intersection
+  //     re-derives against the pre-rescan view.
+  //   - Restore the ref-based onRetry + the ref-sync useEffect ->
+  //     test passes again.
+  const TWO_ROWS: SourceSessionView[] = [
+    {
+      session_key: "claude_code:retry-A",
+      tool: "claude_code",
+      source_session_id: "retry-A",
+      source_path: "/tmp/fixture/retry-a.jsonl",
+      source_fingerprint: "fp-retry-a",
+      created_at: "2026-04-22T00:00:00Z",
+      source_updated_at: "2026-04-22T00:00:00Z",
+      project_path: "/tmp/fixture",
+      title: "Retry A",
+      has_subagent_sidecars: false,
+      status: "not_stored",
+      session_uid: null,
+      stored_ingested_at: null,
+    },
+    {
+      session_key: "claude_code:retry-B",
+      tool: "claude_code",
+      source_session_id: "retry-B",
+      source_path: "/tmp/fixture/retry-b.jsonl",
+      source_fingerprint: "fp-retry-b",
+      created_at: "2026-04-22T00:00:00Z",
+      source_updated_at: "2026-04-22T00:00:00Z",
+      project_path: "/tmp/fixture",
+      title: "Retry B",
+      has_subagent_sidecars: false,
+      status: "not_stored",
+      session_uid: null,
+      stored_ingested_at: null,
+    },
+  ];
+  const ONE_ROW: SourceSessionView[] = [TWO_ROWS[0]!];
+
+  // The test progresses through three phases controlled by booleans:
+  //   - importCalls: 1st = 500 (failure), 2nd = success (the Retry).
+  //   - rescanned: flips after the rescan POST so the next
+  //     /source-sessions GET returns ONE_ROW (B pruned).
+  let importCalls = 0;
+  let rescanned = false;
+  const fetchMock = mock(
+    async (
+      input: Request | string | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const url = urlOf(input);
+      const method = init?.method ?? "GET";
+      if (method === "POST" && url === IMPORT_PATH) {
+        importCalls += 1;
+        if (importCalls === 1) {
+          return new Response("boom", {
+            status: 500,
+            headers: { "Content-Type": "text/plain" },
+          });
+        }
+        return jsonResponse(IMPORT_FIXTURE);
+      }
+      if (method === "POST" && url === RESCAN_PATH) {
+        rescanned = true;
+        return jsonResponse(RESCAN_FIXTURE);
+      }
+      if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
+        return jsonResponse(rescanned ? ONE_ROW : TWO_ROWS);
+      }
+      if (method === "GET" && url === STORED_SESSIONS_PATH) {
+        return jsonResponse([]);
+      }
+      if (method === "GET" && url === SCAN_ERRORS_PATH) {
+        return jsonResponse([]);
+      }
+      return new Response(`unexpected ${method} ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+  const { container } = render(<App />);
+
+  // Wait for both rows to render.
+  await screen.findByText("claude_code:retry-A");
+  await screen.findByText("claude_code:retry-B");
+
+  // Select both per-row checkboxes.
+  const checkboxA = container.querySelector<HTMLInputElement>(
+    'input[type="checkbox"][aria-label="Select claude_code:retry-A"]',
+  );
+  const checkboxB = container.querySelector<HTMLInputElement>(
+    'input[type="checkbox"][aria-label="Select claude_code:retry-B"]',
+  );
+  expect(checkboxA).not.toBeNull();
+  expect(checkboxB).not.toBeNull();
+  await act(async () => {
+    checkboxA?.click();
+  });
+  await act(async () => {
+    checkboxB?.click();
+  });
+
+  // Sanity: action-bar count is 2.
+  const importButton = container.querySelector<HTMLButtonElement>(
+    ".action-bar button:nth-of-type(2)",
+  );
+  expect(importButton?.textContent).toBe("Import selected (2)");
+
+  // Click Import -> first POST -> 500 -> error toast appears.
+  await act(async () => {
+    importButton?.click();
+  });
+  await waitFor(() => {
+    expect(container.textContent?.includes("Import failed")).toBe(true);
+  });
+  const errorToast = container.querySelector(".toast.error");
+  expect(errorToast).not.toBeNull();
+  const retryButton = errorToast!.querySelector<HTMLButtonElement>(
+    ".toast-retry",
+  );
+  expect(retryButton).not.toBeNull();
+
+  // Click Rescan -> rescan POST + refetch -> sourceState updates to
+  // ONE_ROW -> the reconciliation useEffect prunes B from `selected`
+  // -> new handleImport identity is created.
+  const rescanButton = container.querySelector<HTMLButtonElement>(
+    ".action-bar button:nth-of-type(1)",
+  );
+  await act(async () => {
+    rescanButton?.click();
+  });
+  // Wait for the rescan POST (1) + refetch (3) cycle to land. Total
+  // calls so far: 3 initial GETs + 1 import POST (failed) + 1 rescan
+  // POST + 3 refetch GETs = 8.
+  await waitFor(() => {
+    expect(fetchMock).toHaveBeenCalledTimes(8);
+  });
+  // Confirm the rescan landed: the pruned row is gone from the DOM
+  // and the action-bar count is 1.
+  await waitFor(() => {
+    expect(container.textContent?.includes("claude_code:retry-B")).toBe(
+      false,
+    );
+  });
+  expect(importButton?.textContent).toBe("Import selected (1)");
+
+  // Click Retry on the IMPORT error toast. With the ref fix, this
+  // invokes the LATEST handleImport (which sees the post-rescan
+  // state). Without the ref fix, this invokes the stale
+  // handleImport whose closure captured the pre-rescan state.
+  // (The error toast is still in the DOM; the rescan-success toast
+  // joins it but does not replace it.)
+  const stillThereRetryButton = container
+    .querySelector(".toast.error")!
+    .querySelector<HTMLButtonElement>(".toast-retry");
+  expect(stillThereRetryButton).not.toBeNull();
+  await act(async () => {
+    stillThereRetryButton!.click();
+  });
+
+  // Wait for the second import POST + its refetch.
+  await waitFor(() => {
+    expect(importCalls).toBe(2);
+  });
+  // Wait for the post-import refetch trio + the import-success toast.
+  await waitFor(() => {
+    expect(container.textContent?.includes("Import complete")).toBe(true);
+  });
+
+  // Capture both import POST bodies. The first (failed) call shipped
+  // both keys (which is correct for that moment in time — the rescan
+  // had not yet landed). The second (Retry) call MUST ship only
+  // key-A; the closure-captured stale handleImport would have shipped
+  // both keys.
+  const importPostCalls = fetchMock.mock.calls.filter((args) => {
+    const init = args[1] as RequestInit | undefined;
+    const url = urlOf(args[0] as Request | string | URL);
+    return (init?.method ?? "GET") === "POST" && url === IMPORT_PATH;
+  });
+  expect(importPostCalls.length).toBe(2);
+  const firstBody = importPostCalls[0]?.[1]?.body as string;
+  const secondBody = importPostCalls[1]?.[1]?.body as string;
+  // First call shipped both keys.
+  expect(firstBody.includes("claude_code:retry-A")).toBe(true);
+  expect(firstBody.includes("claude_code:retry-B")).toBe(true);
+  // Second (Retry) call shipped ONLY key-A — the ref-resolved
+  // latest handleImport saw the post-rescan state.
+  expect(secondBody).toBe(
+    JSON.stringify({ session_keys: ["claude_code:retry-A"] }),
+  );
+  expect(secondBody.includes("claude_code:retry-B")).toBe(false);
 });

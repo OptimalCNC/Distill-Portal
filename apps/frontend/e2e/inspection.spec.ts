@@ -91,12 +91,19 @@ test.describe.serial("inspection surface end-to-end", () => {
     await expect(importButton).toBeEnabled();
     await importButton.click();
 
-    // 5. The ImportReport summary lands in the `role="status"` paragraph.
-    //    Assert both the "Import:" prefix and the `requested_sessions: 1`
-    //    numeric field we know ActionBar emits.
-    const statusLine = page.getByRole("status");
-    await expect(statusLine).toContainText(/Import:/);
-    await expect(statusLine).toContainText(/1 requested_sessions/);
+    // 5. The ImportReport summary lands as a success toast (M5 swapped
+    //    the M3-era inline status paragraph for a Toast queue). Assert
+    //    the title + the structured `requested_sessions` count name
+    //    inside the <details> disclosure are both visible.
+    const importToast = page.locator(".toast.success", {
+      hasText: "Import complete",
+    });
+    await expect(importToast).toBeVisible({ timeout: 5_000 });
+    await expect(importToast).toContainText(/requested_sessions/);
+    // Dismiss the import-success toast so it doesn't crowd subsequent
+    // toast assertions in step 11.
+    await importToast.locator(".toast-dismiss").click();
+    await expect(importToast).toHaveCount(0);
 
     // 6. The Stored Sessions panel should now render the freshly-imported
     //    session. The session UID is a UUID; match the UUID pattern.
@@ -123,10 +130,18 @@ test.describe.serial("inspection surface end-to-end", () => {
       .first();
     await expect(uuidLink).toBeVisible();
 
-    // 8. Rescan must emit a RescanReport summary into the same status line.
+    // 8. Rescan must emit a RescanReport summary as a success toast
+    //    (mirrors the M5 import-toast flow above). Dismiss the toast
+    //    afterwards so step 11's rescan toast assertion has a clean
+    //    queue to match against.
     await page.getByRole("button", { name: "Rescan" }).click();
-    await expect(statusLine).toContainText(/Rescan:/);
-    await expect(statusLine).toContainText(/discovered_files/);
+    const firstRescanToast = page.locator(".toast.success", {
+      hasText: "Rescan complete",
+    });
+    await expect(firstRescanToast).toBeVisible({ timeout: 5_000 });
+    await expect(firstRescanToast).toContainText(/discovered_files/);
+    await firstRescanToast.locator(".toast-dismiss").click();
+    await expect(firstRescanToast).toHaveCount(0);
 
     // 9. M4 Chunk E1: Drawer interaction + focus-trap gate +
     //    full close-path coverage. This step is the documented
@@ -356,5 +371,63 @@ test.describe.serial("inspection surface end-to-end", () => {
     // Final Esc-close so we exit cleanly.
     await page.keyboard.press("Escape");
     await expect(dialog).not.toBeVisible();
+
+    // 11. M5 Chunk F: Pagination + sticky action bar + toasts.
+    //
+    //    The seeded fixture has a single session, so the unified
+    //    table renders one row total -> "Page 1 of 1" caption.
+    //    We assert:
+    //      (a) the Pagination control is in the DOM and reads
+    //          "Page 1 of 1" with the seeded fixture
+    //      (b) the page-size selector accepts a change to 100
+    //          without breaking the layout (the table still
+    //          renders the lone fixture row)
+    //      (c) clicking Rescan pushes a "Rescan complete" toast
+    //          with the structured RescanReport counts visible
+    //          (textContent walks closed <details> elements)
+    //      (d) the action-bar carries the .sticky modifier so
+    //          CSS position:sticky engages
+    //      (e) the last-rescan caption updates to a non-em-dash
+    //          form after the rescan succeeds
+    //
+    //    The sticky-bar visibility-after-scroll assertion is
+    //    omitted here because the seeded fixture's single row
+    //    does not produce enough vertical content to push the
+    //    bar out of natural view; the M5 component test in
+    //    `ActionBar.test.tsx` covers the .sticky class wiring
+    //    directly.
+    const paginationCaption = page.locator(".pagination-caption");
+    await expect(paginationCaption).toBeVisible();
+    await expect(paginationCaption).toHaveText("Page 1 of 1");
+
+    // (b) Change page-size to 100 -> still "Page 1 of 1" + table
+    //     still has the fixture row.
+    const pageSizeSelect = page.locator('select[aria-label="Page size"]');
+    await pageSizeSelect.selectOption("100");
+    await expect(paginationCaption).toHaveText("Page 1 of 1");
+    await expect(
+      page.getByText(FIXTURE_SESSION_KEY, { exact: false }),
+    ).toBeVisible();
+
+    // (d) Sticky-modifier on the action-bar root.
+    const actionBar = page.locator(".action-bar").first();
+    await expect(actionBar).toHaveClass(/(^|\s)sticky(\s|$)/);
+
+    // (c) Click Rescan; the success toast lands.
+    await page.getByRole("button", { name: "Rescan" }).click();
+    const rescanToast = page.locator(".toast.success", {
+      hasText: "Rescan complete",
+    });
+    await expect(rescanToast).toBeVisible({ timeout: 5_000 });
+    // Structured details: the typed RescanReport count names live
+    // inside the toast's <details> disclosure and are findable via
+    // the rendered DOM.
+    await expect(rescanToast).toContainText("discovered_files");
+
+    // (e) Last-rescan caption is no longer the em-dash form.
+    const lastRescanCaption = page.locator(".action-bar-last-rescan");
+    await expect(lastRescanCaption).not.toHaveText(
+      "last rescan from this browser —",
+    );
   });
 });

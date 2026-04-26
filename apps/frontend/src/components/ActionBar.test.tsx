@@ -1,69 +1,51 @@
-// Disabled-state + report-rendering truth table for ActionBar.
+// Disabled-state + caption truth table for ActionBar.
 //
-// ActionBar is stateless: `App.tsx` owns every piece of state it displays
-// and passes it down as props. This file pins down the rendering rules
-// for the five observable behaviors below:
+// ActionBar is stateless: `App.tsx` owns every piece of state it
+// displays and passes it down as props. As of M5 the inline
+// `lastReport` text was replaced by toasts (see `Toast` +
+// `useToastQueue`); the rendering rules covered here are now:
 //
 //   (1) disabled-state truth table for the Rescan / Import buttons as a
 //       function of `pending` and `selectedCount`;
 //   (2) Import label carries the live `selectedCount` in the idle case
 //       and the "Importing N..." form while a mutation is in flight;
 //   (3) Rescan label flips to "Rescanning..." while a rescan is pending;
-//   (4) the report summary renders the typed RescanReport / ImportReport
-//       numeric fields in the idle-null-error-rescan-import cross
-//       product;
-//   (5) clicking an enabled Rescan button invokes `onRescan` exactly
-//       once (one handler-dispatch sanity assertion).
+//   (4) clicking an enabled Rescan button invokes `onRescan` exactly once
+//       (one handler-dispatch sanity assertion);
+//   (5) M3 hidden-by-filter caption + clear affordances;
+//   (6) M5 last-rescan caption renders the relative-time form against
+//       a pinned `now`; renders the em-dash fallback when
+//       `lastRescanAt` is null OR when `now` is omitted (M3-shaped
+//       callers that don't pass it yet).
+//   (7) The action-bar root element carries the `.sticky` modifier
+//       so CSS `position: sticky` engages.
 //
-// Fixtures are typed from the generated contract so a Rust-side rename
-// of any `RescanReport` / `ImportReport` field fails the TS compile
-// here. The component renders the literal `No recent mutation.` when
-// `lastReport === null`, so that exact string is asserted rather than
-// the "no text at all" shape an earlier draft suggested — reading
-// the component's idle branch is authoritative.
+// The renderReport-shape assertions from M3 have moved to the toast
+// suite (`Toast.test.tsx`) and the App-level toast assertions in
+// `App.test.tsx`. ActionBar no longer renders `<p role="status">`.
 import { afterEach, expect, mock, test } from "bun:test";
 import { cleanup, render } from "@testing-library/react";
 import { ActionBar } from "./ActionBar";
-import type { ImportReport, RescanReport } from "../lib/contracts";
 
 afterEach(() => {
   cleanup();
 });
 
-const RESCAN_FIXTURE: RescanReport = {
-  discovered_files: 12,
-  skipped_files: 1,
-  parsed_sessions: 11,
-  not_stored_sessions: 2,
-  outdated_sessions: 0,
-  up_to_date_sessions: 9,
-  scan_errors: 0,
-};
-
-const IMPORT_FIXTURE: ImportReport = {
-  requested_sessions: 3,
-  inserted_sessions: 2,
-  updated_sessions: 1,
-  unchanged_sessions: 0,
-};
-
-// Narrow helper: locate the two action-bar buttons in the rendered DOM.
-// `nth-of-type` is used to match the existing App.test.tsx convention so
-// a future reorder of the two buttons surfaces in both suites at once.
+// Narrow helper: locate the Rescan + Import buttons in the rendered
+// DOM. They are always the first two `<button>` children of
+// `.action-bar-buttons`. M5 added more children (.action-bar-clear,
+// .action-bar-last-rescan span); the n-th-of-type query targets
+// just the two mutation buttons.
 function buttons(container: HTMLElement) {
   const all = container.querySelectorAll<HTMLButtonElement>(
-    ".action-bar button",
+    ".action-bar-buttons > button",
   );
-  if (all.length !== 2) {
-    throw new Error(`expected 2 action-bar buttons, got ${all.length}`);
+  // At minimum the Rescan + Import buttons are present; M3 adds
+  // optional Clear hidden / Clear selection text-style buttons.
+  if (all.length < 2) {
+    throw new Error(`expected ≥ 2 action-bar buttons, got ${all.length}`);
   }
   return { rescan: all[0]!, import: all[1]! };
-}
-
-function statusNode(container: HTMLElement): HTMLElement {
-  const el = container.querySelector<HTMLElement>('[role="status"]');
-  if (!el) throw new Error("action-bar status node not found");
-  return el;
 }
 
 test("ActionBar idle + zero selection: Rescan enabled, Import disabled, count in label", () => {
@@ -71,7 +53,6 @@ test("ActionBar idle + zero selection: Rescan enabled, Import disabled, count in
     <ActionBar
       selectedCount={0}
       pending={null}
-      lastReport={null}
       onRescan={() => {}}
       onImport={() => {}}
     />,
@@ -81,8 +62,8 @@ test("ActionBar idle + zero selection: Rescan enabled, Import disabled, count in
   expect(rescan.textContent).toBe("Rescan");
   expect(importBtn.disabled).toBe(true);
   expect(importBtn.textContent).toBe("Import selected (0)");
-  // lastReport === null: the status node renders the canonical idle copy.
-  expect(statusNode(container).textContent).toBe("No recent mutation.");
+  // No status node — toasts replace the inline report copy.
+  expect(container.querySelector('[role="status"]')).toBeNull();
 });
 
 test("ActionBar idle + non-zero selection: both buttons enabled, count in label", () => {
@@ -90,7 +71,6 @@ test("ActionBar idle + non-zero selection: both buttons enabled, count in label"
     <ActionBar
       selectedCount={3}
       pending={null}
-      lastReport={null}
       onRescan={() => {}}
       onImport={() => {}}
     />,
@@ -106,7 +86,6 @@ test("ActionBar pending=rescan disables both buttons and flips Rescan label", ()
     <ActionBar
       selectedCount={0}
       pending="rescan"
-      lastReport={null}
       onRescan={() => {}}
       onImport={() => {}}
     />,
@@ -114,7 +93,6 @@ test("ActionBar pending=rescan disables both buttons and flips Rescan label", ()
   const { rescan, import: importBtn } = buttons(container);
   expect(rescan.disabled).toBe(true);
   expect(importBtn.disabled).toBe(true);
-  // Actual component copy — "Rescanning..." with ASCII ellipsis.
   expect(rescan.textContent).toBe("Rescanning...");
 });
 
@@ -123,7 +101,6 @@ test("ActionBar pending=import disables both buttons and flips Import label", ()
     <ActionBar
       selectedCount={2}
       pending="import"
-      lastReport={null}
       onRescan={() => {}}
       onImport={() => {}}
     />,
@@ -131,58 +108,7 @@ test("ActionBar pending=import disables both buttons and flips Import label", ()
   const { rescan, import: importBtn } = buttons(container);
   expect(rescan.disabled).toBe(true);
   expect(importBtn.disabled).toBe(true);
-  // Pending-import label embeds the live selectedCount via template.
   expect(importBtn.textContent).toBe("Importing 2...");
-});
-
-test("ActionBar renders typed RescanReport numeric fields in the status node", () => {
-  const { container } = render(
-    <ActionBar
-      selectedCount={0}
-      pending={null}
-      lastReport={{ kind: "rescan", report: RESCAN_FIXTURE }}
-      onRescan={() => {}}
-      onImport={() => {}}
-    />,
-  );
-  const text = statusNode(container).textContent ?? "";
-  // Shape prefix + the two numeric fields the spec explicitly calls out.
-  expect(text.startsWith("Rescan:")).toBe(true);
-  expect(text.includes("12 discovered_files")).toBe(true);
-  expect(text.includes("11 parsed_sessions")).toBe(true);
-  // Spot-check one more typed field so a future rename of not_stored_sessions
-  // in the Rust source-of-truth fails this test as well as the TS compile.
-  expect(text.includes("2 not_stored_sessions")).toBe(true);
-});
-
-test("ActionBar renders typed ImportReport numeric fields in the status node", () => {
-  const { container } = render(
-    <ActionBar
-      selectedCount={0}
-      pending={null}
-      lastReport={{ kind: "import", report: IMPORT_FIXTURE }}
-      onRescan={() => {}}
-      onImport={() => {}}
-    />,
-  );
-  const text = statusNode(container).textContent ?? "";
-  expect(text.startsWith("Import:")).toBe(true);
-  expect(text.includes("3 requested_sessions")).toBe(true);
-  expect(text.includes("2 inserted_sessions")).toBe(true);
-  expect(text.includes("1 updated_sessions")).toBe(true);
-});
-
-test("ActionBar renders the error message verbatim when lastReport.kind === 'error'", () => {
-  const { container } = render(
-    <ActionBar
-      selectedCount={0}
-      pending={null}
-      lastReport={{ kind: "error", message: "something went wrong" }}
-      onRescan={() => {}}
-      onImport={() => {}}
-    />,
-  );
-  expect(statusNode(container).textContent).toBe("something went wrong");
 });
 
 test("ActionBar dispatches onRescan exactly once when Rescan is clicked", () => {
@@ -192,7 +118,6 @@ test("ActionBar dispatches onRescan exactly once when Rescan is clicked", () => 
     <ActionBar
       selectedCount={0}
       pending={null}
-      lastReport={null}
       onRescan={onRescan}
       onImport={onImport}
     />,
@@ -209,7 +134,6 @@ test("ActionBar: hiddenByFilterCount > 0 renders the +K caption (M3)", () => {
       selectedCount={2}
       hiddenByFilterCount={3}
       pending={null}
-      lastReport={null}
       onRescan={() => {}}
       onImport={() => {}}
       onClearHidden={() => {}}
@@ -226,7 +150,6 @@ test("ActionBar: hiddenByFilterCount === 0 (or omitted) does NOT render the capt
     <ActionBar
       selectedCount={2}
       pending={null}
-      lastReport={null}
       onRescan={() => {}}
       onImport={() => {}}
     />,
@@ -241,7 +164,6 @@ test("ActionBar: Clear hidden button shown when hiddenByFilterCount > 0 + onClea
       selectedCount={2}
       hiddenByFilterCount={3}
       pending={null}
-      lastReport={null}
       onRescan={() => {}}
       onImport={() => {}}
       onClearHidden={onClearHidden}
@@ -262,7 +184,6 @@ test("ActionBar: Clear selection button shown when selectedCount > 0", () => {
     <ActionBar
       selectedCount={2}
       pending={null}
-      lastReport={null}
       onRescan={() => {}}
       onImport={() => {}}
       onClearSelection={onClearSelection}
@@ -282,7 +203,6 @@ test("ActionBar: zero selection AND zero hidden -> no Clear affordances", () => 
       selectedCount={0}
       hiddenByFilterCount={0}
       pending={null}
-      lastReport={null}
       onRescan={() => {}}
       onImport={() => {}}
       onClearHidden={() => {}}
@@ -292,4 +212,73 @@ test("ActionBar: zero selection AND zero hidden -> no Clear affordances", () => 
   expect(
     container.querySelectorAll(".action-bar-clear").length,
   ).toBe(0);
+});
+
+test("ActionBar (M5): root carries the .sticky modifier so CSS position:sticky engages", () => {
+  const { container } = render(
+    <ActionBar
+      selectedCount={0}
+      pending={null}
+      onRescan={() => {}}
+      onImport={() => {}}
+    />,
+  );
+  const bar = container.querySelector(".action-bar");
+  expect(bar).not.toBeNull();
+  expect(bar!.classList.contains("sticky")).toBe(true);
+});
+
+test("ActionBar (M5): last-rescan caption renders relative-time when lastRescanAt and now are provided", () => {
+  // 90 seconds in the past -> "1m ago"
+  const now = "2026-04-25T12:00:00.000Z";
+  const lastRescanAt = "2026-04-25T11:58:30.000Z";
+  const { container } = render(
+    <ActionBar
+      selectedCount={0}
+      pending={null}
+      onRescan={() => {}}
+      onImport={() => {}}
+      lastRescanAt={lastRescanAt}
+      now={now}
+    />,
+  );
+  const caption = container.querySelector(".action-bar-last-rescan");
+  expect(caption).not.toBeNull();
+  expect(caption!.textContent).toBe(
+    "last rescan from this browser 1m ago",
+  );
+  expect(caption!.getAttribute("title")).toBe(lastRescanAt);
+});
+
+test("ActionBar (M5): last-rescan caption renders the em-dash when lastRescanAt is null", () => {
+  const { container } = render(
+    <ActionBar
+      selectedCount={0}
+      pending={null}
+      onRescan={() => {}}
+      onImport={() => {}}
+      lastRescanAt={null}
+      now="2026-04-25T12:00:00.000Z"
+    />,
+  );
+  const caption = container.querySelector(".action-bar-last-rescan");
+  expect(caption).not.toBeNull();
+  expect(caption!.textContent).toBe("last rescan from this browser —");
+});
+
+test("ActionBar (M5): last-rescan caption renders em-dash when both lastRescanAt and now are omitted (default)", () => {
+  // Backward-compatible call shape — callers that don't yet wire
+  // lastRescanAt/now still see the labelled caption with the em-dash
+  // instead of an empty string or "Invalid Date".
+  const { container } = render(
+    <ActionBar
+      selectedCount={0}
+      pending={null}
+      onRescan={() => {}}
+      onImport={() => {}}
+    />,
+  );
+  const caption = container.querySelector(".action-bar-last-rescan");
+  expect(caption).not.toBeNull();
+  expect(caption!.textContent).toBe("last rescan from this browser —");
 });
