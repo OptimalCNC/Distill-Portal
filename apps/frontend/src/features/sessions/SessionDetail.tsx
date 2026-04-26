@@ -21,17 +21,29 @@
 //   - "View raw" anchor (only rendered for stored sessions, i.e.
 //     `storedSessionUid !== null`) opens the existing
 //     `/api/v1/sessions/:uid/raw` endpoint in a new tab.
-//   - Raw preview placeholder (stored sessions only). The streaming
-//     preview body lands in Chunk E2; E1 ships the chrome around it
-//     so the drawer is fully reviewable on its own.
+//   - Raw preview block (stored sessions only). The block streams the
+//     `/api/v1/sessions/:uid/raw` endpoint via `streamSessionRaw` +
+//     `consumeRawPreview` and renders the structured `RawPreviewState`
+//     (loading / success / error / non_2xx). M4 Chunk E2 added the
+//     live block — the placeholder from E1 is gone.
 //
-// SessionDetail is presentational. The parent (`SessionsView`) owns
-// the open-state, the row lookup, and the "now" timestamp pinning.
-// All field reads are done at render time so the drawer always shows
-// whatever the merged row carries when the parent picks a key.
-import { useEffect, useRef, useState } from "react";
+// SessionDetail is presentational EXCEPT for the raw-preview block,
+// which owns its own fetch lifecycle (one AbortController per
+// SessionDetail mount, restarted whenever the row changes — e.g. the
+// user closes the drawer and opens a different row). The parent
+// (`SessionsView`) owns the open-state, the row lookup, and the
+// "now" timestamp pinning. All field reads are done at render time
+// so the drawer always shows whatever the merged row carries when
+// the parent picks a key.
+import { useCallback, useEffect, useRef, useState } from "react";
 import { StatusBadge } from "../../components/StatusBadge";
+import { ApiError, streamSessionRaw } from "../../lib/api";
 import { relativeTimeFrom } from "./relativeTime";
+import {
+  consumeRawPreview,
+  type RawPreviewLine,
+  type RawPreviewState,
+} from "./rawPreview";
 import type { SessionRow } from "./types";
 
 export type SessionDetailProps = {
@@ -241,13 +253,196 @@ export function SessionDetail({ row, now }: SessionDetailProps) {
       {row.storedSessionUid !== null ? (
         <section className="drawer-raw-preview">
           <h3>Raw preview</h3>
-          <p className="raw-preview-placeholder">
-            Raw preview block lands in Chunk E2.
-          </p>
+          <RawPreviewBlock sessionUid={row.storedSessionUid} />
         </section>
       ) : null}
     </div>
   );
+}
+
+/**
+ * Streaming raw-preview block.
+ *
+ * Owns one fetch lifecycle per `sessionUid`. On mount (and whenever
+ * `sessionUid` changes), creates an `AbortController`, calls
+ * `streamSessionRaw` + `consumeRawPreview`, and stores the resulting
+ * `RawPreviewState`. On unmount (drawer close OR a different row
+ * opened), aborts the controller — the consumer's abort handling
+ * cancels the in-flight reader and re-throws AbortError, which we
+ * silently ignore.
+ *
+ * The Retry button wires through to the same effect by bumping a
+ * local "attempt" counter, which is included in the effect's dep
+ * array so the effect re-runs on click.
+ */
+type RawPreviewBlockProps = { sessionUid: string };
+
+function RawPreviewBlock({ sessionUid }: RawPreviewBlockProps) {
+  const [state, setState] = useState<RawPreviewState>({ kind: "loading" });
+  // Bumping `attempt` re-runs the effect, which is the cleanest way
+  // to refire the fetch on Retry without duplicating the logic.
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    setState({ kind: "loading" });
+
+    void (async () => {
+      try {
+        const response = await streamSessionRaw(sessionUid, controller.signal);
+        const result = await consumeRawPreview(response, controller.signal);
+        if (!cancelled) {
+          setState(result);
+        }
+      } catch (err) {
+        // AbortError is a normal close-time outcome; do not mutate
+        // state because the component is about to unmount or a
+        // newer effect has already taken over.
+        if (isAbortError(err)) return;
+        if (cancelled) return;
+        if (err instanceof ApiError) {
+          setState({
+            kind: "non_2xx",
+            status: err.status,
+            bodySnippet: truncateForDisplay(err.body),
+          });
+          return;
+        }
+        const message = err instanceof Error ? err.message : String(err);
+        setState({ kind: "error", message });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [sessionUid, attempt]);
+
+  const handleRetry = useCallback(() => {
+    setAttempt((a) => a + 1);
+  }, []);
+
+  if (state.kind === "idle" || state.kind === "loading") {
+    return (
+      <p className="raw-preview-loading">Loading raw preview…</p>
+    );
+  }
+
+  if (state.kind === "error") {
+    return (
+      <div>
+        <p className="raw-preview-error">
+          Failed to load raw preview: {state.message}
+        </p>
+        <p>
+          <button type="button" onClick={handleRetry}>
+            Retry
+          </button>
+        </p>
+      </div>
+    );
+  }
+
+  if (state.kind === "non_2xx") {
+    return (
+      <div>
+        <p className="raw-preview-error">
+          HTTP {state.status}: {state.bodySnippet}
+        </p>
+        <p>
+          <button type="button" onClick={handleRetry}>
+            Retry
+          </button>
+        </p>
+      </div>
+    );
+  }
+
+  // success
+  const { lines, reachedLineCap, reachedByteCap } = state;
+  const caption = describeCaption(
+    lines.length,
+    reachedLineCap,
+    reachedByteCap,
+  );
+
+  return (
+    <div>
+      <pre className="raw-preview" aria-label="Raw NDJSON preview">
+        {lines.map((line, idx) => (
+          <RawPreviewLineRow key={idx} line={line} />
+        ))}
+      </pre>
+      <p className="raw-preview-caption">{caption}</p>
+    </div>
+  );
+}
+
+/**
+ * One rendered preview line. JSON lines render their raw NDJSON; text
+ * fallbacks render with a distinct class AND a visible "(non-JSON
+ * line)" marker so the user can tell when the parser fell back. The
+ * marker is inside the same `<div>` so the row stays one logical
+ * unit for screen readers.
+ */
+function RawPreviewLineRow({ line }: { line: RawPreviewLine }) {
+  if (line.kind === "json") {
+    return <div className="raw-preview-line">{line.raw}</div>;
+  }
+  return (
+    <div className="raw-preview-line text">
+      {line.raw}
+      {" "}
+      <span className="raw-preview-fallback-marker">(non-JSON line)</span>
+    </div>
+  );
+}
+
+/**
+ * Caption text per the spec:
+ *
+ *   - byte cap fired → "Stopped at byte cap — full payload not
+ *     downloaded." (EXACT spec text per working/phase-4.md
+ *     §Session Detail Drawer)
+ *   - line cap fired → "Showing first 20 lines of the raw payload."
+ *   - neither cap → "Showing first N lines (full payload below the
+ *     caps)."
+ *
+ * If both caps fired (rare; possible when the chunk that pushed
+ * bytesRead past the cap also contained the 20th newline), the byte
+ * cap message wins because it carries the more specific "not
+ * downloaded" warning.
+ */
+function describeCaption(
+  lineCount: number,
+  reachedLineCap: boolean,
+  reachedByteCap: boolean,
+): string {
+  if (reachedByteCap) {
+    return "Stopped at byte cap — full payload not downloaded.";
+  }
+  if (reachedLineCap) {
+    return `Showing first ${lineCount} lines of the raw payload.`;
+  }
+  return `Showing first ${lineCount} lines (full payload below the caps).`;
+}
+
+/**
+ * Trim the error-body snippet so a misbehaving backend that returns a
+ * megabyte of HTML on a 500 does not blow out the drawer.
+ */
+function truncateForDisplay(body: string, maxChars = 240): string {
+  if (body.length <= maxChars) return body;
+  return `${body.slice(0, maxChars)}…`;
+}
+
+function isAbortError(err: unknown): boolean {
+  if (err === null || err === undefined) return false;
+  if (typeof err !== "object") return false;
+  const name = (err as { name?: unknown }).name;
+  return name === "AbortError";
 }
 
 function renderTimestamp(now: string, value: string | null) {

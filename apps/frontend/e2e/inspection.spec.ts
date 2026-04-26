@@ -305,5 +305,56 @@ test.describe.serial("inspection surface end-to-end", () => {
     //     test teardown.
     await page.keyboard.press("Escape");
     await expect(dialog).not.toBeVisible();
+
+    // 10. M4 Chunk E2: streaming raw-preview block.
+    //
+    //     Re-open the drawer on the fixture row (which is now
+    //     stored, so `storedSessionUid !== null` → the raw-preview
+    //     section MUST render). Assert:
+    //       - the "Raw preview" h3 is visible inside the drawer
+    //       - at least one rendered NDJSON line lands
+    //         (`.raw-preview-line`)
+    //       - the caption is visible and matches one of the spec
+    //         forms ("Showing first N lines …" or "Stopped at byte
+    //         cap …"); the seeded fixture is 4 lines so the
+    //         "Showing first 4 lines (full payload below the caps)"
+    //         caption is the expected branch.
+    //
+    //     Why a separate step rather than extending step 9: step 9
+    //     specifically exercises the focus-trap + close-path matrix
+    //     and ends with the dialog deliberately closed. The
+    //     raw-preview assertions rely on the drawer being OPEN with
+    //     the streaming fetch having resolved — distinct concern,
+    //     distinct step, easier to read in isolation.
+    //
+    //     Why we don't test the byte-cap path here: the seeded
+    //     fixture is intentionally tiny (a few NDJSON lines, well
+    //     under the 256 KB byte cap and the 20-line cap), so
+    //     Playwright cannot exercise the cap path against it. The
+    //     byte-cap test lives in `rawPreview.test.ts` +
+    //     `SessionDetail.test.tsx` where a hand-built >256 KB
+    //     ReadableStream proves the cap fires AND that
+    //     `reader.cancel()` actually runs.
+    await fixtureRow.click();
+    await expect(dialog).toBeVisible();
+    // The Raw preview heading sits inside the drawer.
+    const rawPreviewHeading = dialog.locator(
+      "section.drawer-raw-preview h3",
+    );
+    await expect(rawPreviewHeading).toBeVisible();
+    await expect(rawPreviewHeading).toHaveText("Raw preview");
+    // Wait for the streaming consumer to land (replaces the
+    // initial "Loading raw preview…" copy with the rendered lines
+    // + caption).
+    const firstLine = dialog.locator(".raw-preview-line").first();
+    await expect(firstLine).toBeVisible({ timeout: 5_000 });
+    const caption = dialog.locator(".raw-preview-caption");
+    await expect(caption).toBeVisible();
+    await expect(caption).toHaveText(
+      /Showing first \d+ lines|Stopped at byte cap/,
+    );
+    // Final Esc-close so we exit cleanly.
+    await page.keyboard.press("Escape");
+    await expect(dialog).not.toBeVisible();
   });
 });

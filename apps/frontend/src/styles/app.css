@@ -46,6 +46,11 @@
  *     this file in the M4 section. The drawer's `::backdrop` alpha
  *     scrim is NOT a structural literal — it lives in `tokens.css`
  *     as `--color-backdrop` so the dist CSS hex audit stays clean.
+ *   - M4 Chunk E2 added one structural literal: `.raw-preview`'s
+ *     `max-height: 16rem` (the streaming preview block scrolls
+ *     internally rather than blowing out the drawer body height).
+ *     The token system has no "max-scroll-region" variant; same
+ *     design-balloon rejection applies.
  *
  * Badge backgrounds use `color-mix(in srgb, <semantic-token> 15%,
  * var(--color-surface))` so the four pastel pairs the original Phase 3
@@ -444,17 +449,70 @@ td.select-col {
   margin: 0;
 }
 
+.drawer-raw-preview {
+  margin-top: var(--space-4);
+}
+
 .drawer-raw-preview h3 {
   margin: 0 0 var(--space-2) 0;
   font-size: var(--text-base);
   color: var(--color-text);
 }
 
-.raw-preview-placeholder {
+/* ---------- Streaming raw preview block (M4 Chunk E2) ---------- */
+
+/* `<pre>` wrapper around the rendered NDJSON lines. Capped at 16rem
+ * tall so the drawer body still fits in the viewport even when the
+ * payload streams 20 long lines; long lines wrap rather than
+ * overflow horizontally so the user never scrolls sideways inside
+ * the preview block. */
+.raw-preview {
   margin: 0;
-  padding: var(--space-3);
-  border: 1px dashed var(--color-border);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  max-height: 16rem;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.raw-preview-line {
+  white-space: pre-wrap;
+  word-break: break-all;
+  padding: var(--space-1) 0;
+  color: var(--color-text);
+}
+
+/* Plain-text fallback rows render with the muted text token so the
+ * user can visually distinguish lines that failed JSON.parse from
+ * normal NDJSON rows. The fallback marker `<span>` reuses the muted
+ * tone for the same reason. AA contrast is preserved (text-muted on
+ * surface measured at ≥ 4.7:1 in both light and dark — see chunk
+ * evidence pack). */
+.raw-preview-line.text {
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
+}
+
+.raw-preview-fallback-marker {
+  font-style: italic;
+  color: var(--color-text-muted);
+}
+
+.raw-preview-caption {
+  margin-top: var(--space-2);
+  margin-bottom: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.raw-preview-error {
+  color: var(--color-error);
+  margin: 0;
+}
+
+.raw-preview-loading {
+  color: var(--color-text-muted);
+  margin: 0;
 }

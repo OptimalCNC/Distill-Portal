@@ -19,6 +19,15 @@ export const STORED_SESSIONS_PATH = "/api/v1/sessions";
 export const SCAN_ERRORS_PATH = "/api/v1/admin/scan-errors";
 export const RESCAN_PATH = "/api/v1/admin/rescan";
 export const IMPORT_PATH = "/api/v1/source-sessions/import";
+/**
+ * Path constructor for the streaming raw NDJSON endpoint.
+ *
+ * Always pre-encodes the session UID so callers cannot accidentally inject
+ * path segments. Constructed inline so `streamSessionRaw` (and any future
+ * streaming consumer) routes through one literal.
+ */
+export const RAW_SESSION_PATH = (sessionUid: string): string =>
+  `/api/v1/sessions/${encodeURIComponent(sessionUid)}/raw`;
 
 /**
  * Thrown by this module on any non-2xx response. Carries the HTTP status
@@ -100,6 +109,40 @@ export async function importSourceSessions(
 ): Promise<ImportReport> {
   const payload: ImportSourceSessionsRequest = { session_keys: sessionKeys };
   return postJson<ImportReport>(IMPORT_PATH, payload);
+}
+
+/**
+ * GET /api/v1/sessions/:uid/raw — streaming raw NDJSON.
+ *
+ * Returns the raw `Response` object so the streaming consumer in
+ * `apps/frontend/src/features/sessions/rawPreview.ts` can own the read
+ * loop with `getReader()` + `TextDecoder` + line buffer + caps. The
+ * full-body `.text()` shortcut is explicitly forbidden for this path
+ * because raw payloads can be tens of MB and would freeze the drawer
+ * while the body drains (working/phase-4.md §Session Detail Drawer).
+ *
+ * The optional `signal` argument is an `AbortSignal` so React effects
+ * can cancel the in-flight read on drawer close (covers both the
+ * pre-cap and post-cap windows per Milestone 4 DoD bullet 2).
+ *
+ * Throws `ApiError` on non-2xx; the error body is read via the bounded
+ * `safeReadText` helper used elsewhere in this module — error bodies
+ * are not the streaming raw body, so reading them in full is safe.
+ */
+export async function streamSessionRaw(
+  sessionUid: string,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const response = await fetch(`${API_BASE}${RAW_SESSION_PATH(sessionUid)}`, {
+    method: "GET",
+    headers: { Accept: "application/x-ndjson" },
+    signal,
+  });
+  if (!response.ok) {
+    const body = await safeReadText(response);
+    throw new ApiError(response.status, body);
+  }
+  return response;
 }
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
