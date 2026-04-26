@@ -11,8 +11,8 @@ Bun + Vite + React + TypeScript inspection UI. Surfaces source sessions, stored 
 - `index.html` — Vite HTML shell
 - `src/main.tsx` — React root bootstrap
 - `src/App.tsx` — inspection-page orchestration (data fetching, import/rescan mutations, selection state)
-- `src/features/sessions/` — unified session list (view, table, merge, types)
-- `src/components/` — shared React primitives (action bar, status badge, scan-errors callout)
+- `src/features/sessions/` — unified session list (view, table, merge, types) + session detail drawer body (`SessionDetail.tsx`)
+- `src/components/` — shared React primitives (action bar, status badge, scan-errors callout, native-`<dialog>`-backed drawer shell `Drawer.tsx`)
 - `src/lib/api.ts` — typed HTTP client
 - `src/lib/config.ts` — frontend runtime config (`VITE_API_BASE` override)
 - `src/lib/contracts.ts` — re-export barrel for generated contract types

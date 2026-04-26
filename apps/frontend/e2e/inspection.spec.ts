@@ -127,5 +127,183 @@ test.describe.serial("inspection surface end-to-end", () => {
     await page.getByRole("button", { name: "Rescan" }).click();
     await expect(statusLine).toContainText(/Rescan:/);
     await expect(statusLine).toContainText(/discovered_files/);
+
+    // 9. M4 Chunk E1: Drawer interaction + focus-trap gate +
+    //    full close-path coverage. This step is the documented
+    //    Playwright reproducer per `working/phase-4.md` §Dependency
+    //    Policy AND the M4 DoD bullet 3 evidence: the drawer's
+    //    focus-trap, Esc-close, close-button-close, backdrop-close,
+    //    and focus-restoration must all be covered in BOTH the
+    //    component suite (`src/components/Drawer.test.tsx`) and
+    //    here under real Chromium. While these assertions all pass,
+    //    no new runtime dep is added; if focus-trap fails on real
+    //    Chromium the documented escape hatch (a focus-management
+    //    package, e.g. `focus-trap-react`) lands and the failing
+    //    reproducer is captured in the progress log.
+    //
+    //    Sub-steps:
+    //      (a) Open via Enter on the focused fixture row. The
+    //          dialog becomes visible.
+    //      (b) Esc-close + focus restoration. Press Esc, assert
+    //          the dialog hides, then `waitForFunction` until
+    //          `document.activeElement` is back inside the
+    //          fixture row (DoD bullet 3: focus restoration to
+    //          originating row).
+    //      (c) Re-open via row click; close via the in-dialog
+    //          `.drawer-close` button (DoD bullet 3: close-
+    //          button-close). After the close, `waitForFunction`
+    //          until focus is back on the row — this serializes
+    //          us with focus-trap-react's deactivation lifecycle.
+    //      (d) Re-open via row click; close via a backdrop click
+    //          dispatched in-page (`dialog.dispatchEvent(new
+    //          MouseEvent("click"))`) so `event.target === dialog`
+    //          (the source-side guard in `Drawer.tsx`). We
+    //          dispatch synthetically rather than positional-
+    //          click because the backdrop has no addressable hit
+    //          target — `page.locator("dialog[open]").click()`
+    //          lands on dialog content, not the backdrop scrim
+    //          (DoD bullet 3: backdrop-close).
+    //      (e) Re-open via Enter on the focused row; verify the
+    //          focus-trap holds across multiple Tabs. Native
+    //          `<dialog>` does NOT cycle Tab inside the modal —
+    //          focus escapes to BODY past the last focusable
+    //          child. With focus-trap-react installed, walking
+    //          through `(focusable count + 1)` Tabs must keep
+    //          focus inside the dialog on every step (DoD
+    //          bullet 3: focus-trap).
+    //      (f) Final Esc-close so the dialog state is clean for
+    //          the test teardown.
+    //
+    //    The (c)/(d) re-opens use `fixtureRow.click()` rather
+    //    than `keyboard.press("Enter")` because, after a previous
+    //    close where focus-trap-react's deactivation runs as a
+    //    React effect, the next synthetic keydown can race the
+    //    cleanup tail and the React onKeyDown handler will not
+    //    fire (the keydown reaches the document but is swallowed
+    //    before reaching React's synthetic event system). A real-
+    //    input click avoids that race deterministically. The
+    //    Enter-open path is exercised in (a) and (e), which is
+    //    enough to satisfy the spec ("open the drawer via Enter
+    //    on the focused fixture row" — required for the focus-
+    //    restoration assertion in (b) and the focus-trap gate
+    //    in (e)).
+    const fixtureRow = page
+      .locator(`tr:has-text("${FIXTURE_SESSION_KEY}")`)
+      .first();
+    const dialog = page.locator("dialog[open]");
+
+    // (a) Open via Enter on focused row.
+    await fixtureRow.focus();
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeVisible();
+
+    // (b) Esc-close + focus restoration to the originating row.
+    //     Native `<dialog>` Esc semantics, not our happy-dom shim.
+    //     The platform restores focus on `dialog.close()`; the
+    //     Drawer also wires an explicit `restoreFocusRef.current
+    //     ?.focus()` belt-and-braces; focus-trap-react ALSO does
+    //     a `returnFocus` step in its componentDidUpdate-driven
+    //     post-deactivate path. All three converge on the row.
+    //     We use `waitForFunction` so the assertion does not race
+    //     with the post-deactivate step (the explicit ref focus
+    //     fires synchronously in our `close` handler, but the
+    //     focus-trap-react settle runs later as a React effect).
+    await page.keyboard.press("Escape");
+    await expect(dialog).not.toBeVisible();
+    await page.waitForFunction(
+      (key: string) => {
+        const a = document.activeElement;
+        if (a === null) return false;
+        const tr = a.closest("tr");
+        if (tr === null) return false;
+        return tr.textContent?.includes(key) === true;
+      },
+      FIXTURE_SESSION_KEY,
+      { timeout: 2000 },
+    );
+
+    // (c) Re-open via row click and close via the in-dialog
+    //     Close button. The re-open uses `fixtureRow.click()`
+    //     rather than `keyboard.press("Enter")` because the
+    //     post-Esc focus-trap-react deactivation can still be
+    //     in-flight at this point (the `waitForFunction` above
+    //     waits for focus to settle on the row, but the trap's
+    //     componentDidUpdate-driven cleanup runs on a slightly
+    //     longer tail and can intermittently swallow the next
+    //     synthetic keypress before React's onKeyDown handler
+    //     sees it). A real-input click avoids that race
+    //     deterministically.
+    await fixtureRow.click();
+    await expect(dialog).toBeVisible();
+    await page.locator(".drawer-close").click();
+    await expect(dialog).not.toBeVisible();
+    await page.waitForFunction(
+      (key: string) => {
+        const a = document.activeElement;
+        if (a === null) return false;
+        const tr = a.closest("tr");
+        if (tr === null) return false;
+        return tr.textContent?.includes(key) === true;
+      },
+      FIXTURE_SESSION_KEY,
+      { timeout: 2000 },
+    );
+
+    // (d) Re-open via row click (same rationale as (c)) and close
+    //     via a backdrop click. We synthesize the backdrop click
+    //     in-page so `event.target === dialog` (the guard in
+    //     `Drawer.tsx`'s click handler). A
+    //     `page.locator("dialog[open]").click({ position: ... })`
+    //     would land on the dialog's padding area but the
+    //     `event.target` would still be the dialog element; that
+    //     said, hit-testing is fragile across viewports, so the
+    //     `dispatchEvent` path is the reliable choice.
+    await fixtureRow.click();
+    await expect(dialog).toBeVisible();
+    await page.evaluate(() => {
+      const dlg = document.querySelector(
+        "dialog[open]",
+      ) as HTMLDialogElement | null;
+      if (dlg === null) throw new Error("dialog[open] not found");
+      dlg.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+    });
+    await expect(dialog).not.toBeVisible();
+
+    // (e) Re-open and verify the focus-trap holds across multiple
+    //     Tabs. Native `<dialog>` marks the rest of the document
+    //     inert during modal mode, but does NOT cycle Tab back to
+    //     the first focusable element when the user steps past
+    //     the last one — focus escapes to BODY (the documented
+    //     Chromium reproducer captured in
+    //     `progress/phase-4.progress.md`, which is why M4 landed
+    //     the `focus-trap-react` escape hatch). With the trap
+    //     installed, walking through `(focusable count + 1)` Tabs
+    //     must keep focus inside the dialog on every step.
+    await fixtureRow.focus();
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeVisible();
+    const focusableInside = await page.evaluate(() => {
+      const dlg = document.querySelector("dialog[open]");
+      if (dlg === null) return 0;
+      return dlg.querySelectorAll(
+        "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])",
+      ).length;
+    });
+    const tabSteps = focusableInside + 1;
+    for (let i = 0; i < tabSteps; i++) {
+      await page.keyboard.press("Tab");
+      const stillInside = await page.evaluate(() => {
+        const dlg = document.querySelector("dialog[open]");
+        return dlg !== null && dlg.contains(document.activeElement);
+      });
+      expect(stillInside).toBe(true);
+    }
+
+    // (f) Final Esc-close so the dialog state is clean for the
+    //     test teardown.
+    await page.keyboard.press("Escape");
+    await expect(dialog).not.toBeVisible();
   });
 });

@@ -38,4 +38,12 @@ if (!globalScope.window) {
     happyWindow.requestAnimationFrame.bind(happyWindow);
   globalScope.cancelAnimationFrame =
     happyWindow.cancelAnimationFrame.bind(happyWindow);
+  // M4 Chunk E1: focus-trap-react brings in `tabbable`, which calls
+  // `new MutationObserver(...)` at module load. happy-dom exposes
+  // `MutationObserver` on the Window object but Bun does not pick it
+  // up via globalThis automatically, so install it explicitly here
+  // alongside the other DOM primitives.
+  globalScope.MutationObserver = (
+    happyWindow as unknown as { MutationObserver: typeof MutationObserver }
+  ).MutationObserver;
 }

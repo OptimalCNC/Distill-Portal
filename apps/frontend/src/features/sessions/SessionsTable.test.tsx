@@ -14,8 +14,13 @@
 //   5. sourcePathIsStale rendering: the source-path cell carries the
 //      `title=` hover hint when the flag is true; no `title=` when
 //      false.
+//   6. Row-click drawer wiring (E1): clicking a row (NOT the checkbox)
+//      fires `onOpenDetail(row.rowKey, triggerEl)`.
+//   7. Enter on a focused row fires `onOpenDetail`.
+//   8. Clicking the checkbox cell does NOT call `onOpenDetail` (it
+//      still fires `onToggle` — the M2 contract).
 import { afterEach, expect, mock, test } from "bun:test";
-import { cleanup, render } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import { SessionsTable } from "./SessionsTable";
 import type { SessionRow } from "./types";
 
@@ -409,4 +414,130 @@ test("SessionsTable: Updated cell renders relative time against the pinned `now`
   ).filter((el) => el.textContent === "—");
   // At least one em-dash cell exists for the null row's Updated column.
   expect(dashCells.length).toBeGreaterThanOrEqual(1);
+});
+
+test("SessionsTable: clicking a row (not the checkbox cell) calls onOpenDetail with row.rowKey", () => {
+  const rows: SessionRow[] = [
+    buildRow({
+      rowKey: "claude_code:open-detail-1",
+      sourceSessionKey: "claude_code:open-detail-1",
+      sourceSessionId: "open-detail-1",
+      status: "not_stored",
+      presence: "source_only",
+    }),
+  ];
+  const onToggle = mock(() => {});
+  const onToggleAll = mock(() => {});
+  const onOpenDetail = mock(
+    (_rowKey: string, _trigger: HTMLElement | null) => {},
+  );
+  const { container } = render(
+    <SessionsTable
+      rows={rows}
+      selected={new Set()}
+      onToggle={onToggle}
+      onToggleAll={onToggleAll}
+      onOpenDetail={onOpenDetail}
+      now={NOW}
+    />,
+  );
+  const tr = container.querySelector("tbody tr") as HTMLTableRowElement;
+  expect(tr).not.toBeNull();
+  // Click a non-checkbox cell (the title cell) inside the row.
+  const titleCell = tr.querySelector("td.stack") as HTMLTableCellElement;
+  expect(titleCell).not.toBeNull();
+  act(() => {
+    titleCell.click();
+  });
+  expect(onOpenDetail).toHaveBeenCalledTimes(1);
+  expect(onOpenDetail.mock.calls[0]?.[0]).toBe("claude_code:open-detail-1");
+  // The trigger element should be the <tr> (event.currentTarget on
+  // the row's onClick handler).
+  expect(onOpenDetail.mock.calls[0]?.[1]).toBe(tr);
+  // Selection toggling stayed silent.
+  expect(onToggle).toHaveBeenCalledTimes(0);
+});
+
+test("SessionsTable: Enter keydown on a focused row calls onOpenDetail with row.rowKey", () => {
+  const rows: SessionRow[] = [
+    buildRow({
+      rowKey: "claude_code:enter-1",
+      sourceSessionKey: "claude_code:enter-1",
+      sourceSessionId: "enter-1",
+      status: "not_stored",
+      presence: "source_only",
+    }),
+  ];
+  const onToggle = mock(() => {});
+  const onToggleAll = mock(() => {});
+  const onOpenDetail = mock(
+    (_rowKey: string, _trigger: HTMLElement | null) => {},
+  );
+  const { container } = render(
+    <SessionsTable
+      rows={rows}
+      selected={new Set()}
+      onToggle={onToggle}
+      onToggleAll={onToggleAll}
+      onOpenDetail={onOpenDetail}
+      now={NOW}
+    />,
+  );
+  const tr = container.querySelector("tbody tr") as HTMLTableRowElement;
+  expect(tr).not.toBeNull();
+  expect(tr.getAttribute("tabindex")).toBe("0");
+  // Reach for the window-bound KeyboardEvent constructor; happy-dom
+  // does not expose it on globalThis.
+  const KeyboardEventCtor =
+    (globalThis as unknown as { window: { KeyboardEvent: typeof KeyboardEvent } })
+      .window.KeyboardEvent;
+  const enter = new KeyboardEventCtor("keydown", {
+    key: "Enter",
+    bubbles: true,
+    cancelable: true,
+  });
+  act(() => {
+    tr.dispatchEvent(enter);
+  });
+  expect(onOpenDetail).toHaveBeenCalledTimes(1);
+  expect(onOpenDetail.mock.calls[0]?.[0]).toBe("claude_code:enter-1");
+});
+
+test("SessionsTable: clicking the checkbox cell calls onToggle but NOT onOpenDetail", () => {
+  const rows: SessionRow[] = [
+    buildRow({
+      rowKey: "claude_code:checkbox-1",
+      sourceSessionKey: "claude_code:checkbox-1",
+      sourceSessionId: "checkbox-1",
+      status: "not_stored",
+      presence: "source_only",
+    }),
+  ];
+  const onToggle = mock(() => {});
+  const onToggleAll = mock(() => {});
+  const onOpenDetail = mock(
+    (_rowKey: string, _trigger: HTMLElement | null) => {},
+  );
+  const { container } = render(
+    <SessionsTable
+      rows={rows}
+      selected={new Set()}
+      onToggle={onToggle}
+      onToggleAll={onToggleAll}
+      onOpenDetail={onOpenDetail}
+      now={NOW}
+    />,
+  );
+  const checkbox = container.querySelector(
+    'input[type="checkbox"][aria-label="Select claude_code:checkbox-1"]',
+  ) as HTMLInputElement;
+  expect(checkbox).not.toBeNull();
+  act(() => {
+    checkbox.click();
+  });
+  // Selection toggle fired.
+  expect(onToggle).toHaveBeenCalledTimes(1);
+  expect(onToggle.mock.calls[0]?.[0]).toBe("claude_code:checkbox-1");
+  // Drawer-open did NOT fire — the checkbox cell guard short-circuited.
+  expect(onOpenDetail).toHaveBeenCalledTimes(0);
 });

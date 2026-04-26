@@ -47,6 +47,13 @@
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.08);
+
+  /* Modal scrim alpha overlay for native `<dialog>::backdrop`. Lives in
+   * the token layer so the dist CSS hex audit (`rg '#[0-9a-fA-F]{3,8}'
+   * apps/frontend/dist/assets/*.css`) traces every literal back to a
+   * token. Dark mode darkens the scrim slightly so the modal still
+   * separates cleanly from the page surface. */
+  --color-backdrop: rgba(0, 0, 0, 0.45);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -63,5 +70,6 @@
     --color-success: #5fb68a;
     --color-warn: #e0a75a;
     --color-error: #e57d7d;
+    --color-backdrop: rgba(0, 0, 0, 0.6);
   }
 }

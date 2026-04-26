@@ -15,7 +15,10 @@
 // Per spec §Data Model in the Browser, a row whose `statusConflict` is
 // true gets a small "(refresh)" affordance next to its `StatusBadge` —
 // the M2 minimum for the "fetched state changed during load — refresh"
-// hint. The full conflict badge UI lands in M4's drawer.
+// hint. The drawer header in M4 ALSO gets its own "Conflict" badge;
+// per the open risk in `progress/phase-4.progress.md` the row-side
+// affordance MUST stay (the drawer-side one supplements rather than
+// replaces it).
 //
 // Per spec, a row whose `sourcePathIsStale` is true labels its
 // source-path cell with a `title=` hover hint clarifying that the
@@ -26,6 +29,18 @@
 // prop) so the page does not ticker-update. The full ISO timestamp
 // stays available via the `title=` hover hint for users who need the
 // absolute value.
+//
+// As of M4 (Chunk E1) the row itself becomes the drawer trigger: a
+// click anywhere on the row OR pressing Enter while the row is
+// focused calls `onOpenDetail(row.rowKey, triggerEl)`. The trigger
+// element is forwarded so the parent can stash it in a ref and
+// restore focus to it after the drawer closes (happy-dom does not
+// implement the platform focus-restoration on `dialog.close()`; real
+// Chromium does, but the explicit ref makes the behaviour
+// deterministic across both targets). The checkbox cell stops
+// propagation so toggling selection never opens the drawer (a11y bug
+// magnet). `onOpenDetail` is optional with a no-op default for
+// backward compatibility with M2/M3 tests that did not pass it.
 //
 // Reuses the structural CSS selectors set by M1 (`.table-wrap`,
 // `.empty`, `.muted`, `.mono`, `.stack`, `.select-col`, `.raw-link`,
@@ -45,6 +60,11 @@ export type SessionsTableProps = {
   onToggleAll: () => void;
   /** Pinned-`now` ISO string used by the relative-time cell renderer. */
   now: string;
+  /** Open the detail drawer for `rowKey`. The second argument is the
+   *  trigger DOM element so the parent can stash it in a ref and
+   *  restore focus on close. Optional for backward compatibility with
+   *  M2/M3 callers that don't render a drawer. Defaults to a no-op. */
+  onOpenDetail?: (rowKey: string, triggerEl: HTMLElement | null) => void;
 };
 
 export function SessionsTable({
@@ -53,6 +73,7 @@ export function SessionsTable({
   onToggle,
   onToggleAll,
   now,
+  onOpenDetail,
 }: SessionsTableProps) {
   if (rows.length === 0) {
     return (
@@ -134,9 +155,49 @@ export function SessionsTable({
               row.storedSessionUid !== null
                 ? `/api/v1/sessions/${row.storedSessionUid}`
                 : null;
+            const handleRowOpen = (
+              triggerEl: HTMLElement | null,
+            ) => {
+              if (onOpenDetail) onOpenDetail(row.rowKey, triggerEl);
+            };
             return (
-              <tr key={row.rowKey}>
-                <td className="select-col">
+              <tr
+                key={row.rowKey}
+                tabIndex={0}
+                onClick={(event) => {
+                  // Walk up from the click target to see whether the
+                  // event came from inside the checkbox column. A
+                  // click on the checkbox cell (or anything inside
+                  // it) toggles selection only — it MUST NOT open
+                  // the drawer (a11y bug magnet). The
+                  // `event.stopPropagation()` on the cell handles
+                  // most cases; this guard is the belt-and-braces
+                  // backup in case the propagation interception is
+                  // bypassed by an event-time bubble re-fire.
+                  const target = event.target as HTMLElement | null;
+                  if (target?.closest("td.select-col") !== null) return;
+                  handleRowOpen(event.currentTarget);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  // Same checkbox-cell guard as the click handler.
+                  const target = event.target as HTMLElement | null;
+                  if (target?.closest("td.select-col") !== null) return;
+                  // Prevent the default form-submission behaviour
+                  // (no form here, but Enter on a focused element
+                  // can still trigger native actions in some
+                  // contexts).
+                  event.preventDefault();
+                  handleRowOpen(event.currentTarget);
+                }}
+              >
+                <td
+                  className="select-col"
+                  // Stop click propagation BEFORE the row's onClick
+                  // sees it — toggling selection should never open
+                  // the drawer.
+                  onClick={(event) => event.stopPropagation()}
+                >
                   {importable && row.sourceSessionKey !== null ? (
                     <input
                       type="checkbox"

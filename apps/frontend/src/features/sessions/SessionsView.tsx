@@ -16,15 +16,25 @@
 //       (4) "Partial fetch failure" — one of (source, stored) errored;
 //           the per-section banner from M2 still renders + the
 //           unified table shows the surviving rows
+//   - the M4 detail drawer state (`detailRowKey`) plus the trigger
+//     ref. The drawer is always rendered as a sibling of the table
+//     (one drawer at a time per spec); `isOpen` controls its modal
+//     state. The trigger ref captures the row that opened the
+//     drawer so focus can be restored to it on close (the explicit
+//     restoration is the path under test in component tests; in
+//     real Chromium the platform restoration also fires).
 //
 // `App.tsx` retains ownership of fetch state, the merged + filtered
 // row sets (memoized once + passed in), the `selected` set, the
 // filter state hook, and every mutation handler. SessionsView is
-// presentational.
+// presentational except for the drawer state.
+import { useRef, useState } from "react";
 import { isImportable } from "./types";
 import type { SessionRow } from "./types";
 import { SessionFilters } from "./SessionFilters";
 import { SessionsTable } from "./SessionsTable";
+import { SessionDetail } from "./SessionDetail";
+import { Drawer } from "../../components/Drawer";
 import type { SessionFiltersState } from "./useSessionFilters";
 import type { SourceSessionView, StoredSessionView } from "../../lib/contracts";
 
@@ -77,6 +87,36 @@ export function SessionsView({
   rescanPending,
   now,
 }: SessionsViewProps) {
+  // Detail drawer state. `detailRowKey === null` -> closed; otherwise
+  // the value is a `SessionRow.rowKey` (NOT a backend session_key —
+  // stored_only rows must be openable too, so we use the React-level
+  // identity that always exists).
+  const [detailRowKey, setDetailRowKey] = useState<string | null>(null);
+  // Capture the row trigger element so we can restore focus on close.
+  // `useRef<HTMLElement | null>(null)` lets us pass the same ref into
+  // the Drawer's `restoreFocusRef` prop without re-binding on every
+  // render.
+  const triggerRef = useRef<HTMLElement | null>(null);
+  // Pick the merged row to render in the drawer body. Read from
+  // `filteredRows` so the drawer always shows whatever the user can
+  // currently see; if a filter mutation hides the open row, the
+  // lookup falls through to `null` and the drawer body just renders
+  // empty rather than displaying a row the user has filtered away.
+  const selectedDetailRow: SessionRow | null =
+    detailRowKey === null
+      ? null
+      : filteredRows.find((r) => r.rowKey === detailRowKey) ?? null;
+
+  const handleOpenDetail = (
+    rowKey: string,
+    triggerEl: HTMLElement | null,
+  ) => {
+    triggerRef.current = triggerEl;
+    setDetailRowKey(rowKey);
+  };
+  const handleCloseDetail = () => {
+    setDetailRowKey(null);
+  };
   // Both sides still loading: render a single "loading" hint. This
   // mirrors the Phase 3 PanelBody behavior so the user sees feedback
   // during the initial fetch.
@@ -217,8 +257,27 @@ export function SessionsView({
           onToggle={onToggle}
           onToggleAll={onToggleAll}
           now={now}
+          onOpenDetail={handleOpenDetail}
         />
       ) : null}
+      {/* Drawer is ALWAYS rendered — `isOpen` controls the platform
+          modal state. A conditional unmount would break the
+          showModal()/close() lifecycle and lose the dialog ref between
+          opens. */}
+      <Drawer
+        isOpen={detailRowKey !== null}
+        onClose={handleCloseDetail}
+        restoreFocusRef={triggerRef}
+        ariaLabel={
+          selectedDetailRow !== null
+            ? `Session detail: ${selectedDetailRow.title ?? "(untitled)"}`
+            : "Session detail"
+        }
+      >
+        {selectedDetailRow !== null ? (
+          <SessionDetail row={selectedDetailRow} now={now} />
+        ) : null}
+      </Drawer>
     </>
   );
 }

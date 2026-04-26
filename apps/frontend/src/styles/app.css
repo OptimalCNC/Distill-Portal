@@ -36,6 +36,16 @@
  *     resolving them would require either adding new tokens (banned by
  *     the §Risks design-balloon mitigation) or restructuring the
  *     layout (out of scope for M1).
+ *   - M4 Chunk E1 added four additional structural literals all under
+ *     `.drawer*`: `max-width: 640px` and `width: min(92vw, 640px)`
+ *     (drawer reading-width clamp) and `max-height: 88vh` (viewport-
+ *     bound scrolling). The token system has no "max-readable-width"
+ *     variant; promoting these to tokens would be speculative for one
+ *     consumer (the drawer) and is rejected per the same design-
+ *     balloon mitigation. All four are colocated at the bottom of
+ *     this file in the M4 section. The drawer's `::backdrop` alpha
+ *     scrim is NOT a structural literal — it lives in `tokens.css`
+ *     as `--color-backdrop` so the dist CSS hex audit stays clean.
  *
  * Badge backgrounds use `color-mix(in srgb, <semantic-token> 15%,
  * var(--color-surface))` so the four pastel pairs the original Phase 3
@@ -306,4 +316,145 @@ td.select-col {
 
 .action-bar-clear:hover {
   color: var(--color-accent-hover);
+}
+
+/* ---------- Session detail drawer (M4 Chunk E1) ---------- */
+
+/* Native `<dialog>`-backed shell. Centered modal at a comfortable
+ * reading width; the body scrolls if content overflows the viewport
+ * height. The `::backdrop` scrim reads from the
+ * `--color-backdrop` token so the dist CSS hex audit traces every
+ * color literal back to `tokens.css`. */
+.drawer {
+  margin: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--shadow-md);
+  max-width: 640px;
+  width: min(92vw, 640px);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.drawer::backdrop {
+  background: var(--color-backdrop);
+}
+
+.drawer-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.drawer-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  flex: 1 1 auto;
+}
+
+.drawer-tool-badge {
+  /* Inline tool name in the header — matches the tool column's
+   * monospace styling so the user can cross-reference quickly. */
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.drawer-conflict-badge {
+  /* Conflict pill in the drawer header. Reuses the M1 source-missing
+   * recipe (red, the strongest semantic warn) so it visually stands
+   * out from the status pill alongside it. */
+  background: color-mix(in srgb, var(--color-error) 15%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-error) 70%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-error) 35%, var(--color-surface));
+}
+
+.drawer-body {
+  padding: var(--space-4) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.drawer-meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+
+.drawer-meta dt {
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.drawer-meta dd {
+  margin: 0;
+  word-break: break-all;
+  font-size: var(--text-sm);
+}
+
+.drawer-source-path {
+  /* The actual path text — long absolute paths must wrap inside the
+   * grid cell so they don't blow out the drawer width. */
+  display: inline;
+}
+
+.drawer-close {
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  /* Float to the right of the header so the title stays leftmost. */
+  float: right;
+  margin-bottom: var(--space-2);
+}
+
+.drawer-copy-btn {
+  font: inherit;
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.drawer-copy-btn:hover {
+  border-color: var(--color-text-muted);
+}
+
+.drawer-copy-hint {
+  font-size: var(--text-xs);
+}
+
+.drawer-raw-link-row {
+  margin: 0;
+}
+
+.drawer-raw-preview h3 {
+  margin: 0 0 var(--space-2) 0;
+  font-size: var(--text-base);
+  color: var(--color-text);
+}
+
+.raw-preview-placeholder {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
 }
