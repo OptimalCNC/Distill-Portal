@@ -7,7 +7,7 @@
 - Architecture vocabulary: `ARCHITECTURE.md`, `PRD.md`, `docs/dependency-rules.md`, `docs/features/inspection-surface.md`, `docs/features/session-view.md` (created in M5)
 - Prior phase logs for context: `progress/phase-4.progress.md` (Phase 4 complete — six milestones shipped; final Codex catch density: every M1–M6 chunk needed at least one Codex-driven fix-up round; M6 needed three rounds; final unit tests 231/891; dependency budget 1 of 2 escape-hatch slots consumed via `focus-trap-react@^11`); `progress/phase-3.progress.md` (Phase 3 standalone Bun+Vite+React+TS frontend; pattern-establishing six Codex catches across the phase)
 - Pre-Phase-5 HEAD: `f97181d` on `main` (2026-04-27, "Log Chunk G delivery and close Milestone 6 (Phase 4 complete)")
-- Phase 5 source-of-truth commit: TBD (Chunk A — this commit)
+- Phase 5 source-of-truth commit: `bce56c0` on `main` (2026-04-27, "Add Phase 5 planning doc and bootstrap progress log")
 
 ## Task Invocation Block (resolved)
 
@@ -94,7 +94,7 @@
 ## Completed Work Log
 
 - 2026-04-27: bootstrapped `progress/phase-5.progress.md`; resolved the Phase 5 invocation block from `working/phase-5.md`; verified tooling (`codex exec` `0.125.0`, `claude` `2.1.119`, `bun` `1.3.13`); inventoried current frontend state (17 unit-test files / 231 tests / 891 expects post-Phase-4 close; 1 Playwright spec); registered milestone task tracking. No code change yet — Chunk A is purely the spec + log scaffold.
-- 2026-04-27: Chunk A complete — committed `working/phase-5.md` + `progress/phase-5.progress.md` as `<chunk-a-sha>` on `main` ("Add Phase 5 planning doc and bootstrap progress log"). This fixes the source-of-truth SHA all Phase 5 reviewers cite. Spec content is the ~700-line implementation plan covering six milestones (M1 layout shell + URL sync + compact list, M2 Tabs primitive + SessionView shell + Metadata tab, M3 per-tool parsers + buildSkim + truth tables, M4 TranscriptView, M5 SkimView with four block kinds, M6 cleanup + 8-doc sweep + WCAG). No code change.
+- 2026-04-27: Chunk A complete — committed `working/phase-5.md` + `progress/phase-5.progress.md` as `bce56c0` on `main` ("Add Phase 5 planning doc and bootstrap progress log"). This fixes the source-of-truth SHA all Phase 5 reviewers cite. Spec content is the ~700-line implementation plan covering six milestones (M1 layout shell + URL sync + compact list, M2 Tabs primitive + SessionView shell + Metadata tab, M3 per-tool parsers + buildSkim + truth tables, M4 TranscriptView, M5 SkimView with four block kinds, M6 cleanup + 8-doc sweep + WCAG). No code change. Note: `components/collector-runtime/src/adapters/codex.rs` + `tests/parsers.rs` had unrelated user/tool-driven modifications in the working tree at Chunk A time (handling forked Codex sessions); coordinator deliberately left them unstaged (protected paths + outside Phase 5 scope) and surfaced them to the human for separate disposition.
 
 ## Review Log
 
