@@ -5,6 +5,7 @@ use std::{
 };
 
 use distill_portal_ui_api_contracts::Tool;
+use serde_json::Value;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -69,72 +70,100 @@ impl SessionAdapter for CodexAdapter {
         let records = parse_jsonl(path, &safe_read.bytes)?;
         let file_timestamp = file_mtime(path)?;
 
-        let mut created_at = None;
         let mut source_updated_at = None;
-        let mut title = None;
-        let mut session_meta_cwd = None;
-        let mut turn_context_cwd = None;
-        let mut saw_session_meta = false;
+        let mut primary_meta = None;
+        let mut has_embedded_parent_meta = false;
 
-        for (line_number, record) in records.iter().enumerate() {
-            let line_number = line_number + 1;
+        for (index, record) in records.iter().enumerate() {
+            let line_number = index + 1;
 
             if let Some(timestamp) = string_field(record, "timestamp") {
                 let timestamp = parse_rfc3339_timestamp(path, line_number, timestamp)?;
-                created_at = Some(min_timestamp(created_at, timestamp));
                 source_updated_at = Some(max_timestamp(source_updated_at, timestamp));
             }
 
-            match string_field(record, "type") {
-                Some("session_meta") => {
-                    saw_session_meta = true;
-                    if let Some(meta_id) = string_pointer(record, "/payload/id") {
-                        if meta_id != source_session_id {
-                            return Err(AdapterError::invalid(
-                                path,
-                                format!(
-                                    "line {line_number} has session_meta.payload.id {meta_id} but filename id is {source_session_id}"
-                                ),
-                            ));
-                        }
-                    }
+            if string_field(record, "type") != Some("session_meta") {
+                continue;
+            }
 
-                    if let Some(meta_timestamp) = string_pointer(record, "/payload/timestamp") {
-                        let meta_timestamp =
-                            parse_rfc3339_timestamp(path, line_number, meta_timestamp)?;
-                        created_at = Some(min_timestamp(created_at, meta_timestamp));
-                    }
+            let Some(meta) = &primary_meta else {
+                let meta = primary_session_meta(path, line_number, record, &source_session_id)?;
+                primary_meta = Some(meta);
+                continue;
+            };
 
-                    if session_meta_cwd.is_none() {
-                        session_meta_cwd =
-                            string_pointer(record, "/payload/cwd").map(PathBuf::from);
-                    }
+            if let Some(meta_id) = string_pointer(record, "/payload/id") {
+                if meta_id == source_session_id {
+                    continue;
                 }
-                Some("turn_context") => {
-                    if turn_context_cwd.is_none() {
-                        turn_context_cwd =
-                            string_pointer(record, "/payload/cwd").map(PathBuf::from);
-                    }
+
+                if is_known_parent_id(meta, meta_id) {
+                    has_embedded_parent_meta = true;
+                    continue;
                 }
-                Some("event_msg") => {
-                    if title.is_none()
-                        && string_pointer(record, "/payload/type") == Some("user_message")
-                    {
-                        title =
-                            string_pointer(record, "/payload/message").and_then(normalize_title);
-                    }
-                }
-                _ => {}
+
+                return Err(AdapterError::invalid(
+                    path,
+                    format!(
+                        "line {line_number} has session_meta.payload.id {meta_id} but filename id is {source_session_id} and it is not a known parent session id"
+                    ),
+                ));
             }
         }
 
-        let project_path = session_meta_cwd.or(turn_context_cwd);
-        let created_at = created_at.or(file_timestamp);
-        let source_updated_at = source_updated_at.or(file_timestamp);
+        let primary_body_start = if has_embedded_parent_meta {
+            primary_meta
+                .as_ref()
+                .and_then(|meta| meta.timestamp)
+                .and_then(|timestamp| primary_body_start_index(&records, timestamp))
+        } else {
+            Some(0)
+        };
 
-        if !saw_session_meta {
-            // Missing session_meta is allowed for now; later ingest wiring can surface a warning if needed.
+        let mut primary_body_created_at = None;
+        let mut title = None;
+        let mut turn_context_cwd = None;
+
+        if let Some(start_index) = primary_body_start {
+            for (index, record) in records.iter().enumerate().skip(start_index) {
+                let line_number = index + 1;
+
+                if let Some(timestamp) = string_field(record, "timestamp") {
+                    let timestamp = parse_rfc3339_timestamp(path, line_number, timestamp)?;
+                    primary_body_created_at =
+                        Some(min_timestamp(primary_body_created_at, timestamp));
+                }
+
+                match string_field(record, "type") {
+                    Some("turn_context") => {
+                        if turn_context_cwd.is_none() {
+                            turn_context_cwd =
+                                string_pointer(record, "/payload/cwd").map(PathBuf::from);
+                        }
+                    }
+                    Some("event_msg") => {
+                        if title.is_none()
+                            && string_pointer(record, "/payload/type") == Some("user_message")
+                        {
+                            title = string_pointer(record, "/payload/message")
+                                .and_then(normalize_title);
+                        }
+                    }
+                    _ => {}
+                }
+            }
         }
+
+        let project_path = primary_meta
+            .as_ref()
+            .and_then(|meta| meta.cwd.clone())
+            .or(turn_context_cwd);
+        let created_at = primary_meta
+            .as_ref()
+            .and_then(|meta| meta.timestamp)
+            .or(primary_body_created_at)
+            .or(file_timestamp);
+        let source_updated_at = source_updated_at.or(file_timestamp);
 
         Ok(ParsedSession {
             tool: Tool::Codex,
@@ -149,6 +178,87 @@ impl SessionAdapter for CodexAdapter {
             has_subagent_sidecars: false,
         })
     }
+}
+
+#[derive(Clone, Debug)]
+struct PrimarySessionMeta {
+    timestamp: Option<OffsetDateTime>,
+    cwd: Option<PathBuf>,
+    parent_ids: Vec<String>,
+}
+
+fn primary_session_meta(
+    path: &Path,
+    line_number: usize,
+    record: &Value,
+    source_session_id: &str,
+) -> Result<PrimarySessionMeta, AdapterError> {
+    if let Some(meta_id) = string_pointer(record, "/payload/id") {
+        if meta_id != source_session_id {
+            return Err(AdapterError::invalid(
+                path,
+                format!(
+                    "line {line_number} has session_meta.payload.id {meta_id} but filename id is {source_session_id}"
+                ),
+            ));
+        }
+    }
+
+    let timestamp = string_pointer(record, "/payload/timestamp")
+        .map(|timestamp| parse_rfc3339_timestamp(path, line_number, timestamp))
+        .transpose()?;
+    let cwd = string_pointer(record, "/payload/cwd").map(PathBuf::from);
+    let mut parent_ids = Vec::new();
+    push_parent_id(
+        &mut parent_ids,
+        string_pointer(record, "/payload/forked_from_id"),
+    );
+    push_parent_id(
+        &mut parent_ids,
+        string_pointer(
+            record,
+            "/payload/source/subagent/thread_spawn/parent_thread_id",
+        ),
+    );
+
+    Ok(PrimarySessionMeta {
+        timestamp,
+        cwd,
+        parent_ids,
+    })
+}
+
+fn push_parent_id(parent_ids: &mut Vec<String>, parent_id: Option<&str>) {
+    if let Some(parent_id) = parent_id {
+        if !parent_ids.iter().any(|known| known == parent_id) {
+            parent_ids.push(parent_id.to_owned());
+        }
+    }
+}
+
+fn is_known_parent_id(meta: &PrimarySessionMeta, candidate: &str) -> bool {
+    meta.parent_ids
+        .iter()
+        .any(|parent_id| parent_id == candidate)
+}
+
+fn primary_body_start_index(records: &[Value], primary_timestamp: OffsetDateTime) -> Option<usize> {
+    let threshold = primary_timestamp.unix_timestamp().saturating_sub(1);
+
+    records.iter().enumerate().find_map(|(index, record)| {
+        if string_field(record, "type") != Some("event_msg")
+            || string_pointer(record, "/payload/type") != Some("task_started")
+        {
+            return None;
+        }
+
+        let started_at = record.pointer("/payload/started_at")?.as_i64()?;
+        if started_at >= threshold {
+            Some(index)
+        } else {
+            None
+        }
+    })
 }
 
 fn read_child_dirs(root: &Path) -> Result<Vec<PathBuf>, AdapterError> {
