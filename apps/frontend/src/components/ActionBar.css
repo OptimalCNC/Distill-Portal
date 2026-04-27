@@ -1,0 +1,106 @@
+/*
+ * Feature-local CSS for the ActionBar.
+ *
+ * Imported by `ActionBar.tsx` (sibling-import convention introduced in
+ * Phase 4 Milestone 6 when `app.css` was retired).
+ *
+ * Selectors owned here:
+ *   - `.action-bar` — column-with-gap shell.
+ *   - `.action-bar-buttons` — horizontal row of Rescan + Import + clear
+ *     affordances + last-rescan caption.
+ *   - `.action-bar button`, `.action-bar button:disabled` — primary
+ *     mutation buttons.
+ *   - `.action-bar.sticky` — M5 modifier that position-sticks the bar
+ *     to the bottom of its containing block when the natural-layout
+ *     bar would scroll out of view (CSS-only via `position: sticky`;
+ *     no JS scroll detection).
+ *   - `.action-bar-last-rescan` — small caption next to Rescan
+ *     showing "last rescan from this browser X ago" (M5).
+ *   - `.action-bar-hidden-caption` — "+K hidden by filters" count
+ *     surfaced when the user's selection contains keys that fell out
+ *     of the current filter window (M3).
+ *   - `.action-bar-clear`, `.action-bar-clear:hover` — text-style
+ *     "Clear hidden" / "Clear selection" buttons (M3).
+ *
+ * Note: `.action-bar-report` was retired in M5 (Chunk F removed
+ * `renderReport` from ActionBar; `lastReport` migrated to toasts).
+ *
+ * Structural literals:
+ *   - `z-index: 1` on `.action-bar.sticky` — keeps the bar above
+ *     table content during the sticky window. The drawer's native
+ *     `<dialog>` lives in the platform top-layer regardless of
+ *     z-index, so the drawer backdrop always covers the bar.
+ */
+
+.action-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.action-bar-buttons {
+  display: flex;
+  flex-direction: row;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.action-bar button {
+  font: inherit;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.action-bar button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Sticky action bar — the M5 modifier on the existing `.action-bar`
+ * shell. CSS-only (no JS scroll detection); the bar sticks to the
+ * bottom of its containing block when it would otherwise scroll out
+ * of view. `z-index: 1` keeps the bar above table content during the
+ * sticky window; native `<dialog>` lives in the platform top-layer
+ * regardless of z-index, so the drawer backdrop always covers the bar
+ * (verified manually in real Chromium). */
+.action-bar.sticky {
+  position: sticky;
+  bottom: 0;
+  background: var(--color-bg);
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-2);
+  z-index: 1;
+  border-top: 1px solid var(--color-border);
+}
+
+/* M5 last-rescan caption — small inline label next to the Rescan
+ * button. Uses the muted text token; the title= attribute on the span
+ * exposes the absolute ISO timestamp on hover (mirrors the "Updated"
+ * cell affordance in SessionsTable). */
+.action-bar-last-rescan {
+  font-size: var(--text-xs);
+  margin-right: var(--space-2);
+}
+
+.action-bar-hidden-caption {
+  font-size: var(--text-sm);
+}
+
+.action-bar-clear {
+  font: inherit;
+  font-size: var(--text-sm);
+  background: transparent;
+  border: 0;
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.action-bar-clear:hover {
+  color: var(--color-accent-hover);
+}

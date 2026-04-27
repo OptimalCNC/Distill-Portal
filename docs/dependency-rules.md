@@ -11,7 +11,7 @@
   - `components/ui-api-contracts`
 - `apps/frontend` (Bun + Vite + React + TypeScript) may depend on:
   - `components/ui-api-contracts/bindings/*.ts` (generated TypeScript types; one-way import only)
-  - external npm packages managed via Bun for UI, HTTP fetch, and test tooling
+  - external npm packages managed via Bun for UI, HTTP fetch, and test tooling. Phase 4 adopted a strict 2-package escape-hatch budget for browser-only concerns native APIs cannot meet; one slot is consumed (`focus-trap-react@^11`, fixing a native `<dialog>` Tab-cycling gap), one slot remains reserved (`@tanstack/react-virtual`, gated on documented evidence that pagination plus `useMemo` cannot keep render time bounded). Adding a third escape-hatch package requires a fresh planning round.
   - all backend communication is over HTTP to `apps/backend`
 - `components/ingest-service` may depend on:
   - `components/collector-runtime`
@@ -42,7 +42,7 @@
   - `components/ui-api-contracts/bindings/*.ts` (regenerate via `cargo test -p distill-portal-ui-api-contracts --features ts-bindings -- --ignored regenerate_ts_bindings`; see `docs/dev-commands.md`)
   - `apps/backend/src/http_api.rs`
   - the typed API layer in `apps/frontend/src/lib/` (`api.ts`, `contracts.ts`)
-  - any impacted frontend rendering under `apps/frontend/src/App.tsx` or `apps/frontend/src/components/`
+  - any impacted frontend rendering under `apps/frontend/src/App.tsx`, the unified session feature at `apps/frontend/src/features/sessions/`, or the shared React primitives under `apps/frontend/src/components/`
   - the relevant tests in `apps/backend/tests/http_api.rs`, `apps/frontend/src/App.test.tsx`, `apps/frontend/e2e/inspection.spec.ts`, and `tests/e2e/tests/inspection_surface.rs`
 
 ## Layer Ownership

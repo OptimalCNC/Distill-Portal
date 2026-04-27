@@ -13,12 +13,12 @@
 // Non-importable rows are invisible to the bulk action.
 //
 // Per spec §Data Model in the Browser, a row whose `statusConflict` is
-// true gets a small "(refresh)" affordance next to its `StatusBadge` —
-// the M2 minimum for the "fetched state changed during load — refresh"
-// hint. The drawer header in M4 ALSO gets its own "Conflict" badge;
-// per the open risk in `progress/phase-4.progress.md` the row-side
-// affordance MUST stay (the drawer-side one supplements rather than
-// replaces it).
+// true gets a small "(refresh)" affordance next to its inline status
+// badge — the M2 minimum for the "fetched state changed during load —
+// refresh" hint. The drawer header in M4 ALSO gets its own "Conflict"
+// badge; per the open risk in `progress/phase-4.progress.md` the
+// row-side affordance MUST stay (the drawer-side one supplements
+// rather than replaces it).
 //
 // Per spec, a row whose `sourcePathIsStale` is true labels its
 // source-path cell with a `title=` hover hint clarifying that the
@@ -42,13 +42,21 @@
 // magnet). `onOpenDetail` is optional with a no-op default for
 // backward compatibility with M2/M3 tests that did not pass it.
 //
-// Reuses the structural CSS selectors set by M1 (`.table-wrap`,
-// `.empty`, `.muted`, `.mono`, `.stack`, `.select-col`, `.raw-link`,
-// `.badge.*` via StatusBadge). M3 introduces no new selectors here;
-// the filter-bar CSS lives alongside SessionFilters in `app.css`.
-import { StatusBadge } from "../../components/StatusBadge";
+// As of M6 (Chunk G) the status pill is rendered inline (the dedicated
+// `StatusBadge` component was retired). The transform —
+// `variant = status.replace(/_/g, "-")` for the CSS class and
+// `label = status.replace(/_/g, " ")` for the visible text — is
+// preserved byte-for-byte at the call site so the DOM shape stays
+// `<span class="badge {variant}">{label}</span>`.
+//
+// CSS lives in the sibling `SessionsTable.css` (selectors
+// `.table-wrap`, table chrome, `.badge.*`, `.raw-link`, `.select-col`).
+// Global utility classes (`.muted`, `.mono`, `.stack`, `.empty`) live
+// in `styles/global.css`; the filter-bar CSS is in
+// `SessionFilters.css`.
 import { relativeTimeFrom } from "./relativeTime";
 import { isImportable, type SessionRow } from "./types";
+import "./SessionsTable.css";
 
 export type SessionsTableProps = {
   rows: SessionRow[];
@@ -208,7 +216,11 @@ export function SessionsTable({
                   ) : null}
                 </td>
                 <td>
-                  <StatusBadge status={row.status} />
+                  <span
+                    className={`badge ${row.status.replace(/_/g, "-")}`}
+                  >
+                    {row.status.replace(/_/g, " ")}
+                  </span>
                   {row.statusConflict ? (
                     <>
                       {" "}

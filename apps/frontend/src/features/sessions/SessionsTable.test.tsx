@@ -362,7 +362,9 @@ test("SessionsTable: clicking a per-row checkbox calls onToggle with the sourceS
   expect(rowCheckbox).not.toBeNull();
   rowCheckbox?.click();
   expect(onToggle).toHaveBeenCalledTimes(1);
-  expect(onToggle.mock.calls[0]?.[0]).toBe("claude_code:click-1");
+  expect(
+    (onToggle.mock.calls as readonly unknown[][])[0]?.[0],
+  ).toBe("claude_code:click-1");
 });
 
 test("SessionsTable: Updated cell renders relative time against the pinned `now` with absolute on hover", () => {
@@ -537,7 +539,54 @@ test("SessionsTable: clicking the checkbox cell calls onToggle but NOT onOpenDet
   });
   // Selection toggle fired.
   expect(onToggle).toHaveBeenCalledTimes(1);
-  expect(onToggle.mock.calls[0]?.[0]).toBe("claude_code:checkbox-1");
+  expect(
+    (onToggle.mock.calls as readonly unknown[][])[0]?.[0],
+  ).toBe("claude_code:checkbox-1");
   // Drawer-open did NOT fire — the checkbox cell guard short-circuited.
   expect(onOpenDetail).toHaveBeenCalledTimes(0);
+});
+
+test("SessionsTable: inlined status badge renders all 4 variants with the correct class + label transform (M6 StatusBadge retirement)", () => {
+  // Phase 4 Milestone 6 retired StatusBadge.tsx; the JSX is now inlined
+  // at SessionsTable.tsx (line 220 area). This test pins the byte-for-byte
+  // contract that StatusBadge.test.tsx used to enforce: every legal
+  // SessionSyncStatus value renders as
+  // `<span class="badge {status.replace(/_/g, "-")}">{status.replace(/_/g, " ")}</span>`.
+  const variants = [
+    {
+      status: "up_to_date" as const,
+      cssClass: "up-to-date",
+      label: "up to date",
+    },
+    {
+      status: "not_stored" as const,
+      cssClass: "not-stored",
+      label: "not stored",
+    },
+    {
+      status: "outdated" as const,
+      cssClass: "outdated",
+      label: "outdated",
+    },
+    {
+      status: "source_missing" as const,
+      cssClass: "source-missing",
+      label: "source missing",
+    },
+  ];
+  for (const variant of variants) {
+    const { container } = render(
+      <SessionsTable
+        rows={[buildRow({ status: variant.status })]}
+        selected={new Set()}
+        onToggle={mock(() => {})}
+        onToggleAll={mock(() => {})}
+        now={NOW}
+      />,
+    );
+    const badges = container.querySelectorAll(`span.badge.${variant.cssClass}`);
+    expect(badges.length).toBe(1);
+    expect(badges[0]?.textContent).toBe(variant.label);
+    cleanup();
+  }
 });

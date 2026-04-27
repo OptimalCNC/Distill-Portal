@@ -1,0 +1,92 @@
+/*
+ * Feature-local CSS for the native-`<dialog>`-backed Drawer shell.
+ *
+ * Imported by `Drawer.tsx` (sibling-import convention).
+ *
+ * Selectors owned here (the SHELL only — the body content lives in
+ * `SessionDetail.css`):
+ *   - `.drawer` — the `<dialog>` element itself; centered modal at a
+ *     comfortable reading width with body scroll on overflow.
+ *   - `.drawer::backdrop` — the modal scrim; reads from the
+ *     `--color-backdrop` token so the dist CSS hex audit traces every
+ *     literal back to `tokens.css` (the rgba alpha values for light
+ *     and dark live there, not here).
+ *   - `.drawer-header` — header strip wrapping title + tool/status
+ *     badges + conflict badge.
+ *   - `.drawer-title` — the page-2 title element inside the header.
+ *   - `.drawer-body` — the column-with-gap container that wraps the
+ *     metadata `<dl>`, raw-link row, and raw-preview block.
+ *   - `.drawer-close` — the close button (always rendered as the first
+ *     focusable child by the Drawer shell so initial focus lands here).
+ *
+ * Structural literals (per design-balloon mitigation; no
+ * "max-readable-width" token exists and adding one would be
+ * speculative for one consumer):
+ *   - `max-width: 640px` on `.drawer`
+ *   - `width: min(92vw, 640px)` on `.drawer`
+ *   - `max-height: 88vh` on `.drawer`
+ *
+ * Color rule: every literal is a token reference. The
+ * `--color-backdrop` token (rgba) was promoted in the M4 Chunk E1
+ * fix-up so the dist hex audit does not see the compiled hex form of
+ * the rgba literal that the rgba expansion would otherwise produce.
+ */
+
+/* Native `<dialog>`-backed shell. Centered modal at a comfortable
+ * reading width; the body scrolls if content overflows the viewport
+ * height. The `::backdrop` scrim reads from the `--color-backdrop`
+ * token so the dist CSS hex audit traces every color literal back to
+ * `tokens.css`. */
+.drawer {
+  margin: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--shadow-md);
+  max-width: 640px;
+  width: min(92vw, 640px);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.drawer::backdrop {
+  background: var(--color-backdrop);
+}
+
+.drawer-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.drawer-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  flex: 1 1 auto;
+}
+
+.drawer-body {
+  padding: var(--space-4) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.drawer-close {
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  /* Float to the right of the header so the title stays leftmost. */
+  float: right;
+  margin-bottom: var(--space-2);
+}

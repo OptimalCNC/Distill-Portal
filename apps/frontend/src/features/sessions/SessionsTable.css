@@ -1,0 +1,122 @@
+/*
+ * Feature-local CSS for the unified SessionsTable.
+ *
+ * Imported by `SessionsTable.tsx` (sibling-import convention introduced
+ * in Phase 4 Milestone 6 when `app.css` was retired). Vite supports the
+ * sibling-import pattern out of the box; the file is concatenated into
+ * the same dist CSS bundle as every other feature-local sheet, so the
+ * cascade order is bundle order, not import order.
+ *
+ * Selectors owned here:
+ *   - `.table-wrap` — overflow shell + border around the `<table>`
+ *   - `table`, `th`, `td`, `tr:last-child td`, `th.select-col`,
+ *     `td.select-col` — the unified-list table chrome
+ *   - `.badge` + variant subclasses (`.badge.up-to-date`, `.badge.not-stored`,
+ *     `.badge.outdated`, `.badge.source-missing`) — the status pill JSX
+ *     is inlined into both `SessionsTable.tsx` (row Status cell) and
+ *     `SessionDetail.tsx` (drawer header + status `<dd>`); the badge
+ *     selectors live with the table because the table is the primary
+ *     emitter and the drawer body sheet imports nothing badge-specific
+ *     beyond the `.drawer-conflict-badge` extension and the per-tool
+ *     `.drawer-tool-badge` override (both in `SessionDetail.css`).
+ *   - `.raw-link` — the View Raw + metadata link styling used inside
+ *     the Stored Copy cell
+ *
+ * Structural literals (intentionally NOT promoted to tokens; same
+ * design-balloon mitigation that justified them in `app.css` per
+ * `working/phase-4.md` §Design Tokens):
+ *   - `min-width: 720px` on `table` (horizontal-overflow trigger; the
+ *     unified list still has 8 columns and needs that width to read).
+ *   - `width: 2.25rem` on `.select-col` (checkbox column width clamp).
+ *   - `border-radius: 999px` on `.badge` (full pill — `--radius-*`
+ *     defines sm/md/lg, no "full"; same literal reused for `.chip`).
+ *   - `letter-spacing: 0.06em` on `th` and `.badge` (uppercase tracking).
+ *
+ * Color rule: backgrounds/foregrounds for the four badge variants use
+ * `color-mix(in srgb, <semantic-token> 15%/70%/35%, var(--color-surface
+ * | --color-text))` so the tinted pastel pairs derive from the existing
+ * semantic palette. The 70/30 darkening on the foreground (as opposed
+ * to the bare semantic token) is what makes the badge pairs clear
+ * WCAG AA 4.5:1 in both light and dark modes — see the M6 contrast
+ * table in `progress/phase-4.progress.md`.
+ */
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 720px;
+}
+
+th,
+td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+  font-size: var(--text-base);
+}
+
+th {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+}
+
+tr:last-child td {
+  border-bottom: 0;
+}
+
+th.select-col,
+td.select-col {
+  width: 2.25rem;
+  padding-right: var(--space-1);
+  text-align: center;
+}
+
+.badge {
+  display: inline-block;
+  padding: var(--space-1) var(--space-2);
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-family: var(--font-mono);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.badge.up-to-date {
+  background: color-mix(in srgb, var(--color-success) 15%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-success) 70%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-success) 35%, var(--color-surface));
+}
+
+.badge.not-stored {
+  background: color-mix(in srgb, var(--color-accent) 15%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-accent) 70%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-surface));
+}
+
+.badge.outdated {
+  background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-warn) 70%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+}
+
+.badge.source-missing {
+  background: color-mix(in srgb, var(--color-error) 15%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-error) 70%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-error) 35%, var(--color-surface));
+}
+
+.raw-link {
+  color: var(--color-accent);
+}

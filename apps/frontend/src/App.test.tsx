@@ -258,8 +258,10 @@ test("mounted App fetches all three panels and renders the unified table", async
     container.textContent?.includes("Malformed NDJSON on line 3"),
   ).toBe(true);
 
-  // (5) StatusBadge renders with the expected class for the `up_to_date`
-  //     row (joined source ⊕ stored).
+  // (5) Status badge renders with the expected class for the `up_to_date`
+  //     row (joined source ⊕ stored). The badge JSX is inlined at the
+  //     SessionsTable + SessionDetail call sites (M6 retired the
+  //     dedicated `StatusBadge` component); the DOM shape is preserved.
   const badges = container.querySelectorAll("span.badge.up-to-date");
   expect(badges.length).toBeGreaterThanOrEqual(1);
 

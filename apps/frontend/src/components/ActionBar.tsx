@@ -31,7 +31,13 @@
 //
 // State is owned by `App.tsx` and passed down as props; this
 // component is stateless.
+//
+// CSS lives in the sibling `ActionBar.css` (selectors `.action-bar`,
+// `.action-bar-buttons`, `.action-bar button`, `.action-bar.sticky`,
+// `.action-bar-last-rescan`, `.action-bar-hidden-caption`,
+// `.action-bar-clear`).
 import { relativeTimeFrom } from "../features/sessions/relativeTime";
+import "./ActionBar.css";
 
 type ActionBarProps = {
   selectedCount: number;

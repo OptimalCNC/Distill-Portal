@@ -46,7 +46,10 @@ test("SessionFilters: clicking a tool chip calls setFilter('tool', value)", () =
   expect(codexChip).not.toBeUndefined();
   codexChip!.click();
   expect(setFilter).toHaveBeenCalledTimes(1);
-  expect(setFilter.mock.calls[0]).toEqual(["tool", "codex"]);
+  expect((setFilter.mock.calls as readonly unknown[][])[0]).toEqual([
+    "tool",
+    "codex",
+  ]);
 });
 
 test("SessionFilters: clicking a storage chip calls setFilter('storage', value)", () => {
@@ -57,7 +60,10 @@ test("SessionFilters: clicking a storage chip calls setFilter('storage', value)"
   expect(storedChip).not.toBeUndefined();
   storedChip!.click();
   expect(setFilter).toHaveBeenCalledTimes(1);
-  expect(setFilter.mock.calls[0]).toEqual(["storage", "stored"]);
+  expect((setFilter.mock.calls as readonly unknown[][])[0]).toEqual([
+    "storage",
+    "stored",
+  ]);
 });
 
 test("SessionFilters: status chip toggle adds and removes from the array", () => {
@@ -67,7 +73,10 @@ test("SessionFilters: status chip toggle adds and removes from the array", () =>
       container.querySelectorAll<HTMLButtonElement>("button.chip"),
     ).find((el) => el.textContent === "Outdated");
   outdated()!.click();
-  expect(setFilter.mock.calls[0]).toEqual(["status", ["outdated"]]);
+  expect((setFilter.mock.calls as readonly unknown[][])[0]).toEqual([
+    "status",
+    ["outdated"],
+  ]);
   // Now mock the persisted state into "outdated active" + click again -> removal.
   const filters2: SessionFiltersState = {
     ...DEFAULT_FILTERS,
@@ -84,7 +93,10 @@ test("SessionFilters: status chip toggle adds and removes from the array", () =>
     />,
   );
   outdated()!.click();
-  expect(setFilter2.mock.calls[0]).toEqual(["status", []]);
+  expect((setFilter2.mock.calls as readonly unknown[][])[0]).toEqual([
+    "status",
+    [],
+  ]);
 });
 
 test("SessionFilters: status 'All' chip resets the array to []", () => {
@@ -97,7 +109,10 @@ test("SessionFilters: status 'All' chip resets the array to []", () => {
   expect(allChip).not.toBeUndefined();
   allChip!.click();
   expect(setFilter).toHaveBeenCalledTimes(1);
-  expect(setFilter.mock.calls[0]).toEqual(["status", []]);
+  expect((setFilter.mock.calls as readonly unknown[][])[0]).toEqual([
+    "status",
+    [],
+  ]);
 });
 
 test("SessionFilters: search input change calls setFilter('search', value)", () => {
@@ -108,7 +123,10 @@ test("SessionFilters: search input change calls setFilter('search', value)", () 
   expect(searchInput).not.toBeNull();
   fireEvent.change(searchInput!, { target: { value: "needle" } });
   expect(setFilter).toHaveBeenCalledTimes(1);
-  expect(setFilter.mock.calls[0]).toEqual(["search", "needle"]);
+  expect((setFilter.mock.calls as readonly unknown[][])[0]).toEqual([
+    "search",
+    "needle",
+  ]);
 });
 
 test("SessionFilters: project datalist exposes options from the projects list", () => {
@@ -131,7 +149,10 @@ test("SessionFilters: project clear button calls setFilter('project', null)", ()
   expect(clearBtn).not.toBeNull();
   clearBtn!.click();
   expect(setFilter).toHaveBeenCalledTimes(1);
-  expect(setFilter.mock.calls[0]).toEqual(["project", null]);
+  expect((setFilter.mock.calls as readonly unknown[][])[0]).toEqual([
+    "project",
+    null,
+  ]);
 });
 
 test("SessionFilters: importableOnly toggle calls setImportableOnly with the new boolean", () => {
@@ -142,7 +163,9 @@ test("SessionFilters: importableOnly toggle calls setImportableOnly with the new
   expect(toggle).not.toBeNull();
   toggle!.click();
   expect(setImportableOnly).toHaveBeenCalledTimes(1);
-  expect(setImportableOnly.mock.calls[0]?.[0]).toBe(true);
+  expect(
+    (setImportableOnly.mock.calls as readonly unknown[][])[0]?.[0],
+  ).toBe(true);
 });
 
 test("SessionFilters: importableOnly toggle from on -> off", () => {
@@ -151,7 +174,9 @@ test("SessionFilters: importableOnly toggle from on -> off", () => {
     'button[aria-label="Show importable only"]',
   );
   toggle!.click();
-  expect(setImportableOnly.mock.calls[0]?.[0]).toBe(false);
+  expect(
+    (setImportableOnly.mock.calls as readonly unknown[][])[0]?.[0],
+  ).toBe(false);
 });
 
 test("SessionFilters: sort field <select> change calls setFilter('sort', {field, direction})", () => {
@@ -162,7 +187,7 @@ test("SessionFilters: sort field <select> change calls setFilter('sort', {field,
   expect(fieldSelect).not.toBeNull();
   fireEvent.change(fieldSelect!, { target: { value: "title" } });
   expect(setFilter).toHaveBeenCalledTimes(1);
-  expect(setFilter.mock.calls[0]).toEqual([
+  expect((setFilter.mock.calls as readonly unknown[][])[0]).toEqual([
     "sort",
     { field: "title", direction: "desc" },
   ]);
@@ -176,7 +201,7 @@ test("SessionFilters: sort direction <select> change calls setFilter('sort', {fi
   expect(directionSelect).not.toBeNull();
   fireEvent.change(directionSelect!, { target: { value: "asc" } });
   expect(setFilter).toHaveBeenCalledTimes(1);
-  expect(setFilter.mock.calls[0]).toEqual([
+  expect((setFilter.mock.calls as readonly unknown[][])[0]).toEqual([
     "sort",
     { field: "source_updated_at", direction: "asc" },
   ]);
@@ -190,7 +215,10 @@ test("SessionFilters: search clear button calls setFilter('search', '')", () => 
   expect(clearBtn).not.toBeNull();
   clearBtn!.click();
   expect(setFilter).toHaveBeenCalledTimes(1);
-  expect(setFilter.mock.calls[0]).toEqual(["search", ""]);
+  expect((setFilter.mock.calls as readonly unknown[][])[0]).toEqual([
+    "search",
+    "",
+  ]);
 });
 
 test("SessionFilters: active tool chip carries .chip.active + aria-pressed=true", () => {

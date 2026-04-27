@@ -1,14 +1,34 @@
 /*
- * Token-driven global rules.
+ * Token-driven global rules for the inspection page.
  *
  * Loaded after `reset.css` and `tokens.css` so the cascade resolves:
- * browser defaults → reset → tokens → global → component (app.css).
- * Every value here is a token reference; no hex literals, no raw
- * spacing values. Component-specific layout (panels, tables, badges,
- * action bar) lives in `app.css`.
+ * browser defaults → reset → tokens → global → feature-local imports
+ * (sibling `.css` files imported by their matching `.tsx`/`.ts`,
+ * concatenated by Vite into the dist bundle).
  *
- * The `<main>` width rule deliberately lives in `app.css` (1400px for
- * the dual-table layout) — defining it here would conflict.
+ * Selectors owned here:
+ *   - `body` — token-driven background, foreground, font-family,
+ *     padding shell.
+ *   - `code, kbd, samp, pre` — monospace font for inline code rendering.
+ *   - `main` — page column cap (max-width: 1400px) plus vertical
+ *     rhythm. The width literal is structural (the spec's quantized
+ *     `--space-*` scale has no "page-column-cap" variant; promoting it
+ *     to a token would be speculative for one consumer per the
+ *     §Risks design-balloon mitigation).
+ *   - `h1` — zeroed margin so the page title sits flush with the
+ *     surrounding stack.
+ *   - `.muted`, `.mono`, `.stack`, `.empty` — global text/structure
+ *     utilities reused across feature surfaces (table cells, drawer
+ *     metadata, empty-state callouts, action bar captions). These four
+ *     are intentionally global because they have no single owning
+ *     feature; they read like text-level mixins.
+ *
+ * Phase 4 Milestone 6 history: when `app.css` was retired, the body
+ * shell (`main { max-width: 1400px ...}`, `h1 { margin: 0 }`) and the
+ * four utility classes (`.muted`, `.mono`, `.stack`, `.empty`) moved
+ * here. Component- and feature-specific rules moved to sibling `.css`
+ * files imported by the matching `.tsx`/`.ts`. See
+ * `progress/phase-4.progress.md` Chunk G for the full migration map.
  */
 
 body {
@@ -23,4 +43,39 @@ kbd,
 samp,
 pre {
   font-family: var(--font-mono);
+}
+
+main {
+  max-width: 1400px;
+  margin: var(--space-6) auto var(--space-8);
+  padding: 0 var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+h1 {
+  margin: 0;
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.empty {
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
 }

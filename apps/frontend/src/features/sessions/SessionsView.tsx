@@ -55,6 +55,7 @@ import { Pagination } from "../../components/Pagination";
 import type { PageSize } from "./applyPagination";
 import type { SessionFiltersState } from "./useSessionFilters";
 import type { SourceSessionView, StoredSessionView } from "../../lib/contracts";
+import "./SessionsView.css";
 
 export type PanelState<T> =
   | { kind: "loading" }

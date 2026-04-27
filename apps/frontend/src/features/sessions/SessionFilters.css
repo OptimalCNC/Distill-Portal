@@ -1,0 +1,92 @@
+/*
+ * Feature-local CSS for the SessionFilters control bar.
+ *
+ * Imported by `SessionFilters.tsx` (sibling-import convention).
+ *
+ * Selectors owned here (M3 filter UI vocabulary):
+ *   - `.session-filters` — column-with-gap layout for the chip groups,
+ *     project autocomplete, search, and sort selects.
+ *   - `.filter-row` — horizontal wrapping group within the bar.
+ *   - `.filter-label` — uppercase muted label that fronts each row.
+ *   - `.chip` — the small pill button; reused by status / tool /
+ *     storage / "Importable only" / clear-x affordances.
+ *   - `.chip:hover:not(:disabled)` — hover ring.
+ *   - `.chip.active` — active state; reuses the M1 badge color-mix
+ *     recipe (accent 15% bg + accent 70% fg + accent 35% border) so
+ *     it inherits the same WCAG AA contrast guarantee — measured at
+ *     light 6.237 / dark 6.949 (see progress log M6 contrast table).
+ *   - `.session-filters input`, `.session-filters select` — input
+ *     chrome; uses surface-raised so the inputs read as recessed
+ *     against the surrounding bar.
+ *   - `.session-filters input[type="text"]`, `[type="search"]` —
+ *     min-width clamp so the project autocomplete + substring search
+ *     inputs keep usable typing room when the bar wraps.
+ *
+ * Structural literals: `border-radius: 999px` on `.chip` (same full-pill
+ * literal used by `.badge`; deliberately not tokenized — see
+ * `SessionsTable.css` header for the design-balloon rationale).
+ */
+
+.session-filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.filter-label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  min-width: 4rem;
+}
+
+.chip {
+  display: inline-block;
+  padding: var(--space-1) var(--space-3);
+  border-radius: 999px;
+  font-size: var(--text-sm);
+  font-family: var(--font-sans);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+}
+
+.chip.active {
+  /* Same recipe as `.badge.not-stored` so the active chip clears WCAG
+   * AA 4.5:1 against its tinted background in both modes (measured
+   * light 6.237 / dark 6.949 — see M6 contrast table in
+   * `progress/phase-4.progress.md`). */
+  background: color-mix(in srgb, var(--color-accent) 15%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-accent) 70%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-surface));
+}
+
+.session-filters input,
+.session-filters select {
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+.session-filters input[type="text"],
+.session-filters input[type="search"] {
+  min-width: 18rem;
+}

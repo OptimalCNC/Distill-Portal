@@ -1,0 +1,138 @@
+/*
+ * Feature-local CSS for the Toast queue.
+ *
+ * Imported by `Toast.tsx` (sibling-import convention). Note that the
+ * `.toast-queue` selector lives here even though only `App.tsx` mounts
+ * the queue container; the queue + the per-toast styling are one
+ * cohesive surface, and colocating them keeps the M6 retirement of
+ * `app.css` clean (no third sheet just for the queue wrapper).
+ *
+ * Selectors owned here:
+ *   - `.toast-queue` — fixed-position stack at the bottom-right of
+ *     the viewport. Sibling-of-`<main>` placement is for fixed-position
+ *     LAYOUT only (NOT React render isolation): toast push/dismiss
+ *     re-renders the App subtree, but the merged/filtered/sorted/
+ *     paginated rows are `useMemo`d so the heavy computation does not
+ *     re-run on a toast event.
+ *   - `.toast` — the toast itself; sets surface + border + radius +
+ *     shadow + min-width.
+ *   - `.toast.success`, `.toast.error`, `.toast.info` — variant
+ *     border tints (color-mix to keep them readable against the
+ *     surface-raised background in both modes).
+ *   - `.toast-title` — bold leading line.
+ *   - `.toast-message` — muted secondary line.
+ *   - `.toast-details`, `.toast-details summary` — collapsible
+ *     `<details>` disclosure for the structured RescanReport /
+ *     ImportReport counts (collapsed by default).
+ *   - `.toast-actions`, `.toast-actions button`,
+ *     `.toast-actions button:hover` — the Retry + Dismiss buttons.
+ *
+ * Structural literals (per design-balloon mitigation):
+ *   - `max-width: 26rem` on `.toast-queue` — keeps the fixed-position
+ *     stack from blowing across the viewport.
+ *   - `min-width: 18rem` on `.toast` — so a single short toast still
+ *     reads as a deliberate notification rather than a tiny chip.
+ *   - `z-index: 2` on `.toast-queue` — layering literal (the design
+ *     system has no token for stacking layers; promoting this would
+ *     be speculative for two consumers — `.action-bar.sticky` at
+ *     `z-index: 1`, `.toast-queue` at `z-index: 2`). The drawer's
+ *     `top-layer` (native `<dialog>`) sits above both regardless.
+ */
+
+/* Toast queue — fixed-position stack at the bottom-right corner of
+ * the viewport. Sibling-of-`<main>` placement is for fixed-position
+ * layout only (NOT React render isolation): toast push/dismiss
+ * re-renders the App subtree, but the merged/filtered/sorted/
+ * paginated rows are `useMemo`d so the heavy computation does not
+ * re-run on a toast event. */
+.toast-queue {
+  position: fixed;
+  bottom: var(--space-4);
+  right: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  z-index: 2;
+  max-width: 26rem;
+  pointer-events: none;
+}
+
+/* Each toast inside the queue. `pointer-events: auto` re-enables
+ * interactions (the queue itself is `pointer-events: none` so the gap
+ * between toasts doesn't intercept clicks on the page below). */
+.toast {
+  pointer-events: auto;
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  box-shadow: var(--shadow-md);
+  min-width: 18rem;
+}
+
+/* Toast variant identity is conveyed by border color alone (no per-variant
+ * background fill), so the border MUST clear WCAG SC 1.4.11 non-text
+ * contrast (3:1 against `--color-surface-raised`). The original 50% mix
+ * against `--color-border` failed in light (2.5-2.8 range). 65% mix
+ * lifts every variant to 3.07-3.83 in both modes (verified via the M6
+ * contrast script — see WCAG table in `progress/phase-4.progress.md`).
+ * Badges use a different recipe (35%) because their identity is the
+ * filled tinted background + AA-passing pill text, so the badge border
+ * is decorative reinforcement under SC 1.4.11. */
+.toast.success {
+  border-color: color-mix(in srgb, var(--color-success) 65%, var(--color-border));
+}
+
+.toast.error {
+  border-color: color-mix(in srgb, var(--color-error) 65%, var(--color-border));
+}
+
+.toast.info {
+  border-color: color-mix(in srgb, var(--color-accent) 65%, var(--color-border));
+}
+
+.toast-title {
+  font-weight: 600;
+  margin: 0 0 var(--space-1) 0;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+
+.toast-message {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.toast-details {
+  margin-top: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.toast-details summary {
+  cursor: pointer;
+  color: var(--color-accent);
+}
+
+.toast-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.toast-actions button {
+  font: inherit;
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.toast-actions button:hover {
+  border-color: var(--color-text-muted);
+}

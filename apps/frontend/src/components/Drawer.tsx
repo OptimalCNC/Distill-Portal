@@ -45,8 +45,16 @@
 // `isOpen` prop drives the imperative `showModal()` / `close()` calls
 // inside a `useEffect`. This keeps the underlying `<dialog>` ref stable
 // across opens.
+//
+// CSS for the SHELL (`.drawer`, `.drawer::backdrop`, `.drawer-header`,
+// `.drawer-title`, `.drawer-body`, `.drawer-close`) lives in the
+// sibling `Drawer.css`. The drawer-body content vocabulary
+// (`.drawer-meta`, `.drawer-tool-badge`, `.drawer-conflict-badge`,
+// `.raw-preview*`, etc.) lives in `features/sessions/SessionDetail.css`
+// alongside its emitter.
 import { useEffect, useRef } from "react";
 import { FocusTrap } from "focus-trap-react";
+import "./Drawer.css";
 
 export type DrawerProps = {
   /** Whether the drawer should be open. Toggling this prop from false to

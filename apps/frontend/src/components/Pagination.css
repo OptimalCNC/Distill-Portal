@@ -1,0 +1,75 @@
+/*
+ * Feature-local CSS for the Pagination strip.
+ *
+ * Imported by `Pagination.tsx` (sibling-import convention).
+ *
+ * Selectors owned here:
+ *   - `.pagination` — horizontal-row layout for the page-size
+ *     selector + Prev/Next buttons + caption.
+ *   - `.pagination-page-size`, `.pagination-page-size-label` — the
+ *     inline `<label>` + uppercase muted descriptor.
+ *   - `.pagination select` — page-size selector chrome (mirrors the
+ *     `.session-filters select` recipe in `SessionFilters.css`).
+ *   - `.pagination button`, `.pagination button:disabled` — the
+ *     Prev/Next buttons.
+ *   - `.pagination-caption` — the "Page N of M" text.
+ *
+ * No structural literals; every value is token-driven.
+ */
+
+/* Pagination strip below the table. Lays out the page-size selector,
+ * Prev / Next buttons, and the "Page N of M" caption inline with the
+ * existing table chrome. Reuses the existing `.session-filters select`
+ * styling pattern for the page-size select. */
+.pagination {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+}
+
+.pagination-page-size {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pagination-page-size-label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.pagination select {
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+.pagination button {
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-caption {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}

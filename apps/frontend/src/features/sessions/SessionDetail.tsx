@@ -35,8 +35,21 @@
 // "now" timestamp pinning. All field reads are done at render time
 // so the drawer always shows whatever the merged row carries when
 // the parent picks a key.
+//
+// As of M6 (Chunk G) the status pill is rendered inline (the dedicated
+// `StatusBadge` component was retired). The transform —
+// `variant = status.replace(/_/g, "-")` for the CSS class and
+// `label = status.replace(/_/g, " ")` for the visible text — is
+// preserved byte-for-byte at both call sites (drawer header + status
+// `<dd>`) so the DOM shape stays `<span class="badge {variant}">
+// {label}</span>` and matches `SessionsTable.tsx` exactly.
+//
+// CSS lives in the sibling `SessionDetail.css` (drawer-body chrome +
+// raw-preview block). The drawer SHELL (`.drawer`, `.drawer::backdrop`,
+// `.drawer-header`, `.drawer-title`, `.drawer-body`, `.drawer-close`)
+// lives in `components/Drawer.css`. The `.badge` shell + variant
+// recipes are in `SessionsTable.css`.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { StatusBadge } from "../../components/StatusBadge";
 import { ApiError, streamSessionRaw } from "../../lib/api";
 import { relativeTimeFrom } from "./relativeTime";
 import {
@@ -45,6 +58,7 @@ import {
   type RawPreviewState,
 } from "./rawPreview";
 import type { SessionRow } from "./types";
+import "./SessionDetail.css";
 
 export type SessionDetailProps = {
   /** The merged row to render. */
@@ -130,7 +144,9 @@ export function SessionDetail({ row, now }: SessionDetailProps) {
       <header className="drawer-header">
         <h2 className="drawer-title">{row.title ?? "(untitled)"}</h2>
         <span className="badge mono drawer-tool-badge">{row.tool}</span>
-        <StatusBadge status={row.status} />
+        <span className={`badge ${row.status.replace(/_/g, "-")}`}>
+          {row.status.replace(/_/g, " ")}
+        </span>
         {row.statusConflict ? (
           <span
             className="badge drawer-conflict-badge"
@@ -162,7 +178,9 @@ export function SessionDetail({ row, now }: SessionDetailProps) {
 
         <dt>status</dt>
         <dd>
-          <StatusBadge status={row.status} />
+          <span className={`badge ${row.status.replace(/_/g, "-")}`}>
+            {row.status.replace(/_/g, " ")}
+          </span>
           {row.statusConflict ? (
             <>
               {" "}

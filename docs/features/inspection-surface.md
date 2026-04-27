@@ -15,10 +15,12 @@ As of Phase 4 Milestone 5 (Chunk F) the unified list paginates client-side at 50
 ## Frontend Files To Modify
 
 - `apps/frontend/src/App.tsx`
-- `apps/frontend/src/features/sessions/` (unified session list — `SessionsView`, `SessionsTable`, `SessionFilters`, `mergeSessions`, `filterSessions`, `relativeTime`, `useSessionFilters`, `types`, plus per-feature tests)
-- `apps/frontend/src/components/` (shared primitives — `ActionBar`, `StatusBadge`, `ScanErrorsCallout`, plus per-component tests)
+- `apps/frontend/src/features/sessions/` (unified session list — `SessionsView`, `SessionsTable`, `SessionFilters`, `SessionDetail`, plus pure helpers `mergeSessions`, `filterSessions`, `applyPagination`, `relativeTime`, `rawPreview`, `useSessionFilters`, `useToastQueue`, `lastRescan`, `types`, and per-feature `.css` siblings + per-feature tests)
+- `apps/frontend/src/components/` (shared React primitives — `ActionBar`, `ScanErrorsCallout`, `Drawer`, `Pagination`, `Toast`, plus per-component `.css` siblings + per-component tests)
 - `apps/frontend/src/lib/api.ts`
 - `apps/frontend/src/lib/contracts.ts`
+
+The Phase 4 Milestone 6 cleanup retired four legacy components (`SourceSessionsTable.tsx`, `StoredSessionsTable.tsx`, `ScanErrorsPanel.tsx` already gone in M2; `StatusBadge.tsx` retired in M6 with its JSX inlined into `SessionsTable.tsx` line 220 + `SessionDetail.tsx` lines 147 + 181) and the monolithic `apps/frontend/src/styles/app.css` (selectors migrated to feature-local sibling `.css` files imported by their matching `.tsx`/`.ts`). `apps/frontend/src/styles/` now holds only the three global sheets `reset.css`, `tokens.css`, `global.css`.
 
 ## Backend Files To Modify
 

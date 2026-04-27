@@ -4,3 +4,6 @@ vite.config.ts.timestamp-*
 test-results/
 playwright-report/
 playwright/.cache/
+# Phase 3 / Phase 4 Codex review sentinel — empty marker file the
+# `codex exec` review tool drops in the directory it inspects.
+.codex

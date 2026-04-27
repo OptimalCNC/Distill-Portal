@@ -44,6 +44,7 @@
 // success path.
 
 import type { ReactNode } from "react";
+import "./Toast.css";
 
 export type ToastKind = "success" | "error" | "info";
 

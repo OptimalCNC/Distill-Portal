@@ -1,17 +1,24 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { App } from "./App";
-// CSS load order is load-bearing (see styles/global.css and
-// styles/app.css headers): reset → tokens → global → app. The reset
-// nukes browser defaults so token-driven rules below it are not
-// fighting the user-agent stylesheet; tokens defines the variables
-// the rest reference; global applies token-driven body/font rules;
-// app.css carries component layout rules and must come last so its
-// `<main>` width override wins over the more general scope above.
+
+// CSS load order is load-bearing. The three global sheets are imported
+// FIRST so Vite emits them ahead of the feature-local sibling sheets
+// pulled in transitively via `App`'s import graph. `reset.css` nukes
+// browser defaults; `tokens.css` defines the CSS custom properties the
+// rest reference (including under `prefers-color-scheme: dark`);
+// `global.css` applies token-driven body / `<main>` shell rules and
+// the four global utility classes (`.muted`, `.mono`, `.stack`,
+// `.empty`). Feature-local CSS is imported by sibling `.tsx`/`.ts`
+// files (e.g. `SessionsTable.tsx` imports `./SessionsTable.css`); they
+// land after the globals in the dist bundle so feature rules can
+// override globals where needed. The Phase 4 Milestone 6 retirement
+// of `app.css` collapsed the prior monolith into per-feature siblings;
+// see `progress/phase-4.progress.md` Chunk G for the migration map.
 import "./styles/reset.css";
 import "./styles/tokens.css";
 import "./styles/global.css";
-import "./styles/app.css";
+
+import { App } from "./App";
 
 const container = document.getElementById("root");
 if (!container) {

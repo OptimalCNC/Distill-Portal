@@ -19,16 +19,19 @@
 //     visual consistency with the other filters; the user clicks
 //     once and the filter narrows immediately).
 //
-// Token-driven CSS lives in `app.css` (selectors `.session-filters`,
-// `.chip`, `.chip.active`, `.session-filters input`); WCAG AA contrast
-// for `.chip.active` foreground/background was pre-computed via the
-// Bun script in the chunk evidence pack and is ≥ 4.5:1 in both modes.
+// Token-driven CSS lives in the sibling `SessionFilters.css` (selectors
+// `.session-filters`, `.filter-row`, `.filter-label`, `.chip`,
+// `.chip.active`, `.session-filters input`, `.session-filters select`);
+// WCAG AA contrast for `.chip.active` foreground/background was
+// pre-computed via the Bun script in the M3 chunk evidence pack and
+// remeasured in M6 — light 6.237 / dark 6.949 (both ≥ 4.5:1).
 import type { SessionSyncStatus, Tool } from "../../lib/contracts";
 import type {
   SessionFiltersState,
   SortDirection,
   SortField,
 } from "./useSessionFilters";
+import "./SessionFilters.css";
 
 export type SessionFiltersProps = {
   filters: SessionFiltersState;

@@ -30,6 +30,7 @@
 //     `applyPagination` as a defense in depth.
 
 import type { PageSize } from "../features/sessions/applyPagination";
+import "./Pagination.css";
 
 export type PaginationProps = {
   /** Currently active page size (50 / 100 / 200). */
