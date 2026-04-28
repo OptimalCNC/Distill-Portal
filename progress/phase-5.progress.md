@@ -2,12 +2,12 @@
 
 ## Source-of-Truth Reference
 
-- Implementation spec: `working/phase-5.md` (frozen at the Chunk A commit on `main`, 2026-04-27)
+- Implementation spec: `working/phase-5.md` (refined and re-frozen at `05467ad` on `main`, 2026-04-28; supersedes the original Chunk A spec at `bce56c0`)
 - Coordinator operating prompt: `coordinator-prompt.md`
 - Architecture vocabulary: `ARCHITECTURE.md`, `PRD.md`, `docs/dependency-rules.md`, `docs/features/inspection-surface.md`, `docs/features/session-view.md` (created in M5)
 - Prior phase logs for context: `progress/phase-4.progress.md` (Phase 4 complete — six milestones shipped; final Codex catch density: every M1–M6 chunk needed at least one Codex-driven fix-up round; M6 needed three rounds; final unit tests 231/891; dependency budget 1 of 2 escape-hatch slots consumed via `focus-trap-react@^11`); `progress/phase-3.progress.md` (Phase 3 standalone Bun+Vite+React+TS frontend; pattern-establishing six Codex catches across the phase)
 - Pre-Phase-5 HEAD: `f97181d` on `main` (2026-04-27, "Log Chunk G delivery and close Milestone 6 (Phase 4 complete)")
-- Phase 5 source-of-truth commit: `bce56c0` on `main` (2026-04-27, "Add Phase 5 planning doc and bootstrap progress log")
+- Phase 5 source-of-truth commit: **`05467ad`** on `main` (2026-04-28, "Refine Phase 5 spec with Archive-room aesthetic + 5-round codex arch review"). Supersedes the original bootstrap commit `bce56c0` (2026-04-27). All M1+ chunks reference `05467ad`. The original `bce56c0` is preserved in history but no longer the freeze SHA — the refinement landed before any implementation chunk dispatched, so the freeze contract was renewed cleanly.
 
 ## Task Invocation Block (resolved)
 
@@ -59,8 +59,8 @@
 
 ## Current Snapshot
 
-- Date: 2026-04-27
-- Status: **Phase 5 bootstrap (Chunk A) in progress.** Spec written + frozen at this commit's SHA; progress log seeded with task invocation block. Awaiting M1 planner dispatch.
+- Date: 2026-04-28
+- Status: **Phase 5 spec refinement complete (Chunk A revised).** Spec re-bootstrapped at `05467ad` after a /frontend-design pass added the Archive-room aesthetic + 5 rounds of `codex exec` architecture review. Codex final verdict: APPROVED-WITH-NITS, all nits resolved. Awaiting M1 planner dispatch.
 - Repo state going into Phase 5:
   - Frontend at `apps/frontend/` is Bun + Vite + React + TS only. Phase 4 closed at `f97181d` with: unified inspection list (`SessionsTable.tsx` 8 columns), filters / sort / search / pagination + sticky action bar + toast queue, modal `<Drawer>` (native `<dialog>` + `focus-trap-react` from M4 E1) hosting `SessionDetail.tsx` (18-field metadata `<dl>` + raw-NDJSON preview block via `streamSessionRaw` + `consumeRawPreview`), 8 feature-local sibling CSS files (per-component pattern from M6 retirement of `app.css`).
   - Cascade order in `main.tsx`: `reset.css → tokens.css → global.css → feature-local sibling sheets`.
@@ -94,7 +94,9 @@
 ## Completed Work Log
 
 - 2026-04-27: bootstrapped `progress/phase-5.progress.md`; resolved the Phase 5 invocation block from `working/phase-5.md`; verified tooling (`codex exec` `0.125.0`, `claude` `2.1.119`, `bun` `1.3.13`); inventoried current frontend state (17 unit-test files / 231 tests / 891 expects post-Phase-4 close; 1 Playwright spec); registered milestone task tracking. No code change yet — Chunk A is purely the spec + log scaffold.
-- 2026-04-27: Chunk A complete — committed `working/phase-5.md` + `progress/phase-5.progress.md` as `bce56c0` on `main` ("Add Phase 5 planning doc and bootstrap progress log"). This fixes the source-of-truth SHA all Phase 5 reviewers cite. Spec content is the ~700-line implementation plan covering six milestones (M1 layout shell + URL sync + compact list, M2 Tabs primitive + SessionView shell + Metadata tab, M3 per-tool parsers + buildSkim + truth tables, M4 TranscriptView, M5 SkimView with four block kinds, M6 cleanup + 8-doc sweep + WCAG). No code change. Note: `components/collector-runtime/src/adapters/codex.rs` + `tests/parsers.rs` had unrelated user/tool-driven modifications in the working tree at Chunk A time (handling forked Codex sessions); coordinator deliberately left them unstaged (protected paths + outside Phase 5 scope) and surfaced them to the human for separate disposition.
+- 2026-04-27: Chunk A complete — committed `working/phase-5.md` + `progress/phase-5.progress.md` as `bce56c0` on `main` ("Add Phase 5 planning doc and bootstrap progress log"). This fixes the source-of-truth SHA all Phase 5 reviewers cite. Spec content is the ~700-line implementation plan covering six milestones (M1 layout shell + URL sync + compact list, M2 Tabs primitive + SessionView shell + Metadata tab, M3 per-tool parsers + buildSkim + truth tables, M4 TranscriptView, M5 SkimView with four block kinds, M6 cleanup + 8-doc sweep + WCAG). No code change. Note: `components/collector-runtime/src/adapters/codex.rs` + `tests/parsers.rs` had unrelated user/tool-driven modifications in the working tree at Chunk A time (handling forked Codex sessions); coordinator deliberately left them unstaged (protected paths + outside Phase 5 scope) and surfaced them to the human for separate disposition. Those changes were subsequently committed by the user as `422f164` ("Fix Codex forked session parsing") on 2026-04-27; not tracked further by Phase 5 bookkeeping.
+
+- 2026-04-28: Chunk A revised — committed `working/phase-5.md` as `05467ad` on `main` ("Refine Phase 5 spec with Archive-room aesthetic + 5-round codex arch review"). Triggered by `/frontend-design` invocation against the Chunk A spec to (a) add an intentional UI/UX direction the original spec lacked, and (b) loop `codex exec` architecture review until codex agreed. Spec delta: 664 → 1178 lines (+669 / -155), 21 → 24 top-level sections (added §Design Language, §Motion & Micro-interactions, §State handling for parsed-content tabs). Resolved Decisions count: 9 → 20. Major UI/UX additions: Archive-room aesthetic with Fraunces (self-hosted variable serif, ~80 KB) + system sans + JetBrains Mono; oklch color tokens with hex `@supports` fallback; six enumerated signature details; motion budget table with reduced-motion zero-out. Major architecture additions: `MessageKind = "boundary"`; `lineOrdinal` vs `messageIndex` split; ParserOutput / StreamMeta separation; PARSERS registry; useParsedSession in-flight coalescing + LRU(5) + cacheEpoch invalidation; lazy `visitedTabs` mounting; corrected Codex field paths (top-level `"type"`, anchor principle for response_item↔event_msg dedup); URL state coordination spelled out; default-tab progression M2=Metadata → M4=Transcript. Codex review converged across 5 rounds (round 1: 7B+8SF+3N → round 2: 5B+6SF+3N → round 3: 2B+6SF+1N → round 4: 2B+3SF+2N → round 5: APPROVED-WITH-NITS, 3 nits resolved). Codex review artifacts at `/tmp/codex-phase-5-arch-review-v{1,2,3}.md`. No code change. Original `bce56c0` is preserved in history but no longer the freeze SHA. The refinement landed BEFORE any implementation chunk dispatched, so the freeze contract was renewed cleanly without invalidating prior reviewer work.
 
 ## Review Log
 
@@ -103,6 +105,7 @@
 ## External Reviewer Availability Log
 
 - 2026-04-27: `codex exec` confirmed available at `codex-cli 0.125.0`. No invocations yet at session start.
+- 2026-04-28: `codex exec` invoked 5 times during Chunk A revision (`/frontend-design` flow). Round 1 (7B+8SF+3N) → Round 2 (5B+6SF+3N) → Round 3 (2B+6SF+1N) → Round 4 (2B+3SF+2N) → Round 5 (APPROVED-WITH-NITS, all nits resolved). All five reviews scoped to architecture only (aesthetics excluded by prompt). Codex caught: `useParsedSession` keying by rowKey instead of storedSessionUid (would break for source-only rows); tab panels mounting all-at-once (would prematurely trigger 5 MB fetch); Codex field paths typo (`record_type` should be `type`); `response_item.message` ↔ `event_msg.user_message` duplicate; in-flight fetch coalescing missing; `boundary` MessageKind in TranscriptView missing; `streamRawText` totalBytes missing; buildSkim accumulator state confusion; many cross-section consistency drift items. Round 4 + Round 5 hit network-related hangs requiring re-dispatch. The convergence pattern (each round caught fewer issues + smaller categories) is itself evidence that the spec is in good shape.
 
 ## Protected-Path Exception Log
 
@@ -122,8 +125,11 @@
 
 ## Next Recommended Task
 
-- **Chunk A close + Milestone 1 planner dispatch**: after Chunk A's two commits land (impl + log SHA update), dispatch the M1 planner subagent (Plan agent) to propose 1–3 tractable chunks for Milestone 1 (layout shell + URL sync + compact list compression). The planner brief should reference this progress log's "Active Plan" + "Remaining Milestones" sections + the spec's §Milestone 1 DoD bullets, and resolve open questions like:
-  - Where does `selectedRowKey` live (`App.tsx` vs `SessionsView.tsx`)?
-  - Is M1 a single-shot chunk, or does the layout restructure split into M1a (CSS Grid + url sync hook) + M1b (column compression + row-click + vestigial drawer link)?
-  - Does M1 add the `<details>` filter wrapper for narrow viewports, or defer to a later milestone?
+- **Milestone 1 planner dispatch**: Chunk A refinement is closed (spec at `05467ad`, this log update follows). Dispatch the M1 planner subagent (Plan agent) to propose 1–3 tractable chunks for Milestone 1 (layout shell + URL sync + compact list compression). The planner brief should reference this progress log's "Active Plan" + "Remaining Milestones" sections + the spec's §Milestone 1 DoD bullets.
+- **Open questions for M1 planner** (most are now resolved in spec; only one remains genuinely planner-discretion):
+  - Selection ownership: RESOLVED — `App.tsx` per Resolved Decision #20.
+  - Is M1 a single-shot chunk, or does the layout restructure split into M1a (CSS Grid + url sync hook + Design-Language tokens land) + M1b (column compression + row-click + vestigial drawer link)? — **planner-discretion**; the spec doesn't dictate.
+  - Does M1 add the `<details>` filter wrapper for narrow viewports, or defer to a later milestone? — Spec includes `<details>` wrapping at < 1100 px in the M1 scope (§Filter bar placement); planner confirms.
+  - Does M1 land the Design-Language tokens (typography, motion, surface) into `tokens.css`, or does that wait for M2? — Spec says M2 ships tokens (§Design Language → "M2 ships the @font-face rule + the fallback wiring"), so M1 only adds the structural literals listed in the M1 row of §Design Tokens. Planner confirms.
 - **Bun-first reminder**: rule from feedback memory still applies. No `child_process`, no `jest.fn()`, no `npm`/`node`.
+- **Three-reviewer rule**: M1 dispatch follows the standard backend-protection Claude + normal Claude + Codex external pattern per `coordinator-prompt.md`. Per-chunk Codex catches average ≥ 2 rounds (Phase 4 precedent + the Chunk A refinement's 5 rounds confirms).
