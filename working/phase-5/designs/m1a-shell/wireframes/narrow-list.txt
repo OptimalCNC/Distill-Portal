@@ -1,0 +1,44 @@
+Phase 5 / M1a — narrow viewport (< 900 px), narrowMode = "list".
+
+Single-column stacked layout. Only the list pane is visible. The
+session pane is `display: none` (still React-mounted to preserve its
+internal state — scroll position, future tab state).
+
+The hairline gutter is GONE (only one pane is visible; nothing to
+gutter against). Spec §Inspection Surface Layout line 497 + line
+510-511.
+
+  +============================ <main class="split-pane"
+  |                              data-narrow-mode="list"> =====+
+  |                                                            |
+  |  <aside class="list-pane" aria-label="Sessions list">      |
+  |  -----------------------------------------------------     |
+  |  Filters strip (M1a unchanged from Phase 4)                |
+  |    [Title…]  [Tool ▾]  [Project ▾]  [Status ▾]  [Imp ☐]    |
+  |  -----------------------------------------------------     |
+  |  ┌─[ ]──Status────Tool───Title──────────Project──Updated┐  |
+  |  │ [ ] up-to-date  cc  Refactor mergeS…  distill   12m  │  |
+  |  │ [ ] outdated  cdx   Phase 5 spec…     distill    2h  │  |
+  |  │ >> selected row, aria-current="true"                 │  |
+  |  │ [ ] not-stored cc  (untitled)         scratch    yes │  |
+  |  │ …                                                    │  |
+  |  └──────────────────────────────────────────────────────┘  |
+  |                                                            |
+  |  Pagination, Action bar (Phase-4 baseline)                 |
+  |                                                            |
+  |     << session pane is display:none here; not rendered. >> |
+  |                                                            |
+  +============================================================+
+
+
+Notes:
+  - Default narrowMode on first mount: "list".
+  - Tapping a row sets narrowMode = "session" (transitions to the
+    next wireframe, narrow-session.txt) and sets `selectedRowKey`.
+    Both happen synchronously in the same React update.
+  - The list pane has NO `border-right` here (the rule fires only
+    above 900 px).
+  - Selected-row treatment is identical to wide viewport — the user
+    sees which row is "current" even when the session pane isn't on
+    screen. This is the key Phase-5-vs-Phase-4 affordance: the user
+    can return to the session pane without re-clicking the row.

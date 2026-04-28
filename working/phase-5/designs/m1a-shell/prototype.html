@@ -1,0 +1,880 @@
+<!--
+  Phase 5 / M1a — split-pane shell working prototype.
+
+  Reference-only artifact. The developer re-implements against
+  React + per-component sibling CSS. Open this file directly in any
+  browser; no build step. The state-picker at the top exercises every
+  M1a state/variant the implementation must cover.
+
+  All structural literals match working/phase-5.md @ 05467ad.
+  All tokens used here are Phase-4 baseline:
+    --color-bg, --color-surface, --color-surface-raised,
+    --color-border, --color-border-strong,
+    --color-text, --color-text-muted,
+    --color-accent.
+  M1a adds NO new tokens. Hex literals appear ONLY in :root (token
+  declarations); every other value is var(--token) or color-mix
+  recipe.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Phase 5 / M1a — split-pane shell prototype</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* ---------------------------------------------------------------
+     * Reset (mirrors apps/frontend/src/styles/reset.css).
+     * --------------------------------------------------------------- */
+    *, *::before, *::after { box-sizing: border-box; }
+    html { color-scheme: light dark; }
+    body { margin: 0; }
+
+    /* ---------------------------------------------------------------
+     * Tokens (mirrors apps/frontend/src/styles/tokens.css verbatim
+     * — Phase-4 baseline, M1a does NOT add new tokens).
+     * --------------------------------------------------------------- */
+    :root {
+      --color-bg: #ffffff;
+      --color-surface: #f8f9fb;
+      --color-surface-raised: #ffffff;
+      --color-border: #e3e5ea;
+      --color-border-strong: #c8ccd4;
+      --color-text: #14161a;
+      --color-text-muted: #5a606b;
+      --color-accent: #2864d4;
+      --color-accent-hover: #1d4fa8;
+      --color-success: #1f7a4a;
+      --color-warn: #b86b07;
+      --color-error: #b13838;
+
+      --space-1: 0.25rem;
+      --space-2: 0.5rem;
+      --space-3: 0.75rem;
+      --space-4: 1rem;
+      --space-6: 1.5rem;
+      --space-8: 2rem;
+
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-lg: 12px;
+
+      --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --text-xs: 0.72rem;
+      --text-sm: 0.85rem;
+      --text-base: 0.95rem;
+      --text-lg: 1.15rem;
+      --text-xl: 1.35rem;
+      /* Phase 4 baseline tops at --text-xl; the empty-pane mark renders at --text-xl. The Phase 5 spec promotes --text-2xl: 2rem in M2 (typography token table); M1a does not introduce it. */
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-bg: #0f1115;
+        --color-surface: #151821;
+        --color-surface-raised: #1b1f2a;
+        --color-border: #262b36;
+        --color-border-strong: #3a404d;
+        --color-text: #e8eaef;
+        --color-text-muted: #9098a6;
+        --color-accent: #6da5ff;
+        --color-accent-hover: #8bbbff;
+        --color-success: #5fb68a;
+        --color-warn: #e0a75a;
+        --color-error: #e57d7d;
+      }
+    }
+
+    /* ---------------------------------------------------------------
+     * Global rules (mirrors apps/frontend/src/styles/global.css; the
+     * production prototype keeps its single-source body padding and
+     * 1400px max-width).
+     * --------------------------------------------------------------- */
+    body {
+      padding: var(--space-6);
+      font-family: var(--font-sans);
+      background: var(--color-bg);
+      color: var(--color-text);
+    }
+    code, kbd, samp, pre { font-family: var(--font-mono); }
+    h1 { margin: 0; }
+
+    /* The reduced-motion zero-out is the SINGLE rule M1a contributes
+     * to global.css. Reviewer / developer must match this verbatim. */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    /* ---------------------------------------------------------------
+     * Prototype-only chrome: state picker. Not part of the M1a
+     * deliverable — only exercises every state.
+     * --------------------------------------------------------------- */
+    .picker {
+      max-width: 1400px;
+      margin: 0 auto var(--space-4);
+      padding: var(--space-3) var(--space-4);
+      border: 1px dashed var(--color-border);
+      border-radius: var(--radius-md);
+      background: var(--color-surface);
+      font-size: var(--text-sm);
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: var(--space-3) var(--space-4);
+    }
+    .picker fieldset {
+      border: 0; padding: 0; margin: 0;
+      display: flex; flex-direction: column; gap: var(--space-1);
+    }
+    .picker legend {
+      font-weight: 600;
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--color-text-muted);
+      padding: 0 0 var(--space-1);
+    }
+    .picker label { display: flex; gap: var(--space-2); align-items: center; cursor: pointer; }
+    .picker .row { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+    .picker code {
+      font-size: var(--text-xs);
+      padding: 0 var(--space-1);
+      background: var(--color-surface-raised);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+    }
+    .picker .pill-button {
+      appearance: none;
+      cursor: pointer;
+      background: var(--color-surface-raised);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      padding: var(--space-1) var(--space-2);
+      font: inherit;
+      font-size: var(--text-xs);
+      color: var(--color-text);
+    }
+    .picker .pill-button:hover { border-color: var(--color-border-strong); }
+
+    /* ---------------------------------------------------------------
+     * Split-pane shell — the M1a deliverable starts here.
+     * --------------------------------------------------------------- */
+
+    /* Default: stacked (narrow). Spec line 502–504. */
+    .split-pane {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    /* Split-pane activates at >= 900 px. Spec line 506–508. */
+    @media (min-width: 900px) {
+      .split-pane {
+        grid-template-columns: minmax(300px, 380px) 1fr;
+      }
+    }
+
+    /* List pane — wraps in <aside aria-label="Sessions list">. */
+    .list-pane {
+      min-inline-size: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Hairline gutter (signature-detail #4) — only on wide viewports.
+     * 1px solid var(--color-border) on the right edge of the list pane.
+     * No grid-gap, no styled rail, no shadow. Spec line 497. */
+    @media (min-width: 900px) {
+      .list-pane {
+        border-right: 1px solid var(--color-border);
+      }
+    }
+
+    /* Narrow-viewport visibility rules (spec line 511, 597–611).
+     * Spec uses 899.98px to avoid the inclusive-vs-exclusive ambiguity
+     * at the boundary (line 516). */
+    @media (max-width: 899.98px) {
+      .split-pane[data-narrow-mode="session"] .list-pane { display: none; }
+      .split-pane[data-narrow-mode="list"] .session-pane { display: none; }
+    }
+
+    /* Session pane — wraps in <article>. Spec line 1121. */
+    .session-pane {
+      padding: var(--space-8) var(--space-6);
+      min-inline-size: 0;
+    }
+
+    /* "← Back to list" button: quiet text link. Visible only on
+     * stacked-narrow viewports when the session pane is visible.
+     * Spec lines 601–607 + 627. */
+    .back-to-list {
+      display: none;
+      appearance: none;
+      background: transparent;
+      border: 0;
+      padding: var(--space-1) var(--space-2);
+      margin: 0 0 var(--space-3) calc(-1 * var(--space-2));
+      color: var(--color-text-muted);
+      font: inherit;
+      font-size: var(--text-sm);
+      cursor: pointer;
+    }
+    .back-to-list:hover,
+    .back-to-list:focus-visible { color: var(--color-text); text-decoration: underline; }
+    .back-to-list:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+    @media (max-width: 899.98px) {
+      .split-pane[data-narrow-mode="session"] .back-to-list {
+        display: inline-block;
+      }
+    }
+
+    /* ---------------------------------------------------------------
+     * Right-pane state machine. Drives copy + visual treatment.
+     * data-state ∈ {empty, loading, ready-placeholder, session_not_found}
+     * --------------------------------------------------------------- */
+    .session-state {
+      max-width: 70ch;          /* editorial measure; M2 promotes to --measure */
+      margin: 0 auto;
+    }
+    .session-state[data-state] > * + * { margin-top: var(--space-3); }
+
+    /* Empty preface (spec lines 591–593). The mark glyph is a
+     * typographic ornament — text-only, no SVG asset, no icon
+     * library. Designer decision §6.1 in design.md. */
+    .empty-mark {
+      display: block;
+      text-align: center;
+      font-size: var(--text-xl);
+      font-weight: 200;
+      letter-spacing: 0.2em;
+      color: var(--color-text-muted);
+      margin-bottom: var(--space-4);
+      user-select: none;
+    }
+    .empty-prose-1 {
+      font-size: var(--text-lg);
+      color: var(--color-text);
+      line-height: 1.55;
+    }
+    .empty-prose-2 {
+      font-size: var(--text-base);
+      color: var(--color-text-muted);
+      line-height: 1.55;
+    }
+
+    /* Loading (data-state="loading"). Quiet single-line. */
+    .loading-line {
+      font-size: var(--text-sm);
+      color: var(--color-text-muted);
+      font-style: italic;
+    }
+
+    /* Ready placeholder (data-state="ready-placeholder").
+     * M1a only — M1b adds the vestigial Open detail button; M2
+     * replaces this with the tab strip. */
+    .placeholder-line {
+      font-size: var(--text-sm);
+      color: var(--color-text-muted);
+    }
+
+    /* session_not_found state. Two-line message + two quiet
+     * buttons (Clear selection / Try Rescan). */
+    .not-found-heading {
+      font-size: var(--text-lg);
+      color: var(--color-text);
+      margin: 0 0 var(--space-2);
+    }
+    .not-found-hint {
+      font-size: var(--text-sm);
+      color: var(--color-text-muted);
+      margin: 0 0 var(--space-4);
+    }
+    .not-found-actions {
+      display: flex;
+      gap: var(--space-2);
+    }
+    .quiet-button {
+      appearance: none;
+      cursor: pointer;
+      background: transparent;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      padding: var(--space-2) var(--space-3);
+      font: inherit;
+      font-size: var(--text-sm);
+      color: var(--color-text);
+    }
+    .quiet-button:hover { border-color: var(--color-border-strong); }
+    .quiet-button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+    /* ---------------------------------------------------------------
+     * List-pane chrome (Phase-4 baseline mock — minimum-fidelity
+     * replica of the live SessionsView so the M1a designer can show
+     * the selected-row treatment + deep-link pulse over a realistic
+     * list. NB: M1a does NOT compress the table to 4 columns; that's
+     * M1b. We're rendering 8 columns as Phase 4 ships them.)
+     * --------------------------------------------------------------- */
+    .filter-strip {
+      padding: var(--space-3) var(--space-4);
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-surface);
+      font-size: var(--text-sm);
+      color: var(--color-text-muted);
+      display: flex;
+      gap: var(--space-3);
+      flex-wrap: wrap;
+    }
+    .filter-strip strong {
+      color: var(--color-text);
+      font-weight: 500;
+      margin-right: var(--space-1);
+    }
+    .table-scroll {
+      overflow-x: auto;
+      flex: 1 1 auto;
+    }
+    table.sessions {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: var(--text-sm);
+    }
+    table.sessions th,
+    table.sessions td {
+      padding: var(--space-2) var(--space-3);
+      text-align: left;
+      border-bottom: 1px solid var(--color-border);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 24ch;
+    }
+    table.sessions th {
+      font-weight: 600;
+      color: var(--color-text-muted);
+      background: var(--color-surface);
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    table.sessions tbody tr {
+      cursor: pointer;
+      transition: background-color 80ms linear;
+    }
+
+    /* M1a row variants. These five rules are the load-bearing
+     * visual additions M1a makes to the existing table. They MUST
+     * survive the M1b 8→4 column compression unchanged. */
+    table.sessions tbody tr:hover {
+      background-color: color-mix(in srgb, var(--color-text) 4%, transparent);
+    }
+    table.sessions tbody tr[aria-current="true"] {
+      background-color: color-mix(in srgb, var(--color-accent) 8%, transparent);
+      box-shadow: inset 2px 0 0 var(--color-accent);
+    }
+    table.sessions tbody tr[aria-current="true"]:hover {
+      background-color: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    }
+    table.sessions tbody tr[data-deep-link="true"] {
+      animation: deep-link-pulse 600ms ease-out 1;
+    }
+    @keyframes deep-link-pulse {
+      0%   { background-color: color-mix(in srgb, var(--color-accent) 22%, transparent); }
+      100% { background-color: color-mix(in srgb, var(--color-accent)  8%, transparent); }
+    }
+
+    .pagination,
+    .action-bar {
+      padding: var(--space-3) var(--space-4);
+      border-top: 1px solid var(--color-border);
+      font-size: var(--text-sm);
+      color: var(--color-text-muted);
+    }
+    .action-bar { display: flex; gap: var(--space-3); align-items: center; }
+    .action-bar .grow { flex: 1 1 auto; }
+    .action-bar button.primary {
+      appearance: none;
+      cursor: pointer;
+      background: var(--color-accent);
+      color: var(--color-bg);
+      border: 1px solid var(--color-accent);
+      border-radius: var(--radius-sm);
+      padding: var(--space-2) var(--space-3);
+      font: inherit;
+      font-size: var(--text-sm);
+    }
+    .action-bar button.primary:hover { background: var(--color-accent-hover); border-color: var(--color-accent-hover); }
+
+    /* Status pill — Phase-4 baseline recipe, reused so the prototype
+     * looks like the running app. */
+    .pill {
+      display: inline-block;
+      padding: 2px var(--space-2);
+      border: 1px solid;
+      border-radius: var(--radius-sm);
+      font-size: var(--text-xs);
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      text-transform: lowercase;
+    }
+    .pill.up-to-date {
+      background: color-mix(in srgb, var(--color-success) 15%, var(--color-surface));
+      color: color-mix(in srgb, var(--color-success) 70%, var(--color-text));
+      border-color: color-mix(in srgb, var(--color-success) 35%, var(--color-surface));
+    }
+    .pill.outdated {
+      background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+      color: color-mix(in srgb, var(--color-warn) 70%, var(--color-text));
+      border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+    }
+    .pill.not-stored {
+      background: color-mix(in srgb, var(--color-accent) 15%, var(--color-surface));
+      color: color-mix(in srgb, var(--color-accent) 70%, var(--color-text));
+      border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-surface));
+    }
+
+    /* Mono text inside the table for rowKey + sourcePath. */
+    .mono-sm { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted); }
+
+    /* Section header inside the picker. */
+    h1 {
+      max-width: 1400px; margin: 0 auto var(--space-3);
+      font-size: var(--text-xl); font-weight: 600;
+    }
+    h1 .sub {
+      font-size: var(--text-sm); color: var(--color-text-muted);
+      font-weight: 400; margin-left: var(--space-2);
+    }
+
+    /* Outline the focused row and back-to-list button consistently. */
+    table.sessions tbody tr:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: -2px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Phase 5 / M1a — split-pane shell prototype<span class="sub">working/phase-5/designs/m1a-shell/prototype.html</span></h1>
+
+  <!-- ---------------------------------------------------------------
+    State picker. Not part of the M1a deliverable — exists only to
+    exercise every state/variant the implementation must cover.
+    ---------------------------------------------------------------- -->
+  <div class="picker" role="group" aria-label="Prototype state picker">
+    <fieldset>
+      <legend>Right-pane state</legend>
+      <label><input type="radio" name="state" value="empty" checked> empty (no selection)</label>
+      <label><input type="radio" name="state" value="loading"> loading</label>
+      <label><input type="radio" name="state" value="ready-placeholder"> ready-placeholder</label>
+      <label><input type="radio" name="state" value="session_not_found"> session_not_found</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Layout / narrow mode</legend>
+      <label><input type="radio" name="narrow" value="auto" checked> auto (resize to test ≥/&lt; 900 px)</label>
+      <label><input type="radio" name="narrow" value="list"> force narrow + list</label>
+      <label><input type="radio" name="narrow" value="session"> force narrow + session</label>
+      <p class="row" style="margin: var(--space-1) 0 0;">
+        Width: <code id="vw-readout">…</code>
+      </p>
+    </fieldset>
+
+    <fieldset>
+      <legend>List rows</legend>
+      <p class="row" style="margin:0;">
+        <button type="button" class="pill-button" id="btn-replay-pulse">Replay deep-link pulse</button>
+      </p>
+      <label><input type="checkbox" id="chk-no-selection"> Clear selection (right pane will reflect the chosen state)</label>
+      <p style="margin: var(--space-1) 0 0; font-size: var(--text-xs); color: var(--color-text-muted);">
+        Click any row to select it (also drives URL via <code>history.replaceState</code> in the real impl).
+        Esc clears selection. The deep-link pulse fires on initial load only — use the button to replay.
+      </p>
+    </fieldset>
+  </div>
+
+  <!-- ---------------------------------------------------------------
+    The M1a deliverable starts here.
+    --------------------------------------------------------------- -->
+  <main class="split-pane" data-narrow-mode="list" id="split-pane">
+
+    <!-- LIST PANE: <aside> landmark, hairline gutter (border-right). -->
+    <aside class="list-pane" aria-label="Sessions list">
+      <!-- Phase-4 chrome stays as-is in M1a. The filter strip, the
+           8-column table, the pagination strip, and the action bar
+           render exactly where Phase 4 puts them. M1b moves
+           Pagination + ActionBar into a sticky footer and compresses
+           the table to 4 columns; M1a leaves them. -->
+
+      <div class="filter-strip" role="region" aria-label="Filters (Phase-4 baseline; M1a does not change)">
+        <span><strong>Title:</strong> —</span>
+        <span><strong>Tool:</strong> all</span>
+        <span><strong>Project:</strong> all</span>
+        <span><strong>Status:</strong> all</span>
+        <span><strong>Importable only:</strong> off</span>
+      </div>
+
+      <div class="table-scroll">
+        <table class="sessions" aria-label="Sessions">
+          <thead>
+            <tr>
+              <th><input type="checkbox" aria-label="Select all importable" /></th>
+              <th>Status</th>
+              <th>Tool</th>
+              <th>Title</th>
+              <th>Project</th>
+              <th>Updated</th>
+              <th>Stored copy</th>
+              <th>Source path</th>
+            </tr>
+          </thead>
+          <tbody id="row-body">
+            <!-- Six mock rows. Click to select. The first row will
+                 deep-link-pulse on initial load (mimics the
+                 ?session=<rowKey> arrival path). -->
+            <tr data-row-key="row-1" data-deep-link="true" tabindex="0">
+              <td><input type="checkbox" aria-label="Select row" /></td>
+              <td><span class="pill up-to-date">up-to-date</span></td>
+              <td>claude_code</td>
+              <td>Refactor mergeSessions to drop the projection map<br/><span class="mono-sm">claude_code::abc123…</span></td>
+              <td>distill-portal</td>
+              <td title="2026-04-28T13:45:00Z">12 min ago</td>
+              <td>2026-04-28 13:45</td>
+              <td title=".../claude/projects/-distill-portal/sessions/2026-04-28-abc.jsonl">…/sessions/2026-04-28-abc.jsonl</td>
+            </tr>
+            <tr data-row-key="row-2" tabindex="0">
+              <td><input type="checkbox" aria-label="Select row" /></td>
+              <td><span class="pill outdated">outdated</span></td>
+              <td>codex</td>
+              <td>Phase 5 spec refinement loop<br/><span class="mono-sm">codex::def456…</span></td>
+              <td>distill-portal</td>
+              <td title="2026-04-28T11:20:00Z">2 h ago</td>
+              <td>2026-04-28 09:00</td>
+              <td title=".../codex/sessions/rollouts/2026-04-28-def.jsonl">…/rollouts/2026-04-28-def.jsonl</td>
+            </tr>
+            <tr data-row-key="row-3" tabindex="0">
+              <td><input type="checkbox" aria-label="Select row" /></td>
+              <td><span class="pill not-stored">not-stored</span></td>
+              <td>claude_code</td>
+              <td>(untitled)<br/><span class="mono-sm">claude_code::ghi789…</span></td>
+              <td>scratch-pad</td>
+              <td title="2026-04-27T22:11:00Z">yesterday</td>
+              <td>—</td>
+              <td title=".../claude/projects/scratch-pad/sessions/2026-04-27-ghi.jsonl">…/sessions/2026-04-27-ghi.jsonl</td>
+            </tr>
+            <tr data-row-key="row-4" tabindex="0">
+              <td><input type="checkbox" aria-label="Select row" /></td>
+              <td><span class="pill up-to-date">up-to-date</span></td>
+              <td>claude_code</td>
+              <td>Investigate Codex forked session adapter<br/><span class="mono-sm">claude_code::jkl012…</span></td>
+              <td>distill-portal</td>
+              <td title="2026-04-27T15:42:00Z">yesterday</td>
+              <td>2026-04-27 15:42</td>
+              <td title=".../claude/projects/-distill-portal/sessions/2026-04-27-jkl.jsonl">…/sessions/2026-04-27-jkl.jsonl</td>
+            </tr>
+            <tr data-row-key="row-5" tabindex="0">
+              <td><input type="checkbox" aria-label="Select row" /></td>
+              <td><span class="pill outdated">outdated</span></td>
+              <td>codex</td>
+              <td>Skim view brainstorm — block kinds<br/><span class="mono-sm">codex::mno345…</span></td>
+              <td>distill-portal</td>
+              <td title="2026-04-26T20:08:00Z">2 days ago</td>
+              <td>2026-04-26 14:00</td>
+              <td title=".../codex/sessions/rollouts/2026-04-26-mno.jsonl">…/rollouts/2026-04-26-mno.jsonl</td>
+            </tr>
+            <tr data-row-key="row-6" tabindex="0">
+              <td><input type="checkbox" aria-label="Select row" /></td>
+              <td><span class="pill up-to-date">up-to-date</span></td>
+              <td>claude_code</td>
+              <td>Phase 4 wrap-up + retro<br/><span class="mono-sm">claude_code::pqr678…</span></td>
+              <td>distill-portal</td>
+              <td title="2026-04-25T10:00:00Z">3 days ago</td>
+              <td>2026-04-25 10:00</td>
+              <td title=".../claude/projects/-distill-portal/sessions/2026-04-25-pqr.jsonl">…/sessions/2026-04-25-pqr.jsonl</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pagination">Showing 1–6 of 6 · 50 / 100 / 200 per page</div>
+
+      <div class="action-bar">
+        <span class="grow"><strong>0 selected</strong> · last rescan from this browser 14 min ago</span>
+        <button type="button" class="primary">Rescan</button>
+        <button type="button" class="primary" style="opacity:0.5">Import</button>
+      </div>
+    </aside>
+
+    <!-- SESSION PANE: <article> landmark, data-state-driven. -->
+    <article class="session-pane" data-state="empty" id="session-pane" aria-busy="false" aria-live="polite">
+
+      <!-- Quiet text-link, only renders on stacked-narrow + narrowMode=session. -->
+      <button type="button" class="back-to-list" id="btn-back-to-list">← Back to list</button>
+
+      <div class="session-state" data-state="empty" id="session-state-host">
+        <!-- The state-host's children are swapped on state change.
+             Each state below is rendered as a single direct child of
+             .session-state. The data-state attribute mirrors the
+             attribute on .session-pane for CSS targeting. -->
+      </div>
+    </article>
+
+  </main>
+
+  <!-- ---------------------------------------------------------------
+    Prototype JS. Pure vanilla; no framework. The developer
+    re-implements this state machine in React (App.tsx +
+    useSelectedSession + SessionView.tsx). Annotated with the React
+    equivalents so the developer can map by inspection.
+    --------------------------------------------------------------- -->
+  <script>
+    (function () {
+      "use strict";
+
+      // Local state. In the real impl:
+      //   selectedRowKey     -> useSelectedSession() in App.tsx
+      //   pendingDeepLinkPulseRowKey -> App.tsx state
+      //   narrowMode         -> App.tsx state ("list"|"session")
+      //   session-pane state -> derived from selectedRowKey + fetch states
+      const state = {
+        selectedRowKey: null,         // null until first click
+        rightPaneState: "empty",      // empty | loading | ready-placeholder | session_not_found
+        narrowOverride: "auto",       // "auto" | "list" | "session" — picker-only
+        deepLinkRowKey: "row-1",      // simulates ?session=row-1 on initial load
+      };
+
+      const splitPane = document.getElementById("split-pane");
+      const sessionPane = document.getElementById("session-pane");
+      const stateHost = document.getElementById("session-state-host");
+      const rowBody = document.getElementById("row-body");
+      const vwReadout = document.getElementById("vw-readout");
+      const chkNoSelection = document.getElementById("chk-no-selection");
+
+      // ---- Render the right-pane state. ---------------------------
+      function renderRightPane() {
+        const s = state.rightPaneState;
+        sessionPane.setAttribute("data-state", s);
+        sessionPane.setAttribute("aria-busy", s === "loading" ? "true" : "false");
+        stateHost.setAttribute("data-state", s);
+        stateHost.innerHTML = "";
+
+        if (s === "empty") {
+          stateHost.innerHTML = `
+            <span class="empty-mark" aria-hidden="true">·</span>
+            <p class="empty-prose-1">Select a session from the list to view its content.</p>
+            <p class="empty-prose-2">The session view shows the full Transcript chronologically, a Skim outline (one block per user message), the Raw NDJSON for verification, and the session's Metadata.</p>
+          `;
+        } else if (s === "loading") {
+          stateHost.innerHTML = `
+            <p class="loading-line">Reading session…</p>
+          `;
+        } else if (s === "ready-placeholder") {
+          stateHost.innerHTML = `
+            <p class="placeholder-line">Session view coming in Milestone 2.</p>
+          `;
+        } else if (s === "session_not_found") {
+          stateHost.innerHTML = `
+            <h2 class="not-found-heading">Session not found in current view</h2>
+            <p class="not-found-hint">The session referenced by the URL was not in the merged set after the latest scan.</p>
+            <div class="not-found-actions">
+              <button type="button" class="quiet-button" id="btn-clear-selection">Clear selection</button>
+              <button type="button" class="quiet-button" id="btn-try-rescan">Try Rescan</button>
+            </div>
+          `;
+          // Wire the buttons.
+          stateHost.querySelector("#btn-clear-selection").addEventListener("click", () => {
+            // Real impl: selectRow(null) — clears selection + URL.
+            chkNoSelection.checked = true;
+            applyPickerSelection();
+          });
+          stateHost.querySelector("#btn-try-rescan").addEventListener("click", () => {
+            // Real impl: refetchAll(); for the prototype, just demonstrate
+            // by switching to "loading" then back to "ready-placeholder" after a beat.
+            setRightPaneState("loading");
+            setTimeout(() => setRightPaneState("ready-placeholder"), 700);
+          });
+        }
+      }
+
+      function setRightPaneState(next) {
+        state.rightPaneState = next;
+        renderRightPane();
+      }
+
+      // ---- Selection (drives narrow-mode toggle). ----------------
+      function selectRow(rowKey) {
+        state.selectedRowKey = rowKey;
+        // Reflect aria-current.
+        Array.from(rowBody.querySelectorAll("tr")).forEach((tr) => {
+          if (tr.getAttribute("data-row-key") === rowKey) {
+            tr.setAttribute("aria-current", "true");
+          } else {
+            tr.removeAttribute("aria-current");
+          }
+        });
+        // Update URL via History API. In real impl this is buildUrl(key).
+        try {
+          const url = new URL(window.location.href);
+          if (rowKey === null) url.searchParams.delete("session");
+          else url.searchParams.set("session", rowKey);
+          window.history.replaceState(null, "", url.toString());
+        } catch (e) { /* file:// — ignore */ }
+
+        // On click-driven selection, narrow-mode flips to "session".
+        if (rowKey !== null && state.narrowOverride === "auto") {
+          splitPane.setAttribute("data-narrow-mode", "session");
+        }
+
+        // Right-pane state derives from selection.
+        if (rowKey === null) setRightPaneState("empty");
+        else setRightPaneState("ready-placeholder");
+      }
+
+      function clearSelection() {
+        // Esc + "Clear selection" path. Resets narrow-mode to "list" too.
+        chkNoSelection.checked = true;
+        applyPickerSelection();
+        if (state.narrowOverride === "auto") {
+          splitPane.setAttribute("data-narrow-mode", "list");
+        }
+      }
+
+      // ---- Row click handler. ------------------------------------
+      rowBody.addEventListener("click", (e) => {
+        const target = e.target;
+        if (target instanceof HTMLInputElement && target.type === "checkbox") {
+          // Clicking the Select-cell checkbox MUST NOT mount the session.
+          // Phase-4 invariant; preserved in M1a.
+          return;
+        }
+        const tr = target instanceof Element ? target.closest("tr[data-row-key]") : null;
+        if (!tr) return;
+        chkNoSelection.checked = false;
+        selectRow(tr.getAttribute("data-row-key"));
+      });
+
+      rowBody.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          const tr = e.target instanceof Element ? e.target.closest("tr[data-row-key]") : null;
+          if (tr) {
+            e.preventDefault();
+            chkNoSelection.checked = false;
+            selectRow(tr.getAttribute("data-row-key"));
+          }
+        }
+      });
+
+      // ---- Esc handler. Scoped: ignored when focus is in editable. -
+      document.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        const t = e.target;
+        if (t instanceof Element) {
+          const tag = t.tagName.toLowerCase();
+          if (tag === "input" || tag === "textarea") return;
+          if (t.getAttribute("contenteditable") === "true") return;
+          if (t.getAttribute("role") === "combobox") return;
+        }
+        clearSelection();
+      });
+
+      // ---- Deep-link pulse cleanup. -------------------------------
+      // Real impl: row's onAnimationEnd handler clears
+      // pendingDeepLinkPulseRowKey OR a 2 s safety timer fires.
+      function wireDeepLinkPulseCleanup() {
+        const tr = rowBody.querySelector('tr[data-deep-link="true"]');
+        if (!tr) return;
+        const handler = () => {
+          tr.removeAttribute("data-deep-link");
+          tr.removeEventListener("animationend", handler);
+        };
+        tr.addEventListener("animationend", handler);
+        // 2 s safety net.
+        setTimeout(() => {
+          if (tr.hasAttribute("data-deep-link")) {
+            tr.removeAttribute("data-deep-link");
+          }
+        }, 2000);
+      }
+
+      // ---- Replay pulse (prototype only). -------------------------
+      document.getElementById("btn-replay-pulse").addEventListener("click", () => {
+        const tr = rowBody.querySelector(`tr[data-row-key="${state.deepLinkRowKey}"]`);
+        if (!tr) return;
+        // Toggle to retrigger the keyframe.
+        tr.removeAttribute("data-deep-link");
+        // Force reflow before re-adding so the animation re-fires.
+        // eslint-disable-next-line no-unused-expressions
+        void tr.offsetWidth;
+        tr.setAttribute("data-deep-link", "true");
+        wireDeepLinkPulseCleanup();
+      });
+
+      // ---- "← Back to list" handler. ------------------------------
+      document.getElementById("btn-back-to-list").addEventListener("click", () => {
+        // Sets narrowMode=list ONLY. Does NOT clear selectedRowKey or URL.
+        splitPane.setAttribute("data-narrow-mode", "list");
+      });
+
+      // ---- Picker wiring. ----------------------------------------
+      document.querySelectorAll('input[name="state"]').forEach((r) => {
+        r.addEventListener("change", () => {
+          if (r.checked) setRightPaneState(r.value);
+        });
+      });
+
+      function applyPickerSelection() {
+        // The "Clear selection" checkbox is a toggle; if checked,
+        // wipe selection and force the picker's chosen state.
+        if (chkNoSelection.checked) {
+          state.selectedRowKey = null;
+          Array.from(rowBody.querySelectorAll("tr")).forEach((tr) => {
+            tr.removeAttribute("aria-current");
+          });
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete("session");
+            window.history.replaceState(null, "", url.toString());
+          } catch (e) { /* file:// — ignore */ }
+        }
+      }
+      chkNoSelection.addEventListener("change", applyPickerSelection);
+
+      document.querySelectorAll('input[name="narrow"]').forEach((r) => {
+        r.addEventListener("change", () => {
+          if (!r.checked) return;
+          state.narrowOverride = r.value;
+          if (r.value === "list") splitPane.setAttribute("data-narrow-mode", "list");
+          else if (r.value === "session") splitPane.setAttribute("data-narrow-mode", "session");
+          // "auto": leave whatever the click flow set.
+        });
+      });
+
+      // Width readout for the picker.
+      function refreshVw() {
+        vwReadout.textContent = window.innerWidth + " px (" + (window.innerWidth >= 900 ? "wide / split" : "narrow / stacked") + ")";
+      }
+      window.addEventListener("resize", refreshVw);
+
+      // ---- Initial paint. ----------------------------------------
+      // Mimic the URL-driven mount path: the deep-link pulse fires on
+      // row-1 because data-deep-link="true" is already set in the
+      // markup. Selection state stays null until first click — but
+      // the prototype's initial state is "empty" right pane. The
+      // pulse fires regardless of selection, since spec line 585 says
+      // pulse triggers on URL-driven mount only and is independent of
+      // selection state.
+      wireDeepLinkPulseCleanup();
+      refreshVw();
+      renderRightPane();
+
+    })();
+  </script>
+
+</body>
+</html>

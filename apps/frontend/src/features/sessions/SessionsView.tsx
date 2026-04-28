@@ -98,6 +98,21 @@ export type SessionsViewProps = {
   rescanPending: boolean;
   /** Pinned-`now` ISO string used by the relative-time cell renderer. */
   now: string;
+  /** M1a: rowKey of the currently URL-selected session (passed
+   *  through to SessionsTable for `aria-current="true"` styling +
+   *  the selected-row visual treatment). */
+  selectedRowKey?: string | null;
+  /** M1a: setter for the URL-synced selection. Row click invokes
+   *  this in addition to opening the drawer (Phase-4 flow preserved
+   *  in M1a; M1b retires the drawer). */
+  onSelectRow?: (rowKey: string) => void;
+  /** M1a: rowKey of the row that should fire the deep-link pulse on
+   *  the next paint (URL-driven mount only — never click-driven). */
+  pendingDeepLinkPulseRowKey?: string | null;
+  /** M1a: notify the parent that the deep-link pulse animation has
+   *  ended on `rowKey` so the parent can clear
+   *  `pendingDeepLinkPulseRowKey`. */
+  onDeepLinkPulseEnd?: (rowKey: string) => void;
 };
 
 export function SessionsView({
@@ -122,6 +137,10 @@ export function SessionsView({
   onRescan,
   rescanPending,
   now,
+  selectedRowKey,
+  onSelectRow,
+  pendingDeepLinkPulseRowKey,
+  onDeepLinkPulseEnd,
 }: SessionsViewProps) {
   // Detail drawer state. `detailRowKey === null` -> closed; otherwise
   // the value is a `SessionRow.rowKey` (NOT a backend session_key —
@@ -282,6 +301,10 @@ export function SessionsView({
             onToggleAll={onToggleAll}
             now={now}
             onOpenDetail={handleOpenDetail}
+            selectedRowKey={selectedRowKey ?? null}
+            onSelectRow={onSelectRow}
+            pendingDeepLinkPulseRowKey={pendingDeepLinkPulseRowKey ?? null}
+            onDeepLinkPulseEnd={onDeepLinkPulseEnd}
           />
           <Pagination
             pageSize={pageSize}

@@ -1,0 +1,90 @@
+Phase 5 / M1a — right-pane state variants.
+
+The session pane (`<article class="session-pane">`) carries a
+`data-state` attribute that drives its visible content. Four M1a
+states. Each state is shown below as the right pane only — the list
+pane (and the hairline gutter) is omitted for clarity.
+
+
+╔══════════════════════════════════════════════════════════╗
+║   data-state="empty"                                     ║
+║   When: no selectedRowKey, no deep-link arrival.         ║
+╚══════════════════════════════════════════════════════════╝
+
+   +------------------------------------------------+
+   |                                                |
+   |                       ·                        |   ← typographic mark, --color-text-muted
+   |                                                |     middle-dot at --text-xl, weight 200
+   |                                                |
+   |   Select a session from the list to view its   |   ← spec line 591 verbatim
+   |   content.                                     |     --text-lg --color-text
+   |                                                |
+   |   The session view shows the full Transcript   |   ← spec line 593 verbatim
+   |   chronologically, a Skim outline (one block   |     --text-base --color-text-muted
+   |   per user message), the Raw NDJSON for        |
+   |   verification, and the session's Metadata.    |
+   |                                                |
+   +------------------------------------------------+
+
+
+╔══════════════════════════════════════════════════════════╗
+║   data-state="loading"   aria-busy="true"                ║
+║   When: selectedRowKey set AND any GET in flight AND     ║
+║         the row hasn't merged in yet.                    ║
+╚══════════════════════════════════════════════════════════╝
+
+   +------------------------------------------------+
+   |                                                |
+   |   Reading session…                             |   ← --text-sm --color-text-muted italic
+   |                                                |     no spinner; quiet by design
+   |                                                |
+   +------------------------------------------------+
+
+
+╔══════════════════════════════════════════════════════════╗
+║   data-state="ready-placeholder"                         ║
+║   When: row is selected, merged in, and tabs are not yet ║
+║         shipped (M1a is the only phase that lands here). ║
+╚══════════════════════════════════════════════════════════╝
+
+   +------------------------------------------------+
+   |                                                |
+   |   Session view coming in Milestone 2.          |   ← --text-sm --color-text-muted
+   |                                                |
+   |                                                |
+   +------------------------------------------------+
+
+   NB: M1a does NOT render the vestigial "Open detail" drawer button
+   here — that lands in M1b. The ready-placeholder state in M1a is
+   purely a "coming soon" line.
+
+
+╔══════════════════════════════════════════════════════════╗
+║   data-state="session_not_found"                         ║
+║   When: URL ?session=<rowKey> matches no row AFTER all   ║
+║         three GETs (source/stored/scan-errors) settled.  ║
+╚══════════════════════════════════════════════════════════╝
+
+   +------------------------------------------------+
+   |                                                |
+   |   Session not found in current view            |   ← --text-lg --color-text
+   |                                                |
+   |   The session referenced by the URL was not    |   ← --text-sm --color-text-muted
+   |   in the merged set after the latest scan.     |
+   |                                                |
+   |   ┌───────────────┐  ┌─────────────┐           |   ← quiet buttons
+   |   │ Clear         │  │ Try Rescan  │           |     1 px hairline border
+   |   │ selection     │  │             │           |     transparent fill
+   |   └───────────────┘  └─────────────┘           |     --text-sm --color-text
+   |                                                |
+   +------------------------------------------------+
+
+   - Clear selection → selectRow(null) → URL ?session= cleared
+                       → state flips to data-state="empty"
+   - Try Rescan       → calls App.tsx refetchAll() (Phase-4 hook)
+                       → state flips to data-state="loading" (briefly)
+                       → if Rescan finds the row, ready-placeholder
+                       → if Rescan still misses, session_not_found
+
+   The URL is NOT auto-cleared on missing-row arrival — preserves
+   the user's deep link in case Rescan finds the row (spec line 574).

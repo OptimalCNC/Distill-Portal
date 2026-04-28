@@ -1,0 +1,56 @@
+Phase 5 / M1a — narrow viewport (< 900 px), narrowMode = "session".
+
+Single-column stacked layout. Only the session pane is visible. The
+list pane is `display: none` (still React-mounted to preserve scroll
+position).
+
+The "← Back to list" quiet text link appears as the first child of
+the session pane, only on stacked-narrow viewports when narrowMode
+== "session".
+
+  +============================ <main class="split-pane"
+  |                              data-narrow-mode="session"> ==+
+  |                                                            |
+  |     << list pane is display:none here; not rendered. >>    |
+  |                                                            |
+  |  <article class="session-pane" data-state="ready-placeholder"
+  |           aria-live="polite">                              |
+  |                                                            |
+  |    ← Back to list                                          |
+  |    ^^^^^^^^^^^^^^^                                         |
+  |    quiet text link, --color-text-muted at rest             |
+  |    --color-text on hover/focus, no border, no fill         |
+  |                                                            |
+  |    Session view coming in Milestone 2.                     |
+  |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^                     |
+  |    placeholder copy in --color-text-muted                  |
+  |                                                            |
+  +============================================================+
+
+
+Notes:
+  - "← Back to list" sets narrowMode = "list" ONLY. Does NOT clear
+    `selectedRowKey` and does NOT clear the URL `?session=` param.
+    The list pane (returned to via the toggle) still shows the
+    selected row with aria-current="true", so re-tapping the row
+    brings the user back exactly where they left off.
+
+  - Esc is a DIFFERENT gesture (per Resolved Decision #17): it
+    fully clears the selection AND resets narrowMode to "list".
+    Distinguishes the lighter "step back" affordance from the
+    explicit "I'm done with this session" gesture.
+
+  - The session pane is `<article>`, not `<section>` (spec line
+    1121). It does NOT carry `role="main"` because <main> already
+    exists higher in the tree.
+
+  - `data-state` on the <article> drives both styling and the
+    visible state copy. M1a renders four states:
+       empty               (no selectedRowKey)
+       loading             (selectedRowKey set, GETs in flight)
+       ready-placeholder   (row is selected, M1a "coming soon")
+       session_not_found   (URL ?session= matches no row after settle)
+
+  - On wide viewports (>= 900 px), this entire view is irrelevant —
+    "Back to list" doesn't render, narrowMode is meaningless, both
+    panes always show side by side.

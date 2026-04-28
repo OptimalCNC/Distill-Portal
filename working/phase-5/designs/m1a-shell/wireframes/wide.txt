@@ -1,0 +1,57 @@
+Phase 5 / M1a — wide viewport (>= 900 px), max-width 1400 px centered.
+
+The single-line | between the panes is the hairline gutter
+(signature-detail #4): a 1 px line drawn as `border-right` on the
+list pane, color `var(--color-border)`. No grid-gap, no styled rail,
+no shadow.
+
+  +======================================== <main class="split-pane"> =======================================+
+  |                                                                                                          |
+  |  <aside class="list-pane"  aria-label="Sessions list">           |  <article class="session-pane"        |
+  |  -------------------------------------------------------         |     data-state="ready-placeholder"    |
+  |  Filters strip (Phase-4 baseline; M1a does not change it)        |     aria-live="polite">               |
+  |  Title  Tool  Project  Status  Importable                       _|_                                      |
+  |  -------------------------------------------------------       /   \      <-- 1 px hairline gutter       |
+  |  ┌─Select──Status──Tool─Title──────────Project────Updated┐    |   |          (border-right on .list-pane)|
+  |  │  [ ]   up-to-date  cc  Refactor merge…  distill   12m │    |   |                                      |
+  |  │  [ ]   outdated   cdx  Phase 5 spec…    distill    2h │    |   |                                      |
+  |  │ >> selected row carries aria-current="true"           │    |   |   Session view coming in              |
+  |  │ >> 2 px sienna inset on left + 8% accent tint bg      │    |   |   Milestone 2.                        |
+  |  │  [ ]   not-stored  cc  (untitled)        scratch  yest │    |   |                                      |
+  |  │  …                                                    │    |   |                                      |
+  |  └────────────────────────────────────────────────────────┘    |   |                                      |
+  |  -------------------------------------------------------         |                                        |
+  |  Pagination:  Showing 1-50 of 124   50 / 100 / 200 per page      |                                        |
+  |  -------------------------------------------------------         |                                        |
+  |  Action bar:  3 selected  ·  Rescan  Import                      |                                        |
+  |                                                                  |                                        |
+  +==================================================================+========================================+
+        ^   list pane    300 - 380 px column           ^                ^   session pane  flex    1fr column
+        |                                              |                |
+        |                                              |                +-- "<- Back to list" affordance is
+        |                                              |                    HIDDEN on wide viewports.
+        |                                              |
+        |                                              +-- hairline gutter, 1 px var(--color-border)
+        +-- min-inline-size 300 px, max-inline-size 380 px (CSS Grid minmax)
+
+
+Layout:
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) 1fr;
+  gap: 0;
+  max-width: 1400px;
+  margin: 0 auto;
+
+Notes:
+  - The list pane keeps the Phase-4 8-column table during M1a.
+    Compression to 4 columns lands in M1b. Note the design for the
+    selected-row treatment in M1a survives the M1b compression
+    unchanged because it targets `<tr aria-current="true">` (no
+    column-level CSS).
+
+  - The session pane sits above the right grid track with no border,
+    no background fill different from --color-bg. The hairline
+    gutter on the list pane carries the visual separation.
+
+  - Both panes are children of the same <main class="split-pane">
+    grid container. There is no extra wrapping <div>.

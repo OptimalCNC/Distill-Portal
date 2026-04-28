@@ -10,11 +10,15 @@
  *   - `body` — token-driven background, foreground, font-family,
  *     padding shell.
  *   - `code, kbd, samp, pre` — monospace font for inline code rendering.
- *   - `main` — page column cap (max-width: 1400px) plus vertical
- *     rhythm. The width literal is structural (the spec's quantized
- *     `--space-*` scale has no "page-column-cap" variant; promoting it
- *     to a token would be speculative for one consumer per the
- *     §Risks design-balloon mitigation).
+ *   - `main.split-pane` — Phase-5 split-pane CSS Grid shell. Above
+ *     900 px: `grid-template-columns: minmax(300px, 380px) 1fr`
+ *     (compact list left + reading content right). Below 900 px:
+ *     single column; the `data-narrow-mode` attribute on `<main>`
+ *     drives which pane is visible (the other stays React-mounted
+ *     so scroll/tab/disclosure state survives the toggle).
+ *   - `.list-pane` / `.session-pane` — visibility rules under the
+ *     narrow viewport @media query; the wide-viewport hairline gutter
+ *     is `border-right` on `.list-pane`.
  *   - `h1` — zeroed margin so the page title sits flush with the
  *     surrounding stack.
  *   - `.muted`, `.mono`, `.stack`, `.empty` — global text/structure
@@ -23,11 +27,23 @@
  *     are intentionally global because they have no single owning
  *     feature; they read like text-level mixins.
  *
+ * Phase 5 / M1a structural literals introduced here (matched against
+ * `working/phase-5.md` §Structural literals lines 926–946):
+ *   - `grid-template-columns: minmax(300px, 380px) 1fr` on `<main>` (M1)
+ *   - `@media (min-width: 900px)` for split-pane activation
+ *   - `@media (max-width: 899.98px)` for narrowMode visibility rules
+ *   - `1px solid var(--color-border)` split-pane hairline gutter
+ *   - `max-width: 1400px` page-column cap (Phase-4 baseline; preserved)
+ *
+ * The Phase-4 `<main>` recipe (`padding: 0 var(--space-4)`,
+ * `margin: var(--space-6) auto var(--space-8)`, `gap: var(--space-6)`)
+ * is REPLACED by the Phase-5 recipe per spec line 497. Only
+ * `body { padding: var(--space-6) }` carries over verbatim.
+ *
  * Phase 4 Milestone 6 history: when `app.css` was retired, the body
- * shell (`main { max-width: 1400px ...}`, `h1 { margin: 0 }`) and the
- * four utility classes (`.muted`, `.mono`, `.stack`, `.empty`) moved
- * here. Component- and feature-specific rules moved to sibling `.css`
- * files imported by the matching `.tsx`/`.ts`. See
+ * shell and the four utility classes (`.muted`, `.mono`, `.stack`,
+ * `.empty`) moved here. Component- and feature-specific rules moved
+ * to sibling `.css` files imported by the matching `.tsx`/`.ts`. See
  * `progress/phase-4.progress.md` Chunk G for the full migration map.
  */
 
@@ -45,13 +61,96 @@ pre {
   font-family: var(--font-mono);
 }
 
-main {
+/*
+ * Phase-5 split-pane shell. Default (and stacked-narrow) layout is
+ * single-column; the `@media (min-width: 900px)` rule below activates
+ * the side-by-side master-detail layout at exactly 900 px and up
+ * (matches the Acceptance Criterion at spec line 1084). The
+ * `899.98px` literal in the narrow-only rules avoids the inclusive-
+ * vs-exclusive ambiguity at the boundary (spec line 516).
+ */
+main.split-pane {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
   max-width: 1400px;
-  margin: var(--space-6) auto var(--space-8);
-  padding: 0 var(--space-4);
+  margin: 0 auto;
+  padding: 0;
+}
+
+@media (min-width: 900px) {
+  main.split-pane {
+    grid-template-columns: minmax(300px, 380px) 1fr;
+  }
+}
+
+/*
+ * The hairline gutter (signature-detail #4 — spec lines 60, 72) is a
+ * single 1 px line drawn as `border-right` on `.list-pane`. No grid-
+ * gap, no styled rail, no shadow — the hairline IS the only visual
+ * separation between panes. It only renders on wide viewports because
+ * the narrow-mode CSS (below) hides one of the panes; with only one
+ * pane visible there is nothing to gutter against.
+ */
+.list-pane {
+  min-inline-size: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+}
+
+@media (min-width: 900px) {
+  .list-pane {
+    border-right: 1px solid var(--color-border);
+  }
+}
+
+/*
+ * Narrow-viewport visibility. Both panes stay React-mounted so the
+ * SessionView's tab state + the list panel's scroll position survive
+ * the toggle (per spec line 599). The `data-narrow-mode` attribute on
+ * `<main>` drives which pane is visible; the other carries
+ * `display: none`.
+ */
+@media (max-width: 899.98px) {
+  main.split-pane[data-narrow-mode="session"] .list-pane {
+    display: none;
+  }
+  main.split-pane[data-narrow-mode="list"] .session-pane {
+    display: none;
+  }
+  /*
+   * "← Back to list" affordance — re-enables the quiet text-link button
+   * that `SessionView.css` declares with `display: none` by default.
+   * Visible only on narrow viewports AND when narrowMode === "session"
+   * (matches design.md §3.5 + spec acceptance item #24). This rule is
+   * co-located with the rest of the data-narrow-mode visibility rules
+   * (rather than in `SessionView.css`) so the pattern stays in one
+   * place and a future maintainer can audit the full narrow-mode
+   * surface in a single file.
+   */
+  main.split-pane[data-narrow-mode="session"] .back-to-list {
+    display: inline-block;
+  }
+}
+
+/*
+ * Reduced-motion zero-out. Spec lines 102–110 verbatim. This is the
+ * single global rule that suppresses every Phase-5 animation under
+ * `prefers-reduced-motion: reduce`: the M1a deep-link pulse, the M2
+ * tab indicator slide, the M4 transcript fade, the M5 skim-block
+ * stagger — all of them collapse to one paint frame. The signature
+ * noise-overlay (M2) is also decorative and disappears under this
+ * query.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 h1 {

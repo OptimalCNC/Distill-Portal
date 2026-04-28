@@ -429,5 +429,104 @@ test.describe.serial("inspection surface end-to-end", () => {
     await expect(lastRescanCaption).not.toHaveText(
       "last rescan from this browser —",
     );
+
+    // 12. Phase 5 / M1a: deep-link arrival via ?session=<rowKey>
+    //
+    //     Navigate directly to /?session=<FIXTURE_SESSION_KEY> and
+    //     assert:
+    //       - the right pane mounts under <article class="session-pane">
+    //         (data-state attribute reflects the current state — once
+    //         the row merges in it should be "ready-placeholder")
+    //       - the matched list row carries data-deep-link="true"
+    //         transiently during the 600 ms pulse animation (codex
+    //         M1a fix-up #4 — Option A: race against the pulse to
+    //         capture the transient attribute as browser-level
+    //         evidence that the pulse machinery actually fires)
+    //       - the data-deep-link attribute is REMOVED after the
+    //         pulse settles (either via onAnimationEnd or the 2 s
+    //         safety timer); aria-current="true" remains as the
+    //         stable post-pulse selection marker
+    //       - reload (page.reload) preserves the URL state and the
+    //         right-pane mount: the same row remains aria-current
+    //         after the reload.
+    //
+    //     Note: the existing drawer flow (steps 9 + 10) ALSO opens
+    //     when the user clicks a row — that's the M1a "Phase 4
+    //     drawer flow preserved" invariant. M1b will retire it.
+    //     Here we exercise the SEPARATE URL-driven path; the drawer
+    //     does NOT open from a deep-link arrival because no click
+    //     happens.
+    //
+    //     Cross-reference: the unit-level pulse-attribute behavior is
+    //     covered by App.test.tsx tests
+    //       - "M1a: URL-on-mount with ?session=<rowKey> pre-selects +
+    //          matched row carries data-deep-link='true'"
+    //       - "M1a: click-driven selection does NOT set data-deep-link='true'"
+    //       - "M1a: deep-link pulse clears via onAnimationEnd → data-
+    //          deep-link attribute is removed"
+    //     This e2e step is the browser-level cross-check for the
+    //     same machinery (codex round-1 blocking finding #4).
+    await page.goto(`/?session=${encodeURIComponent(FIXTURE_SESSION_KEY)}`);
+    await expect(
+      page.getByRole("heading", { name: "Distill Portal", level: 1 }),
+    ).toBeVisible();
+    // <article class="session-pane"> is in the DOM with a
+    // data-state attribute.
+    const sessionPane = page.locator("article.session-pane");
+    await expect(sessionPane).toHaveCount(1);
+    // Capture the matched row by aria-current first — this is the
+    // stable post-mount selector. Once it appears, the pulse is
+    // either in flight or just-finished; we then make a tight
+    // assertion against data-deep-link with a short timeout to
+    // catch the transient attribute. This mirrors the unit-test
+    // coverage in App.test.tsx (which uses happy-dom + immediate
+    // synchronous assertion); the e2e gives us the browser-level
+    // proof codex's M1a fix-up #4 asked for.
+    const matchedRow = page
+      .locator("tbody tr")
+      .filter({ has: page.locator(`text=${FIXTURE_SESSION_KEY}`) });
+    await expect(matchedRow).toBeVisible({ timeout: 5_000 });
+    // Transient pulse attribute. The pulse runs for 600 ms; the 2 s
+    // safety timer is the hard ceiling. A 1.5 s timeout for the
+    // "attribute is present" assertion is comfortably within the
+    // race window even if WebKit / fixture-server load takes a
+    // beat. If this turns out flaky in real Chromium the fix-up
+    // dispatch brief permits Option B (drop this assertion + add a
+    // cross-reference comment); the cross-reference comment above
+    // is already in place so the fallback is a one-line revert.
+    await expect(matchedRow).toHaveAttribute("data-deep-link", "true", {
+      timeout: 1_500,
+    });
+    // After the pulse settles (≤ 2 s safety timer + a small slack
+    // for the React render cycle), the data-deep-link attribute is
+    // removed. aria-current persists as the stable selection.
+    await expect(matchedRow).not.toHaveAttribute("data-deep-link", "true", {
+      timeout: 3_000,
+    });
+    // Once the row merges in, the data-state flips to
+    // "ready-placeholder". (M2 will swap this for the four-tab
+    // strip; M1a only renders the placeholder copy.)
+    await expect(sessionPane).toHaveAttribute(
+      "data-state",
+      "ready-placeholder",
+      { timeout: 5_000 },
+    );
+    // The matched row carries aria-current="true" after the pulse
+    // settles. aria-current is the stable post-pulse attribute.
+    const ariaCurrentRow = page.locator(`tr[aria-current="true"]`);
+    await expect(ariaCurrentRow).toBeVisible({ timeout: 5_000 });
+    await expect(ariaCurrentRow).toContainText(FIXTURE_SESSION_KEY);
+
+    // Reload the page; the URL state must survive and the same
+    // row must remain selected.
+    await page.reload();
+    await expect(sessionPane).toHaveAttribute(
+      "data-state",
+      "ready-placeholder",
+      { timeout: 5_000 },
+    );
+    await expect(
+      page.locator(`tr[aria-current="true"]`),
+    ).toContainText(FIXTURE_SESSION_KEY, { timeout: 5_000 });
   });
 });

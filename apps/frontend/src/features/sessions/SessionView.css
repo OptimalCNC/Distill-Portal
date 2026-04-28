@@ -1,0 +1,158 @@
+/*
+ * Feature-local CSS for the Phase-5 right-pane placeholder.
+ *
+ * Imported by `SessionView.tsx` (sibling-import convention; see
+ * `SessionsTable.css` header for rationale).
+ *
+ * Selectors owned here:
+ *   - `.session-pane`        → wrapping <article>; padding + min size
+ *   - `.session-state`       → readable measure for the state copy
+ *   - `.empty-mark`          → centered text glyph above the empty
+ *                              preface (typographic ornament)
+ *   - `.empty-prose-1` /
+ *     `.empty-prose-2`       → two-paragraph empty preface
+ *   - `.loading-line`        → quiet "Reading session…" line
+ *   - `.placeholder-line`    → quiet "Session view coming…" line
+ *   - `.not-found-heading` /
+ *     `.not-found-hint` /
+ *     `.not-found-actions` /
+ *     `.quiet-button`        → session_not_found state surface
+ *   - `.back-to-list`        → quiet text-link button (narrow only)
+ *
+ * Narrow-viewport visibility rules for `.list-pane` / `.session-pane`
+ * + the split-pane <main> Grid recipe live in `styles/global.css`
+ * because they govern the page-level layout, not this component's
+ * internal arrangement.
+ *
+ * Structural literals introduced by this file (M1a) are listed in
+ * the M1 row of `working/phase-5.md` §Structural literals (lines
+ * 926–946). All values that are NOT M1 structural literals are
+ * token-driven (`var(--…)`).
+ */
+
+.session-pane {
+  /* Generous, editorial padding. Spec §Spatial rhythm — reading
+   * content gets a comfortable inset; chrome stays denser. M2 may
+   * promote min-block-size: 60vh once tabs ship. */
+  padding: var(--space-8) var(--space-6);
+  min-inline-size: 0;
+  /* Wide-viewport gutter is `border-right` on `.list-pane` (set in
+   * global.css). The session pane carries no border — the hairline
+   * gutter is the single visual separator. */
+}
+
+.session-state {
+  max-width: 70ch;
+  margin: 0 auto;
+}
+.session-state[data-state] > * + * {
+  margin-top: var(--space-3);
+}
+
+/* Empty preface. The mark glyph is a typographic ornament: a single
+ * centered middle-dot in `var(--color-text-muted)` at `--text-xl`.
+ * `aria-hidden="true"` on the glyph in JSX (decorative). */
+.empty-mark {
+  display: block;
+  text-align: center;
+  font-size: var(--text-xl);
+  font-weight: 200;
+  letter-spacing: 0.2em;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-4);
+  user-select: none;
+}
+.empty-prose-1 {
+  font-size: var(--text-lg);
+  color: var(--color-text);
+  line-height: 1.55;
+  margin: 0;
+}
+.empty-prose-2 {
+  font-size: var(--text-base);
+  color: var(--color-text-muted);
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* Loading + ready-placeholder copies — both quiet single lines. */
+.loading-line {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
+  margin: 0;
+}
+.placeholder-line {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+/* session_not_found state. */
+.not-found-heading {
+  font-size: var(--text-lg);
+  color: var(--color-text);
+  margin: 0 0 var(--space-2);
+}
+.not-found-hint {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin: 0 0 var(--space-4);
+}
+.not-found-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* Quiet button: hairline border, transparent fill, token-driven
+ * focus ring. Used for both `Clear selection` / `Try Rescan` in the
+ * session_not_found state. */
+.quiet-button {
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+.quiet-button:hover {
+  border-color: var(--color-border-strong);
+}
+.quiet-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* "← Back to list" quiet text link. Visible only on stacked-narrow
+ * viewports when narrowMode === "session" — the `display: none`
+ * default here is re-enabled by the @media (max-width: 899.98px)
+ * override in `styles/global.css` (matched against
+ * `main.split-pane[data-narrow-mode="session"] .back-to-list`). Per
+ * Resolved Decision #17, this gesture sets narrowMode = "list" ONLY
+ * (preserves selectedRowKey + URL + scroll + tab state — the lighter
+ * "step back without losing the session" gesture; Esc is the heavier
+ * "fully clear selection" gesture). */
+.back-to-list {
+  display: none;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: var(--space-1) var(--space-2);
+  margin: 0 0 var(--space-3) calc(-1 * var(--space-2));
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.back-to-list:hover,
+.back-to-list:focus-visible {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+.back-to-list:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}

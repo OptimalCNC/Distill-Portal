@@ -2744,3 +2744,514 @@ test("M5: import-error Retry uses the LATEST handleImport (rescan-between-attemp
   );
   expect(secondBody.includes("claude_code:retry-B")).toBe(false);
 });
+
+// =============================================================
+// Phase 5 / M1a: split-pane shell + URL-synced selection.
+// =============================================================
+//
+// Tests added per the M1a chunk dispatch brief. They cover:
+//   - split-pane mounts: <aside> + <article> landmarks both rendered
+//   - URL-on-mount: ?session=foo pre-selects on initial render
+//   - popstate round trip: dispatching popstate after URL changes
+//     updates the right-pane content
+//   - global Esc clears selection AND removes ?session= AND IS
+//     IGNORED when focus is in the search input
+//   - deep-link pulse: matched row carries data-deep-link="true"
+//     only on URL-driven mount; click-driven selection does NOT
+//     carry the attribute
+//   - deep-link pulse cleanup: simulating onAnimationEnd OR the
+//     2 s safety timer clears pendingDeepLinkPulseRowKey
+//
+// All tests reset `window.location` between runs so the URL
+// state from one test does not bleed forward.
+
+const M1A_SOURCE_FIXTURE: SourceSessionView[] = [
+  {
+    session_key: "claude_code:m1a-1",
+    tool: "claude_code",
+    source_session_id: "m1a-1",
+    source_path: "/tmp/m1a/1.jsonl",
+    source_fingerprint: "fp-m1a-1",
+    created_at: "2026-04-22T00:00:00Z",
+    source_updated_at: "2026-04-22T00:00:00Z",
+    project_path: "/tmp/m1a",
+    title: "M1a row 1",
+    has_subagent_sidecars: false,
+    status: "not_stored",
+    session_uid: null,
+    stored_ingested_at: null,
+  },
+  {
+    session_key: "claude_code:m1a-2",
+    tool: "claude_code",
+    source_session_id: "m1a-2",
+    source_path: "/tmp/m1a/2.jsonl",
+    source_fingerprint: "fp-m1a-2",
+    created_at: "2026-04-22T00:00:00Z",
+    source_updated_at: "2026-04-22T00:00:00Z",
+    project_path: "/tmp/m1a",
+    title: "M1a row 2",
+    has_subagent_sidecars: false,
+    status: "not_stored",
+    session_uid: null,
+    stored_ingested_at: null,
+  },
+];
+
+function resetUrl() {
+  // Clear any leftover ?session=... from a prior test so this run
+  // starts with a known location.
+  window.history.replaceState(null, "", "/");
+}
+
+function makeM1aFetchMock() {
+  return mock(
+    async (input: Request | string | URL): Promise<Response> => {
+      const url = urlOf(input);
+      if (url === SOURCE_SESSIONS_PATH)
+        return jsonResponse(M1A_SOURCE_FIXTURE);
+      if (url === STORED_SESSIONS_PATH) return jsonResponse([]);
+      if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      return new Response(`unexpected url ${url}`, { status: 404 });
+    },
+  );
+}
+
+test("M1a: split-pane mounts both landmarks (<aside> list-pane + <article> session-pane)", async () => {
+  resetUrl();
+  globalThis.fetch =
+    makeM1aFetchMock() as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:m1a-1");
+  // <main class="split-pane"> wraps both panes.
+  const splitMain = container.querySelector("main.split-pane");
+  expect(splitMain).not.toBeNull();
+  // List landmark.
+  const listAside = container.querySelector(
+    'aside.list-pane[aria-label="Sessions list"]',
+  );
+  expect(listAside).not.toBeNull();
+  // Session landmark.
+  const sessionArticle = container.querySelector("article.session-pane");
+  expect(sessionArticle).not.toBeNull();
+  // No selection on initial mount → empty state.
+  expect(sessionArticle?.getAttribute("data-state")).toBe("empty");
+  // Empty preface copy (verbatim spec lines 591–593).
+  expect(
+    container.textContent?.includes(
+      "Select a session from the list to view its content.",
+    ),
+  ).toBe(true);
+});
+
+test("M1a: URL-on-mount with ?session=<rowKey> pre-selects + matched row carries data-deep-link='true'", async () => {
+  resetUrl();
+  // Pre-seed the URL BEFORE mounting App. The hook reads
+  // URLSearchParams on mount.
+  window.history.replaceState(null, "", "/?session=claude_code:m1a-1");
+  globalThis.fetch =
+    makeM1aFetchMock() as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  // The matched row must render with aria-current + data-deep-link
+  // for the duration of the pulse.
+  await waitFor(() => {
+    const matched = container.querySelector(
+      'tbody tr[aria-current="true"]',
+    );
+    expect(matched).not.toBeNull();
+  });
+  const matched = container.querySelector(
+    'tbody tr[aria-current="true"]',
+  );
+  // The row's text content should include the matching session key.
+  expect(matched?.textContent?.includes("claude_code:m1a-1")).toBe(true);
+  // data-deep-link is the M1a pulse attribute. Click-driven
+  // selection NEVER carries it; URL-driven mount does.
+  expect(matched?.getAttribute("data-deep-link")).toBe("true");
+  // Right pane state is "ready-placeholder" once the row merged in.
+  await waitFor(() => {
+    const article = container.querySelector("article.session-pane");
+    expect(article?.getAttribute("data-state")).toBe("ready-placeholder");
+  });
+});
+
+test("M1a: click-driven selection does NOT set data-deep-link='true'", async () => {
+  resetUrl();
+  globalThis.fetch =
+    makeM1aFetchMock() as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:m1a-1");
+  // No row carries data-deep-link before any click.
+  expect(
+    container.querySelector('tbody tr[data-deep-link="true"]'),
+  ).toBeNull();
+  // Click the title cell of the first row (NOT the checkbox cell —
+  // the checkbox-cell guard short-circuits the row open).
+  const tr = container.querySelector(
+    "tbody tr",
+  ) as HTMLTableRowElement | null;
+  expect(tr).not.toBeNull();
+  const titleCell = tr!.querySelector("td.stack") as HTMLTableCellElement;
+  await act(async () => {
+    titleCell.click();
+  });
+  // Selected row exists (aria-current="true") but data-deep-link is
+  // NOT set — the pulse mechanism is URL-driven only.
+  const selected = container.querySelector(
+    'tbody tr[aria-current="true"]',
+  );
+  expect(selected).not.toBeNull();
+  expect(selected?.getAttribute("data-deep-link")).toBeNull();
+});
+
+test("M1a: deep-link pulse clears via onAnimationEnd → data-deep-link attribute is removed", async () => {
+  resetUrl();
+  window.history.replaceState(null, "", "/?session=claude_code:m1a-1");
+  globalThis.fetch =
+    makeM1aFetchMock() as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await waitFor(() => {
+    expect(
+      container.querySelector('tbody tr[data-deep-link="true"]'),
+    ).not.toBeNull();
+  });
+  const matched = container.querySelector(
+    'tbody tr[data-deep-link="true"]',
+  ) as HTMLTableRowElement;
+  expect(matched).not.toBeNull();
+  // Dispatch an animationend event on the row. The handler clears
+  // pendingDeepLinkPulseRowKey, which removes the data-deep-link
+  // attribute on the next render.
+  const AnimationEventCtor =
+    (globalThis as unknown as {
+      window: { AnimationEvent: typeof AnimationEvent };
+    }).window.AnimationEvent;
+  await act(async () => {
+    matched.dispatchEvent(
+      new AnimationEventCtor("animationend", {
+        bubbles: true,
+        animationName: "deep-link-pulse",
+      }),
+    );
+  });
+  await waitFor(() => {
+    const stillPulsing = container.querySelector(
+      'tbody tr[data-deep-link="true"]',
+    );
+    expect(stillPulsing).toBeNull();
+  });
+  // The row still carries aria-current — clearing the pulse does
+  // not clear the selection.
+  const stillSelected = container.querySelector(
+    'tbody tr[aria-current="true"]',
+  );
+  expect(stillSelected).not.toBeNull();
+});
+
+test("M1a: Esc on a descendant of <article class='session-pane'> clears selection AND removes ?session= from URL", async () => {
+  // Per codex M1a fix-up #2, Esc has a POSITIVE scope rule: it
+  // only fires when the target is (a) a descendant of the session
+  // pane or (b) the currently-selected list row. This test exercises
+  // (a) — the session-pane path.
+  resetUrl();
+  window.history.replaceState(null, "", "/?session=claude_code:m1a-1");
+  globalThis.fetch =
+    makeM1aFetchMock() as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  // Wait for the merged row to settle so aria-current is in DOM.
+  await waitFor(() => {
+    expect(
+      container.querySelector('tbody tr[aria-current="true"]'),
+    ).not.toBeNull();
+  });
+  // Dispatch Escape from INSIDE the session pane so the positive-
+  // scope check (event.target.closest("article.session-pane"))
+  // succeeds. Use the article element itself as the dispatch target —
+  // it's a non-editable surface in scope.
+  const sessionArticle = container.querySelector(
+    "article.session-pane",
+  ) as HTMLElement | null;
+  expect(sessionArticle).not.toBeNull();
+  const KeyboardEventCtor =
+    (globalThis as unknown as {
+      window: { KeyboardEvent: typeof KeyboardEvent };
+    }).window.KeyboardEvent;
+  await act(async () => {
+    sessionArticle!.dispatchEvent(
+      new KeyboardEventCtor("keydown", {
+        key: "Escape",
+        bubbles: true,
+      }),
+    );
+  });
+  await waitFor(() => {
+    const stillSelected = container.querySelector(
+      'tbody tr[aria-current="true"]',
+    );
+    expect(stillSelected).toBeNull();
+  });
+  // URL no longer carries ?session=.
+  const params = new URLSearchParams(window.location.search);
+  expect(params.has("session")).toBe(false);
+});
+
+test("M1a: Esc on the selected list row (tr[aria-current='true']) clears selection", async () => {
+  // Per codex M1a fix-up #2, Esc's positive-scope rule (b) is the
+  // selected-row path: focus on the `<tr aria-current="true">`,
+  // dispatch Esc, selection clears.
+  resetUrl();
+  window.history.replaceState(null, "", "/?session=claude_code:m1a-1");
+  globalThis.fetch =
+    makeM1aFetchMock() as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  let selectedRow: HTMLTableRowElement | null = null;
+  await waitFor(() => {
+    selectedRow = container.querySelector(
+      'tbody tr[aria-current="true"]',
+    ) as HTMLTableRowElement | null;
+    expect(selectedRow).not.toBeNull();
+  });
+  const KeyboardEventCtor =
+    (globalThis as unknown as {
+      window: { KeyboardEvent: typeof KeyboardEvent };
+    }).window.KeyboardEvent;
+  await act(async () => {
+    selectedRow!.dispatchEvent(
+      new KeyboardEventCtor("keydown", {
+        key: "Escape",
+        bubbles: true,
+      }),
+    );
+  });
+  await waitFor(() => {
+    expect(
+      container.querySelector('tbody tr[aria-current="true"]'),
+    ).toBeNull();
+  });
+  const params = new URLSearchParams(window.location.search);
+  expect(params.has("session")).toBe(false);
+});
+
+test("M1a: Esc on a button OUTSIDE the session pane and OUTSIDE a selected row does NOT clear selection", async () => {
+  // Per codex M1a fix-up #2, Esc with focus on (e.g.) a filter-strip
+  // button, table header, action-bar control, or pagination button
+  // is OUT-OF-SCOPE — selection must NOT clear. This is the
+  // positive-scope negation: editable controls aside, only the two
+  // in-scope surfaces (session pane / selected row) trigger Esc.
+  resetUrl();
+  window.history.replaceState(null, "", "/?session=claude_code:m1a-1");
+  globalThis.fetch =
+    makeM1aFetchMock() as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  // Wait for the merged row to settle.
+  await waitFor(() => {
+    expect(
+      container.querySelector('tbody tr[aria-current="true"]'),
+    ).not.toBeNull();
+  });
+  // Find an out-of-scope, non-editable button. The Rescan button in
+  // the action bar is a reliable choice — it's a `<button>` (not an
+  // input / contenteditable / combobox), and it's outside the
+  // session pane and outside any aria-current row.
+  const outOfScopeButton = Array.from(
+    container.querySelectorAll("button"),
+  ).find((b) => b.textContent?.trim() === "Rescan");
+  expect(outOfScopeButton).not.toBeUndefined();
+  // Sanity: this button is NOT inside the session pane and NOT
+  // inside an aria-current row.
+  expect(
+    outOfScopeButton!.closest("article.session-pane"),
+  ).toBeNull();
+  expect(
+    outOfScopeButton!.closest('tr[aria-current="true"]'),
+  ).toBeNull();
+  const KeyboardEventCtor =
+    (globalThis as unknown as {
+      window: { KeyboardEvent: typeof KeyboardEvent };
+    }).window.KeyboardEvent;
+  await act(async () => {
+    outOfScopeButton!.dispatchEvent(
+      new KeyboardEventCtor("keydown", {
+        key: "Escape",
+        bubbles: true,
+      }),
+    );
+  });
+  // Selection MUST still be in place.
+  const stillSelected = container.querySelector(
+    'tbody tr[aria-current="true"]',
+  );
+  expect(stillSelected).not.toBeNull();
+  const params = new URLSearchParams(window.location.search);
+  expect(params.get("session")).toBe("claude_code:m1a-1");
+});
+
+test("M1a: Esc IS IGNORED when focus is in [contenteditable] (boolean / empty-value attribute form)", async () => {
+  // Per codex M1a fix-up #3, the editable-control selector must use
+  // the plain `[contenteditable]` attribute selector (not
+  // `[contenteditable="true"]`) so it matches every form HTML
+  // permits: boolean (`<div contenteditable>`), empty-string
+  // (`<div contenteditable="">`), explicit `="true"`, and
+  // `="plaintext-only"`. This test exercises the empty-string form
+  // which the previous narrow selector would have missed.
+  resetUrl();
+  window.history.replaceState(null, "", "/?session=claude_code:m1a-1");
+  globalThis.fetch =
+    makeM1aFetchMock() as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await waitFor(() => {
+    expect(
+      container.querySelector('tbody tr[aria-current="true"]'),
+    ).not.toBeNull();
+  });
+  // Inject a `<div contenteditable>` (boolean attribute → empty-
+  // string value in the DOM) into the document body so we can
+  // dispatch Esc with that as event.target. We deliberately put it
+  // INSIDE the session pane so the positive-scope check would
+  // otherwise allow Esc through — proving the negative-scope check
+  // (editable filter) wins.
+  const sessionArticle = container.querySelector(
+    "article.session-pane",
+  ) as HTMLElement;
+  const editable = document.createElement("div");
+  // Use `setAttribute` with empty string to mimic the boolean form
+  // exactly (`<div contenteditable>`); HTML serialization stores the
+  // attribute with empty string value either way.
+  editable.setAttribute("contenteditable", "");
+  sessionArticle.appendChild(editable);
+  const KeyboardEventCtor =
+    (globalThis as unknown as {
+      window: { KeyboardEvent: typeof KeyboardEvent };
+    }).window.KeyboardEvent;
+  await act(async () => {
+    editable.dispatchEvent(
+      new KeyboardEventCtor("keydown", {
+        key: "Escape",
+        bubbles: true,
+      }),
+    );
+  });
+  // Selection MUST still be in place — the broadened
+  // `[contenteditable]` selector caught the empty-value form.
+  const stillSelected = container.querySelector(
+    'tbody tr[aria-current="true"]',
+  );
+  expect(stillSelected).not.toBeNull();
+  const params = new URLSearchParams(window.location.search);
+  expect(params.get("session")).toBe("claude_code:m1a-1");
+  // Cleanup the injected node so it does not bleed into the next
+  // test (the cleanup() afterEach handles React-rendered DOM but
+  // not direct DOM mutations like this one).
+  editable.remove();
+});
+
+test("M1a: global Esc is IGNORED when focus is in the SessionFilters search input", async () => {
+  resetUrl();
+  window.history.replaceState(null, "", "/?session=claude_code:m1a-1");
+  globalThis.fetch =
+    makeM1aFetchMock() as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await waitFor(() => {
+    expect(
+      container.querySelector('tbody tr[aria-current="true"]'),
+    ).not.toBeNull();
+  });
+  // Find the search input in SessionFilters and make it the
+  // event target. The Esc handler MUST ignore Esc when the
+  // event.target is an <input> — preserves the Phase-4 search-input
+  // UX (its own onKeyDown can clear its value).
+  const searchInput = container.querySelector(
+    'input[type="search"], input[type="text"]',
+  );
+  expect(searchInput).not.toBeNull();
+  const KeyboardEventCtor =
+    (globalThis as unknown as {
+      window: { KeyboardEvent: typeof KeyboardEvent };
+    }).window.KeyboardEvent;
+  await act(async () => {
+    // Dispatch via the input itself so event.target IS the input.
+    // The event bubbles up to window, where our global handler
+    // sits, and the scope check should short-circuit it.
+    searchInput!.dispatchEvent(
+      new KeyboardEventCtor("keydown", {
+        key: "Escape",
+        bubbles: true,
+      }),
+    );
+  });
+  // The selection MUST still be in place — Esc was ignored.
+  const stillSelected = container.querySelector(
+    'tbody tr[aria-current="true"]',
+  );
+  expect(stillSelected).not.toBeNull();
+  // URL still carries ?session=.
+  const params = new URLSearchParams(window.location.search);
+  expect(params.get("session")).toBe("claude_code:m1a-1");
+});
+
+test("M1a: popstate round trip — dispatching popstate after URL change syncs selection + right-pane state", async () => {
+  resetUrl();
+  globalThis.fetch =
+    makeM1aFetchMock() as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:m1a-1");
+  // Initial state: empty pane, no selection.
+  let article = container.querySelector("article.session-pane");
+  expect(article?.getAttribute("data-state")).toBe("empty");
+  // Simulate browser-driven URL change + popstate (Back / Forward
+  // navigation). The popstate handler in useSelectedSession re-
+  // reads window.location.search and syncs state — withOUT calling
+  // replaceState (no feedback loop).
+  const PopStateEventCtor =
+    (globalThis as unknown as {
+      window: { PopStateEvent: typeof PopStateEvent };
+    }).window.PopStateEvent;
+  await act(async () => {
+    window.history.replaceState(null, "", "/?session=claude_code:m1a-2");
+    window.dispatchEvent(new PopStateEventCtor("popstate"));
+  });
+  await waitFor(() => {
+    article = container.querySelector("article.session-pane");
+    expect(article?.getAttribute("data-state")).toBe("ready-placeholder");
+  });
+  // The selected row is m1a-2 (the new URL value).
+  const selected = container.querySelector(
+    'tbody tr[aria-current="true"]',
+  );
+  expect(selected?.textContent?.includes("claude_code:m1a-2")).toBe(true);
+  // No deep-link pulse — popstate after initial mount does not
+  // re-arm the one-shot pulse mechanism.
+  expect(selected?.getAttribute("data-deep-link")).toBeNull();
+});
+
+test("M1a: session_not_found state renders only AFTER all three GETs settle", async () => {
+  resetUrl();
+  // URL points at a row that does NOT exist in the merged set.
+  window.history.replaceState(null, "", "/?session=claude_code:does-not-exist");
+  // Make the source/stored fetches resolve quickly with empty
+  // arrays. scan_errors also resolves empty.
+  globalThis.fetch = mock(
+    async (input: Request | string | URL): Promise<Response> => {
+      const url = urlOf(input);
+      if (url === SOURCE_SESSIONS_PATH) return jsonResponse([]);
+      if (url === STORED_SESSIONS_PATH) return jsonResponse([]);
+      if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      return new Response(`unexpected url ${url}`, { status: 404 });
+    },
+  ) as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  // Wait for all three GETs to settle. Once they have, the right
+  // pane should flip to session_not_found.
+  await waitFor(() => {
+    const article = container.querySelector("article.session-pane");
+    expect(article?.getAttribute("data-state")).toBe("session_not_found");
+  });
+  // Two recovery buttons are rendered.
+  const buttons = Array.from(container.querySelectorAll("button"));
+  expect(
+    buttons.find((b) => b.textContent === "Clear selection"),
+  ).not.toBeUndefined();
+  expect(
+    buttons.find((b) => b.textContent === "Try Rescan"),
+  ).not.toBeUndefined();
+});

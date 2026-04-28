@@ -73,6 +73,11 @@ import { applyPagination, type PageSize } from "./features/sessions/applyPaginat
 import { useSessionFilters } from "./features/sessions/useSessionFilters";
 import { useToastQueue } from "./features/sessions/useToastQueue";
 import { readLastRescan, writeLastRescan } from "./features/sessions/lastRescan";
+import {
+  useSelectedSession,
+  buildUrl,
+} from "./features/sessions/useSelectedSession";
+import { SessionView } from "./features/sessions/SessionView";
 
 export function App() {
   const [sourceState, setSourceState] = useState<PanelState<SourceSessionView[]>>(
@@ -86,6 +91,76 @@ export function App() {
   );
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<"rescan" | "import" | null>(null);
+
+  // M1a: URL-synced selection (the `?session=<rowKey>` slice). The
+  // hook owns the React state + the History API mirror; App.tsx
+  // owns every consumer that needs to know about the current
+  // selection. Per Resolved Decision #20 (spec line 1165), selection
+  // ownership lives in App.tsx (not in SessionsView).
+  const { selectedRowKey, selectRow } = useSelectedSession();
+
+  // M1a: stacked-narrow viewport mode. The two panes stay React-
+  // mounted regardless of mode; CSS-attribute selectors on
+  // `<main>[data-narrow-mode="..."]` drive visibility. Default is
+  // "list" — on narrow viewports the user lands on the list and a
+  // row click promotes them to "session". On wide viewports
+  // (>= 900 px) the value is meaningless because both panes always
+  // render; we still keep state synced so resize → narrow doesn't
+  // surprise the user with a flipped mode.
+  const [narrowMode, setNarrowMode] =
+    useState<"list" | "session">(() =>
+      // If the URL pre-selected a row on mount, the user is
+      // expecting to see the right pane on first paint. Default
+      // narrowMode to "session" in that case so a narrow-viewport
+      // deep-link arrival shows the session pane immediately
+      // (matches the M1a design.md §5.3 / spec lines 597–611).
+      selectedRowKey !== null ? "session" : "list",
+    );
+
+  // M1a: deep-link pulse mechanism. If the URL pre-selected a row
+  // on initial mount, write the same row key into a separate slice
+  // so the matched list row applies `data-deep-link="true"` for one
+  // paint cycle. The cleanup path is "whichever fires first":
+  // either the row's `onAnimationEnd` clears it, or a 2 s safety
+  // timer clears it unconditionally (the row may never render in
+  // the session_not_found case). Click-driven selection NEVER fires
+  // the pulse (spec line 585) — that's why the pulse target is
+  // captured ONCE on initial mount, not whenever selectedRowKey
+  // changes.
+  const [
+    pendingDeepLinkPulseRowKey,
+    setPendingDeepLinkPulseRowKey,
+  ] = useState<string | null>(() => selectedRowKey);
+  // Use a ref to the safety-timer ID so we can clear it from the
+  // animation-end path or from unmount.
+  const pulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    // Only start the safety timer if there's a pulse target on
+    // initial mount. Subsequent state changes do not re-arm the
+    // pulse — the pulse mechanism is a one-shot per page load,
+    // matched against the URL on initial mount.
+    if (pendingDeepLinkPulseRowKey === null) return;
+    pulseTimerRef.current = setTimeout(() => {
+      setPendingDeepLinkPulseRowKey(null);
+      pulseTimerRef.current = null;
+    }, 2000);
+    return () => {
+      if (pulseTimerRef.current !== null) {
+        clearTimeout(pulseTimerRef.current);
+        pulseTimerRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // mount-only; pulse target is captured at initial render
+  const onDeepLinkPulseEnd = useCallback((rowKey: string) => {
+    setPendingDeepLinkPulseRowKey((prev) =>
+      prev === rowKey ? null : prev,
+    );
+    if (pulseTimerRef.current !== null) {
+      clearTimeout(pulseTimerRef.current);
+      pulseTimerRef.current = null;
+    }
+  }, []);
 
   // useToastQueue is App-level state; push/dismiss re-renders App's
   // JSX walk, but the merged/filtered/sorted/paginated rows are
@@ -546,61 +621,294 @@ export function App() {
     [setFilter],
   );
 
+  // M1a: row-click → URL-synced selection. The Phase-4 row-click →
+  // drawer flow ALSO fires on the same click (preserved in M1a;
+  // M1b retires it); the selection setter here only controls the
+  // right pane + URL. Narrow viewports also flip narrowMode to
+  // "session" so the user sees the session pane after the click.
+  const handleSelectRow = useCallback(
+    (rowKey: string) => {
+      selectRow(rowKey);
+      setNarrowMode("session");
+    },
+    [selectRow],
+  );
+
+  // M1a: "← Back to list" gesture. Per Resolved Decision #17 (spec
+  // line 1162) this only sets `narrowMode = "list"` — does NOT
+  // clear `selectedRowKey` and does NOT clear the URL. Esc is the
+  // distinct gesture for fully clearing.
+  const handleBackToList = useCallback(() => {
+    setNarrowMode("list");
+  }, []);
+
+  // M1a: Try Rescan from the session_not_found state. Fires the
+  // standard refetch — does NOT clear the URL (preserves the deep
+  // link in case Rescan finds the row).
+  const handleTryRescan = useCallback(() => {
+    void refetchAll();
+  }, [refetchAll]);
+
+  // M1a: Clear selection from the session_not_found state.
+  // Identical to Esc's effect on the URL: clears selectedRowKey
+  // and removes the `?session=` query param. Does NOT clear
+  // narrowMode (the user is on a narrow viewport ⇒ already
+  // visible-mode "session" but now empty; we flip to "list" so they
+  // see the list).
+  const handleClearSelectionFromNotFound = useCallback(() => {
+    selectRow(null);
+    setNarrowMode("list");
+  }, [selectRow]);
+
+  // M1a: global `Esc` handler. Clears the URL `?session=` slice +
+  // selectedRowKey + narrowMode in a single keystroke. Per spec
+  // line 567 + Resolved Decision #17, the handler is SCOPED in two
+  // independent ways:
+  //   (1) NEGATIVE scope (editable-control filter): ignored when
+  //       focus is in `<input>`, `<textarea>`, any `[contenteditable]`
+  //       (any value, including the boolean / empty / "plaintext-only"
+  //       forms — codex M1a fix-up #3), or any `[role="combobox"]`.
+  //       Editable controls get to consume Esc themselves first
+  //       (clear search, dismiss combobox, etc.).
+  //   (2) POSITIVE scope (in-scope surfaces only — codex M1a fix-up
+  //       #2): even when focus is non-editable, Esc fires ONLY when
+  //       the target is (a) a descendant of `<article class="session-
+  //       pane">` OR (b) the currently-selected list row
+  //       (`<tr aria-current="true">`). Esc is IGNORED everywhere
+  //       else (filter buttons, table headers, action-bar checkboxes,
+  //       pagination controls, …). This matches spec line 567.
+  //
+  // Identical behavior across narrow + wide viewports — on narrow
+  // it ALSO resets narrowMode to "list" (no session pane to be in).
+  useEffect(() => {
+    function isEditableTarget(target: EventTarget | null): boolean {
+      if (target === null) return false;
+      const el = target as HTMLElement;
+      // Tag check: input / textarea — both directly consume Esc
+      // semantics in their default behavior.
+      const tag = (el.tagName ?? "").toUpperCase();
+      if (tag === "INPUT" || tag === "TEXTAREA") return true;
+      // contenteditable elements: the plain `[contenteditable]`
+      // attribute selector matches every form HTML allows — the
+      // boolean attribute (`<div contenteditable>`), the empty-string
+      // form (`<div contenteditable="">`), the explicit "true" form,
+      // and the "plaintext-only" variant. Spec line 567 uses the
+      // plain selector for exactly this reason; codex's M1a fix-up #3
+      // pinned the previous narrow `'[contenteditable="true"]'`
+      // selector as a blocking finding because it missed the boolean
+      // / empty-string forms.
+      if (
+        typeof el.closest === "function" &&
+        el.closest("[contenteditable]") !== null
+      ) {
+        return true;
+      }
+      // ARIA combobox role — covers e.g. the future-typeahead
+      // autocomplete patterns.
+      if (
+        typeof el.closest === "function" &&
+        el.closest('[role="combobox"]') !== null
+      ) {
+        return true;
+      }
+      return false;
+    }
+    function isInScope(target: EventTarget | null): boolean {
+      // Positive-scope rule (codex M1a fix-up #2): Esc only fires
+      // when the focus target is inside one of the two in-scope
+      // surfaces. Anywhere else the global Esc handler is a no-op,
+      // even on non-editable controls. This is the exact rule from
+      // spec line 567:
+      //   (a) descendant of `<article class="session-pane">`, OR
+      //   (b) on a selected row `<tr aria-current="true">`.
+      if (target === null) return false;
+      const el = target as HTMLElement;
+      if (typeof el.closest !== "function") return false;
+      if (el.closest("article.session-pane") !== null) return true;
+      if (el.closest('tr[aria-current="true"]') !== null) return true;
+      return false;
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      // (1) Negative scope: editable controls consume Esc themselves.
+      if (isEditableTarget(event.target)) return;
+      // (2) Positive scope: only fire when target is in-scope.
+      if (!isInScope(event.target)) return;
+      // setSelectedRowKey(null) + URL clear + narrowMode reset.
+      // selectRow handles the first two; setNarrowMode handles the
+      // third. All three are idempotent so calling them when there
+      // is nothing to clear is a no-op.
+      selectRow(null);
+      setNarrowMode("list");
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [selectRow]);
+
+  // M1a: derive the right-pane state. The four-state machine
+  // (per design.md §4.1) maps the (selectedRowKey, mergedRows,
+  // panel-state) tuple to one of:
+  //   - empty               → no selection
+  //   - loading             → selection set; row not yet merged;
+  //                           any GET still in flight
+  //   - ready-placeholder   → selection set; row IS in merged set
+  //                           (M1a placeholder until M2's tabs)
+  //   - session_not_found   → selection set; row NOT in merged set;
+  //                           ALL three GETs settled (per spec line
+  //                           572 — the "all three settled" gate is
+  //                           load-bearing because resolving "missing
+  //                           row" too early would flash spurious
+  //                           copy while fetches are still in flight)
+  // Note: `buildUrl` is referenced just to keep it in the import
+  // graph for future call sites (Esc + selectRow already use it via
+  // the hook).
+  void buildUrl; // see comment above
+  let sessionViewState:
+    | "empty"
+    | "loading"
+    | "ready-placeholder"
+    | "session_not_found";
+  if (selectedRowKey === null) {
+    sessionViewState = "empty";
+  } else {
+    const matchedRow = mergedRows.find((r) => r.rowKey === selectedRowKey);
+    if (matchedRow !== undefined) {
+      sessionViewState = "ready-placeholder";
+    } else if (
+      sourceState.kind === "loading" ||
+      storedState.kind === "loading" ||
+      errorsState.kind === "loading"
+    ) {
+      // While any of the three GETs is still in flight, render the
+      // generic "loading" copy. Resolving "missing row" too early
+      // would flash session_not_found while the merged list is
+      // still settling.
+      sessionViewState = "loading";
+    } else {
+      sessionViewState = "session_not_found";
+    }
+  }
+
+  // M1a: detect the narrow viewport so we can decide whether the
+  // "← Back to list" affordance should render. The CSS-driven
+  // `display: none` rules already hide the wrong pane below 900 px;
+  // this gate just keeps the back-to-list button DOM-present only
+  // on narrow + session mode (avoids a wide-viewport user finding
+  // it via screen reader or aria-* tooling).
+  const [isNarrow, setIsNarrow] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    if (typeof window.matchMedia !== "function") return false;
+    return window.matchMedia("(max-width: 899.98px)").matches;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia("(max-width: 899.98px)");
+    const onChange = (e: MediaQueryListEvent) => setIsNarrow(e.matches);
+    // addEventListener is the modern API; addListener is the legacy
+    // fallback. happy-dom + Chromium ship the former.
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", onChange);
+    } else if (typeof (mq as unknown as { addListener?: typeof onChange }).addListener === "function") {
+      (mq as unknown as { addListener: (l: typeof onChange) => void }).addListener(onChange);
+    }
+    return () => {
+      if (typeof mq.removeEventListener === "function") {
+        mq.removeEventListener("change", onChange);
+      } else if (
+        typeof (mq as unknown as { removeListener?: typeof onChange }).removeListener === "function"
+      ) {
+        (mq as unknown as { removeListener: (l: typeof onChange) => void }).removeListener(onChange);
+      }
+    };
+  }, []);
+  const showBackToList = isNarrow && narrowMode === "session";
+
   return (
     <>
-      <main>
-        <h1>Distill Portal</h1>
-        <section className="panel">
-          <h2>Sessions</h2>
-          <ActionBar
-            selectedCount={selectedCount}
-            hiddenByFilterCount={hiddenByFilterCount}
-            pending={pending}
-            onRescan={handleRescan}
-            onImport={handleImport}
-            onClearHidden={onClearHidden}
-            onClearSelection={onClearSelection}
-            lastRescanAt={lastRescanAt}
-            now={now}
-          />
-          <SessionsView
-            sourceState={sourceState}
-            storedState={storedState}
-            mergedRows={mergedRows}
-            filteredRows={filteredRows}
-            pageRows={pageRows}
-            pageIndex={clampedPageIndex}
-            pageSize={filters.pageSize}
-            onChangePage={onChangePage}
-            onChangePageSize={onChangePageSize}
-            filters={filters}
-            projects={projects}
-            setFilter={setFilter}
-            setImportableOnly={setImportableOnly}
-            resetAll={resetAll}
-            selected={selected}
-            onToggle={handleToggle}
-            onToggleAll={handleToggleAll}
-            onRetry={() => {
-              void refetchAll();
-            }}
-            onRescan={handleRescan}
-            rescanPending={pending === "rescan"}
-            now={now}
-          />
-        </section>
-        {errorsState.kind === "error" ? (
-          <p role="alert">
-            Failed to load scan errors: {errorsState.message}{" "}
-            <button type="button" onClick={() => void refetchAll()}>
-              Retry
-            </button>
-          </p>
-        ) : (
-          <ScanErrorsCallout
-            errors={errorsState.kind === "ok" ? errorsState.data : []}
-          />
-        )}
+      {/* M1a: page title + scan-errors callout sit above the split-
+          pane <main>. They are NOT inside .list-pane / .session-pane
+          because they apply to the whole inspection surface, not a
+          single side. The toast queue stays a sibling of <main>
+          (Phase-4 pattern preserved). */}
+      <h1>Distill Portal</h1>
+      <main className="split-pane" data-narrow-mode={narrowMode}>
+        {/* List pane: <aside aria-label="Sessions list"> per design
+            §3.3. Phase-4 list chrome (filter strip, 8-column table,
+            pagination, action bar) renders inside this landmark
+            unchanged in M1a. M1b will compress the table to 4
+            columns and relocate Pagination + ActionBar into a sticky
+            list-panel footer; M1a leaves them. */}
+        <aside className="list-pane" aria-label="Sessions list">
+          <section className="panel">
+            <h2>Sessions</h2>
+            <ActionBar
+              selectedCount={selectedCount}
+              hiddenByFilterCount={hiddenByFilterCount}
+              pending={pending}
+              onRescan={handleRescan}
+              onImport={handleImport}
+              onClearHidden={onClearHidden}
+              onClearSelection={onClearSelection}
+              lastRescanAt={lastRescanAt}
+              now={now}
+            />
+            <SessionsView
+              sourceState={sourceState}
+              storedState={storedState}
+              mergedRows={mergedRows}
+              filteredRows={filteredRows}
+              pageRows={pageRows}
+              pageIndex={clampedPageIndex}
+              pageSize={filters.pageSize}
+              onChangePage={onChangePage}
+              onChangePageSize={onChangePageSize}
+              filters={filters}
+              projects={projects}
+              setFilter={setFilter}
+              setImportableOnly={setImportableOnly}
+              resetAll={resetAll}
+              selected={selected}
+              onToggle={handleToggle}
+              onToggleAll={handleToggleAll}
+              onRetry={() => {
+                void refetchAll();
+              }}
+              onRescan={handleRescan}
+              rescanPending={pending === "rescan"}
+              now={now}
+              selectedRowKey={selectedRowKey}
+              onSelectRow={handleSelectRow}
+              pendingDeepLinkPulseRowKey={pendingDeepLinkPulseRowKey}
+              onDeepLinkPulseEnd={onDeepLinkPulseEnd}
+            />
+            {errorsState.kind === "error" ? (
+              <p role="alert">
+                Failed to load scan errors: {errorsState.message}{" "}
+                <button type="button" onClick={() => void refetchAll()}>
+                  Retry
+                </button>
+              </p>
+            ) : (
+              <ScanErrorsCallout
+                errors={errorsState.kind === "ok" ? errorsState.data : []}
+              />
+            )}
+          </section>
+        </aside>
+        {/* Session pane: <article> per spec line 1121 / design §3.4.
+            M1a renders only the placeholder state machine; M2 will
+            mount the four-tab Tabs primitive inside this same
+            element. */}
+        <SessionView
+          state={sessionViewState}
+          showBackToList={showBackToList}
+          onBackToList={handleBackToList}
+          onClearSelection={handleClearSelectionFromNotFound}
+          onTryRescan={handleTryRescan}
+        />
       </main>
       {/* Toast queue lives outside <main> for DOM placement (it's a
           fixed-position overlay anchored bottom-right via CSS;

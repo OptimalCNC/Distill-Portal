@@ -1,0 +1,1459 @@
+Reading prompt from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /home/huwei/ai_codings/distill-portal
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /home/huwei/.codex/memories]
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019dd315-938b-7721-987b-b26b44ac9e12
+--------
+user
+You are an external non-Claude reviewer for **round 2** of M1a (`phase-5`, frozen at commit `05467ad`). The coordinator dispatched you previously; you returned `needs changes` with 4 blocking findings:
+
+1. `.back-to-list` is always `display: none` with no override — narrow-viewport button is invisible.
+2. Esc handler missing positive-scope rule (spec line 567 says Esc fires only when focus is in session pane OR on a selected row).
+3. `[contenteditable="true"]` selector too narrow — should be `[contenteditable]`.
+4. e2e step 12 doesn't verify the deep-link pulse — only stable `aria-current`.
+
+The developer applied a fix-up round addressing all four. Your job: confirm the fixes are correct, complete, and don't introduce new issues.
+
+## Context (same as round 1; carrying forward)
+
+- `working/phase-5.md` (frozen at `05467ad`) — read §URL state via History API (559–586), §Routing/URL State (820–846), §Mobile/narrow viewport (597–611), §Milestone 1 (971–989), §Resolved Decisions #17, #19.
+- `progress/phase-5.progress.md` — §UI/UX Design Log + §Active Plan (M1a status).
+- The approved design artifact: `working/phase-5/designs/m1a-shell/design.md` §8 acceptance checklist.
+- The repo is at `/home/huwei/ai_codings/distill-portal/`.
+
+## What changed in the fixup
+
+The fixup developer's report says (verify each):
+
+### Fix #1 — `.back-to-list` visibility
+
+Location: `apps/frontend/src/styles/global.css` (added inside the existing `@media (max-width: 899.98px)` block):
+
+```css
+main.split-pane[data-narrow-mode="session"] .back-to-list {
+  display: inline-block;
+}
+```
+
+Plus: `apps/frontend/src/features/sessions/SessionView.css` got a comment-only update pointing readers to the new global.css override. Plus a CSS smoke test in `SessionView.test.tsx` reading the `global.css` source via regex (happy-dom doesn't fully evaluate media queries — pragmatic fallback per the dispatch brief).
+
+### Fix #2 — Esc positive scope
+
+Location: `apps/frontend/src/App.tsx` Esc effect (around line 683+):
+
+- New `isInScope(target)` helper: returns true if target's ancestor chain includes `article.session-pane` OR `tr[aria-current="true"]`.
+- Handler now sequences: `if (event.key !== "Escape") return; if (isEditableTarget(...)) return; if (!isInScope(...)) return; selectRow(null); setNarrowMode("list");`.
+- New tests in `App.test.tsx`:
+  - "Esc on a descendant of `<article class='session-pane'>` clears selection AND removes ?session= from URL"
+  - "Esc on the selected list row (tr[aria-current='true']) clears selection"
+  - "Esc on a button OUTSIDE the session pane and OUTSIDE a selected row does NOT clear selection"
+  - "Esc IS IGNORED when focus is in `[contenteditable]` (boolean / empty-value attribute form)"
+- The original "global Esc clears selection" test was REPLACED by the more-specific tests above.
+
+### Fix #3 — contenteditable selector
+
+Location: `apps/frontend/src/App.tsx` `isEditableTarget` (around line 700+):
+
+- Changed `el.closest('[contenteditable="true"]')` → `el.closest('[contenteditable]')`.
+- Covered by Fix #2's new "Esc IS IGNORED when focus is in `[contenteditable]` (boolean / empty-value attribute form)" test.
+
+### Fix #4 — e2e pulse coverage
+
+Location: `apps/frontend/e2e/inspection.spec.ts` step 12 (around line 469+):
+
+Option A applied: tight `expect(matchedRow).toHaveAttribute("data-deep-link", "true", { timeout: 1500 })` immediately after the row becomes visible, then `expect(matchedRow).not.toHaveAttribute("data-deep-link", "true", { timeout: 3000 })` after the pulse settles. Cross-reference comment lists the unit-test names in case Option B fallback is ever needed.
+
+## Coordinator-verified gates (post-fixup)
+
+- `cargo check --workspace` → ok
+- `cargo test --workspace` → all crates green (re-run by coordinator)
+- `cargo test -p distill-portal-ui-api-contracts --features ts-bindings` → 1 passed / 1 ignored
+- `bun run test` (frontend) → **257 pass / 0 fail / 994 expects across 19 files** (round 1 was 253/976; +4 tests / +18 expects — matches the fixup's 4 new tests + adjustments)
+- `bun run build` → 14.20 kB CSS / 265.82 kB JS / built in 544ms
+- `bun run test:e2e` → 1 passed in 3.0s
+- `rg -n '#[0-9a-fA-F]{3,8}' apps/frontend/src/ | wc -l` → 24 (Phase 4 invariant preserved)
+- `grep -cE '^\s*--' apps/frontend/src/styles/tokens.css` → 44 (Phase 4 baseline preserved)
+- `git status --short` shows only `apps/frontend/`, `progress/`, and `working/phase-5/` paths — no protected-path edits.
+
+The backend-protection reviewer (round 2) returned `backend untouched` again on the post-fixup file list.
+
+## Your evidence pack
+
+- Full diff: `/tmp/m1a-diff-modified-v2.patch` (1473 lines).
+- Full new-files content (round 1, unchanged in fixup): `/tmp/m1a-new-files.txt` (842 lines).
+- You can also `cd /home/huwei/ai_codings/distill-portal/` and run `git diff HEAD apps/frontend/` directly.
+
+## Review goals (for round 2)
+
+For each of your round-1 blocking findings, verify the fix is correct AND complete:
+
+### Fix #1 review
+- Does `global.css` actually have the `@media (max-width: 899.98px) { main.split-pane[data-narrow-mode="session"] .back-to-list { display: inline-block; } }` rule? Verify by `grep -A 4 "back-to-list" apps/frontend/src/styles/global.css`.
+- Does the override correctly nest inside the existing narrow-mode media query, not duplicate or conflict with the list/session pane visibility rules?
+- Does the test in `SessionView.test.tsx` correctly verify the override exists in `global.css`?
+- Does `SessionView.css` still declare `display: none` as the default?
+- Is the rule reachable: when `<main data-narrow-mode="session">` AND viewport < 900 px, the button gets `display: inline-block` (not the default `display: none`)?
+
+### Fix #2 review
+- Is the `isInScope(target)` function present and correct? Read `App.tsx` around line 716+.
+- Does it check both surfaces: `article.session-pane` descendants AND `tr[aria-current="true"]`?
+- Does the handler call `isInScope` AFTER `isEditableTarget` (so editable controls inside the session pane still get the ignore)?
+- Are the four new tests actually asserting the right behavior?
+  - The "out-of-scope button" test should focus a button that's NOT in the session pane and NOT a selected row, dispatch Esc, assert URL still has `?session=` and `selectedRowKey` unchanged.
+  - The "selected row" test should focus a `<tr aria-current="true">`, dispatch Esc, assert clear.
+  - The "session pane descendant" test should focus a button inside `<article class="session-pane">`, dispatch Esc, assert clear.
+  - The contenteditable test should use a `<div contenteditable>` (boolean form, no value), focus it, dispatch Esc, assert URL preserved.
+- Is the original over-permissive test removed (not just commented out)?
+
+### Fix #3 review
+- Is the selector now `'[contenteditable]'` (not `'[contenteditable="true"]'`)? Read App.tsx around line 700+.
+- Is the new test using a boolean-attribute or empty-value contenteditable element (so the previous narrow selector would have failed and the broad selector passes)?
+
+### Fix #4 review
+- Does the e2e step actually assert `expect(matchedRow).toHaveAttribute("data-deep-link", "true", { timeout: 1500 })`? Read `inspection.spec.ts` around line 478+.
+- Does it also assert the post-pulse removal (`not.toHaveAttribute("data-deep-link", "true", { timeout: 3000 })`)?
+- Is this assertion timing-robust? (1.5 s window for the 600 ms pulse should be ample.)
+- Does the test still pass against real Chromium per the coordinator's re-run?
+
+### Cross-cutting checks
+- Did the fixup introduce any new tokens, hex literals, or runtime deps? (Coordinator verified hex=24 and tokens=44 and package.json untouched, but cross-check.)
+- Did the fixup touch any protected paths? (Backend-protection v2 said no; cross-check.)
+- Did the fixup break any Phase 4 invariants? (bun test src 257/0 should cover; spot-check the click-time intersection regression tests still pass.)
+- Are the optional nits (`void buildUrl;` dead-scaffold + matchMedia legacy fallback) still present? (Per dispatch brief, the developer may skip them — they're optional.) Note presence/absence in your verdict but do NOT block on them.
+
+## Rules
+
+- Review only from the text and evidence provided. You CAN read the working tree at `/home/huwei/ai_codings/distill-portal/` directly.
+- Do not assume missing behavior exists elsewhere.
+- If approval-relevant evidence is missing, the verdict must be `needs more evidence`.
+- `approved` and `approved with nits` are not allowed while `Missing Evidence` is not `none`.
+- Prefer concrete findings over style opinions.
+- If all 4 round-1 blockers are correctly fixed AND no new blockers introduced, return `approved` or `approved with nits`.
+
+## Output exactly this structure
+
+- **Verdict**: one of `approved`, `approved with nits`, `needs changes`, `needs more evidence`
+- **Round 1 Blocker Resolution**: for each of the 4 round-1 blockers, one paragraph confirming applied / not-applied with cited file:line evidence
+- **New Findings (in the fixup pass)**: for each — severity (`blocking` | `nit`), file:line, issue, why it matters; or `none`
+- **Missing Evidence**: exact missing evidence required, or `none`
+- **Required Changes**: exact changes required before approval, or `none`
+- **Notes**: optional improvements, or `none`
+
+codex
+I’ll verify the fixup against the working tree and the provided evidence, then return only the requested review structure. I’m starting with the repo instructions and the exact touched frontend files so the verdict is tied to line-level evidence.
+exec
+/bin/bash -lc "sed -n '1,220p' README.md" in /home/huwei/ai_codings/distill-portal
+exec
+/bin/bash -lc "sed -n '1,220p' docs/dev-commands.md" in /home/huwei/ai_codings/distill-portal
+exec
+/bin/bash -lc "sed -n '1,220p' docs/dependency-rules.md" in /home/huwei/ai_codings/distill-portal
+exec
+/bin/bash -lc "sed -n '1,220p' docs/README.md" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+# Dependency Rules
+
+## Allowed Directions
+
+- `apps/backend` may depend on:
+  - `components/collector-runtime`
+  - `components/configuration`
+  - `components/ingest-service`
+  - `components/observability`
+  - `components/raw-session-store`
+  - `components/ui-api-contracts`
+- `apps/frontend` (Bun + Vite + React + TypeScript) may depend on:
+  - `components/ui-api-contracts/bindings/*.ts` (generated TypeScript types; one-way import only)
+  - external npm packages managed via Bun for UI, HTTP fetch, and test tooling. Phase 4 adopted a strict 2-package escape-hatch budget for browser-only concerns native APIs cannot meet; one slot is consumed (`focus-trap-react@^11`, fixing a native `<dialog>` Tab-cycling gap), one slot remains reserved (`@tanstack/react-virtual`, gated on documented evidence that pagination plus `useMemo` cannot keep render time bounded). Adding a third escape-hatch package requires a fresh planning round.
+  - all backend communication is over HTTP to `apps/backend`
+- `components/ingest-service` may depend on:
+  - `components/collector-runtime`
+  - `components/raw-session-store`
+- `components/raw-session-store` may depend on:
+  - `components/ui-api-contracts`
+- `components/collector-runtime` may depend on:
+  - `components/ui-api-contracts`
+- `components/configuration`, `components/observability`, and `components/ui-api-contracts` should not depend on app crates
+
+## Forbidden Directions
+
+- `apps/frontend` must not depend on:
+  - `components/collector-runtime`
+  - `components/ingest-service`
+  - `components/raw-session-store`
+- No component crate may depend on `apps/backend` or `apps/frontend`
+- `apps/backend` must not render end-user HTML
+- `apps/frontend` must not reach into storage or ingest internals directly
+
+## Contract Handling
+
+- Shared page and JSON payloads live in `components/ui-api-contracts`
+- `components/ui-api-contracts/src/lib.rs` is the single source of truth for the contract. The TypeScript declarations under `components/ui-api-contracts/bindings/` are checked-in generated artifacts derived from `src/lib.rs` by the `ts-bindings` cargo feature — they are the canonical downstream output and must stay in sync with the Rust source: regenerate and commit them together with any Rust contract change, never hand-edited
+- The Bun frontend consumes contract types via one-way TypeScript imports from `components/ui-api-contracts/bindings/*.ts`, using the `@contracts/*` path alias wired in `apps/frontend/tsconfig.json` (or a direct relative path). The frontend MUST NOT re-declare contract types by hand; the thin barrel at `apps/frontend/src/lib/contracts.ts` re-exports the generated types for internal consumption
+- If a backend JSON shape changes, update:
+  - `components/ui-api-contracts/src/lib.rs`
+  - `components/ui-api-contracts/bindings/*.ts` (regenerate via `cargo test -p distill-portal-ui-api-contracts --features ts-bindings -- --ignored regenerate_ts_bindings`; see `docs/dev-commands.md`)
+  - `apps/backend/src/http_api.rs`
+  - the typed API layer in `apps/frontend/src/lib/` (`api.ts`, `contracts.ts`)
+  - any impacted frontend rendering under `apps/frontend/src/App.tsx`, the unified session feature at `apps/frontend/src/features/sessions/`, or the shared React primitives under `apps/frontend/src/components/`
+  - the relevant tests in `apps/backend/tests/http_api.rs`, `apps/frontend/src/App.test.tsx`, `apps/frontend/e2e/inspection.spec.ts`, and `tests/e2e/tests/inspection_surface.rs`
+
+## Layer Ownership
+
+- Storage writes and reads belong to `components/raw-session-store`
+- Replace-on-sync ingest rules belong to `components/ingest-service`
+- Source discovery and parsing belong to `components/collector-runtime`
+- Environment variable mapping belongs to `components/configuration`
+- HTTP routes belong to the app crates only
+
+## Frontend Dev-Time Topology
+
+- `apps/frontend/` is a Bun-managed package (`package.json`, `bun.lock`, `vite.config.ts`, `index.html`, `src/*.tsx`).
+- Frontend dev-time proxying of `/api/v1/**` and `/health` to the backend belongs in `apps/frontend/vite.config.ts`, not in any application code path.
+- The Bun app must continue to honor the frontend-boundary rules above: no direct dependency on `components/collector-runtime`, `components/ingest-service`, or `components/raw-session-store`; all backend communication goes over HTTP to the Rust backend.
+
+ succeeded in 0ms:
+# Distill Portal
+
+Distill Portal is a local-first portal for collecting, storing, and analyzing coding sessions produced by AI coding tools.
+
+Read [PRD.md](PRD.md) for the product summary and functional requirements.
+
+For developers, please read [docs/README.md](docs/README.md) for documentation on the repository structure, component ownership, features, and development commands.
+
+## Contributing
+
+- Read [PRD.md](PRD.md) for the product summary and functional requirements.
+- Read [ARCHITECTURE.md](ARCHITECTURE.md) for the architecture.
+- Read [docs/README.md](docs/README.md) for the repository structure, component ownership, features, and development commands.
+
+### Hard Rules
+
+- Backend owns machine-consumable HTTP routes; do not reintroduce backend-owned end-user HTML.
+- Frontend talks to the backend only over HTTP and only consumes generated contract types from `components/ui-api-contracts/bindings/*.ts`.
+- `apps/frontend` must not import from `components/collector-runtime`, `components/ingest-service`, or `components/raw-session-store`.
+- HTTP payload changes must update `components/ui-api-contracts`, the Rust and TS sides of both apps, and relevant tests together.
+- Keep docs aligned with any layout, command, dependency, or payload-shape change.
+
+### Quick Checks
+
+Fast checks to run before committing:
+
+```bash
+cargo check --workspace
+cargo test --workspace
+```
+
+From `apps/frontend/`:
+
+```bash
+bun run test
+```
+
+See [docs/dev-commands.md](docs/dev-commands.md) for the full reference, including targeted Rust suites, the TypeScript contract-drift check, and the browser e2e suite.
+
+## Quick Start
+
+Run the backend:
+
+```bash
+cargo run -p distill-portal-backend
+```
+
+Run the frontend (from `apps/frontend/`):
+
+```bash
+bun install
+bun run dev
+```
+
+Then open the frontend address. By default:
+
+- backend: `http://127.0.0.1:4000`
+- frontend (Vite dev server): `http://127.0.0.1:4100`
+
+See `docs/dev-commands.md` for the full list of frontend and test commands.
+
+ succeeded in 0ms:
+# Distill Portal Docs
+
+Start here when you need to orient yourself in the Distill Portal workspace. The backend is Rust under `apps/backend`; the frontend is Bun + Vite + React + TypeScript under `apps/frontend`.
+
+This file is both the docs entry point and the repo map.
+
+## Start With Your Task
+
+| I want to... | Start here |
+| --- | --- |
+| Modify the inspection UI | [`playbooks/modify-frontend-page.md`](playbooks/modify-frontend-page.md), [`../apps/frontend/README.md`](../apps/frontend/README.md) |
+| Change a backend API or JSON payload | [`playbooks/modify-backend-api.md`](playbooks/modify-backend-api.md), [`dependency-rules.md`](dependency-rules.md) |
+| Change session storage behavior | [`playbooks/modify-session-store.md`](playbooks/modify-session-store.md) |
+| Run or test locally | [`dev-commands.md`](dev-commands.md) |
+| Check dependency boundaries | [`dependency-rules.md`](dependency-rules.md) |
+| Understand a feature | [`features/inspection-surface.md`](features/inspection-surface.md), [`features/session-store.md`](features/session-store.md) |
+| Understand product + architecture intent | [`../PRD.md`](../PRD.md), [`../ARCHITECTURE.md`](../ARCHITECTURE.md) |
+| Audit historical planning or delivery | [`../working/README.md`](../working/README.md), [`../progress/README.md`](../progress/README.md) |
+
+## Apps
+
+- `apps/backend` — Rust backend binary: runtime wiring, scan/ingest/store orchestration, machine-consumable HTTP routes. See [`../apps/backend/README.md`](../apps/backend/README.md).
+- `apps/frontend` — Bun + Vite + React + TypeScript inspection UI. The unified session list (table, filters, view, drawer body, merge / filter / sort / paginate / persistence helpers) lives under `apps/frontend/src/features/sessions/`; shared React primitives (action bar, scan-errors callout, native-`<dialog>`-backed drawer shell, pagination strip, toast) live under `apps/frontend/src/components/`. CSS is co-located: each `.tsx`/`.ts` imports its sibling `.css` (no CSS Modules, no CSS-in-JS, no Tailwind); `src/styles/` carries only the three global sheets `reset.css`, `tokens.css`, `global.css`. See [`../apps/frontend/README.md`](../apps/frontend/README.md).
+
+## Components
+
+Reusable, app-independent crates. Each owns its own README:
+
+- [`collector-runtime`](../components/collector-runtime/README.md) — source discovery, safe JSONL reads, tool-specific parsers (Claude Code, Codex)
+- [`configuration`](../components/configuration/README.md) — backend runtime config loading
+- [`ingest-service`](../components/ingest-service/README.md) — content-addressed ingest decisions, replace-on-sync
+- [`observability`](../components/observability/README.md) — tracing subscriber bootstrap
+- [`raw-session-store`](../components/raw-session-store/README.md) — SQLite metadata + blob-store persistence
+- [`ui-api-contracts`](../components/ui-api-contracts/README.md) — shared HTTP payload types; source of truth for the Rust → TS bindings
+
+## Feature Guides
+
+- [`features/inspection-surface.md`](features/inspection-surface.md) — page ownership, API touchpoints, and tests for the inspection workflow
+- [`features/session-store.md`](features/session-store.md) — storage ownership, backend touchpoints, and tests for persisted session behavior
+
+## Playbooks
+
+Short recipes for common changes:
+
+- [`playbooks/modify-frontend-page.md`](playbooks/modify-frontend-page.md) — shortest safe path for UI changes
+- [`playbooks/modify-backend-api.md`](playbooks/modify-backend-api.md) — shortest safe path for backend API changes
+- [`playbooks/modify-session-store.md`](playbooks/modify-session-store.md) — shortest safe path for storage changes
+
+## Verification Map
+
+| Surface | Command |
+| --- | --- |
+| Workspace compile | `cargo check --workspace` |
+| Full Rust test suite | `cargo test --workspace` |
+| Backend HTTP API | `cargo test -p distill-portal-backend --test http_api` |
+| Collector parsers | `cargo test -p distill-portal-collector-runtime --test parsers` |
+| Typed Rust-client HTTP smoke | `cargo test -p distill-portal-e2e --test inspection_surface` |
+| TypeScript contract bindings freshness | `cargo test -p distill-portal-ui-api-contracts --features ts-bindings` |
+| Frontend unit tests | `bun run test` (from `apps/frontend/`) |
+| Browser e2e (Playwright) | `bun run test:e2e` (from `apps/frontend/`) |
+
+## Repo Map
+
+- `apps/backend` — backend binary and its tests
+- `apps/frontend` — Bun/React frontend
+- `components/*` — reusable implementation crates
+- `docs/` — this tree (dependency rules, commands, features, playbooks)
+- `tests/e2e` — real HTTP-boundary Rust integration tests
+- `tests/fixtures` — sample Claude Code and Codex sessions used by parser and backend tests
+- `working/` — historical planning specs for completed phases (see [`../working/README.md`](../working/README.md))
+- `progress/` — historical delivery logs for completed phases (see [`../progress/README.md`](../progress/README.md))
+
+## Historical Material
+
+- [`../working/`](../working/) — frozen planning specs. Not current-state instructions. See [`working/README.md`](../working/README.md).
+- [`../progress/`](../progress/) — frozen delivery logs. Not current-state instructions. See [`progress/README.md`](../progress/README.md).
+
+ succeeded in 0ms:
+# Dev Commands
+
+## Run The Backend
+
+```bash
+cargo run -p distill-portal-backend
+```
+
+Useful backend env vars:
+
+- `DISTILL_PORTAL_BACKEND_BIND` or `DISTILL_PORTAL_BIND`
+- `DISTILL_PORTAL_DATA_DIR`
+- `DISTILL_PORTAL_POLL_INTERVAL_SECS`
+- `DISTILL_PORTAL_CLAUDE_ROOTS`
+- `DISTILL_PORTAL_CODEX_ROOTS`
+
+## Run The Frontend
+
+The frontend lives under `apps/frontend/` as a Bun-managed package (`package.json`, `bun.lock`, `vite.config.ts`, `index.html`, `src/*.tsx`).
+
+Commands (run from `apps/frontend/`):
+
+```bash
+bun install
+bun run dev
+bun run build
+bun run test
+```
+
+- `bun run dev` starts the Vite dev server on `http://127.0.0.1:4100` with `strictPort: true` so a port collision fails fast.
+- `bun run build` writes static assets to `apps/frontend/dist/`.
+- `bun run test` runs `bun test src` (the unit suite; browser e2e is `bun run test:e2e`, documented below). After Phase 4 the unit suite is 231 tests / 891 expect calls across 17 files covering the unified session list, the session detail drawer, pagination, the toast queue, and the shared React primitives:
+  - **Mounted-`App` integration** — `apps/frontend/src/App.test.tsx`: the read-only unified-list render against three `Promise.allSettled` GETs, the rescan and import mutation flows (including an explicit race-window reproducer for the stale-selection bug), per-panel independent-error behavior, the four documented empty-state branches, the click-time intersection rule under filter and pagination races, the toast queue replacing the old inline `lastReport`, and the cross-page bulk-select / retry-after-intervening-rescan invariants.
+  - **Unified session feature** — `apps/frontend/src/features/sessions/`: `SessionsTable.test.tsx`, `SessionFilters.test.tsx`, `SessionDetail.test.tsx` (component-level integration), and pure helpers `mergeSessions.test.ts`, `filterSessions.test.ts`, `applyPagination.test.ts`, `relativeTime.test.ts`, `useSessionFilters.test.ts` (incl. 12+ corrupt-input fallbacks), `useToastQueue.test.ts`, `lastRescan.test.ts`, and the streaming `rawPreview.test.ts` (line-cap + byte-cap + abort + non-JSON fallback).
+  - **Shared React primitives** — `apps/frontend/src/components/`: `ActionBar.test.tsx` (idle zero/non-zero selection, pending rescan/import disabled states, sticky modifier, last-rescan caption, hidden-by-filter caption + clear affordances), `Drawer.test.tsx` (native `<dialog>` shell, focus restoration, Esc-close, backdrop close), `Pagination.test.tsx` (page-size selector + Prev/Next + caption + clamp), `Toast.test.tsx` (kind variants + Retry + Dismiss roles), `ScanErrorsCallout.test.tsx` (renders nothing when empty).
+  - The variant-matrix `StatusBadge.test.tsx` from M2 was retired in M6 (Chunk G); the four-variant DOM-shape contract is preserved by a dedicated test in `SessionsTable.test.tsx` (`SessionsTable: inlined status badge renders all 4 variants ...`) that iterates over `up_to_date / not_stored / outdated / source_missing` and asserts the inlined `<span class="badge {variant}">{label}</span>` markup byte-for-byte for each variant. `App.test.tsx` continues to assert the `up-to-date` variant at the integration level.
+
+## Dev Topology
+
+```
+browser
+   |
+   v
+http://127.0.0.1:4100  <-- Vite dev server (bun run dev)
+   |
+   |  /api/v1/**  and  /health   proxied by Vite
+   v
+http://127.0.0.1:4000  <-- Rust backend (cargo run -p distill-portal-backend)
+```
+
+- Backend: `127.0.0.1:4000` (Rust, `cargo run -p distill-portal-backend`).
+- Frontend dev server: `127.0.0.1:4100` (Bun + Vite, `bun run dev` under `apps/frontend/`).
+- Vite proxies `/api/v1/**` and `/health` to the backend so browser code can use same-origin paths without ad hoc CORS setup. Dev-time proxy config lives in `apps/frontend/vite.config.ts`, not in application code.
+
+## Run Both Together
+
+Terminal 1:
+
+```bash
+cargo run -p distill-portal-backend
+```
+
+Terminal 2 (from `apps/frontend/`):
+
+```bash
+bun run dev
+```
+
+Then open `http://127.0.0.1:4100/` in the browser. The Rust backend must be running for `/health` and `/api/v1/**` to resolve through the Vite proxy.
+
+## Browser E2E (Playwright)
+
+The inspection-surface browser e2e lives under `apps/frontend/e2e/` and
+drives Chromium against the Bun + Vite dev server, which proxies to a
+real Rust backend spawned inside the harness (`e2e/harness/backend.ts`).
+The harness uses `Bun.spawn` per the Bun-first rule, so the suite must
+be run with Bun as the runtime (`bun --bun x playwright test`, wired
+into the `test:e2e` script below).
+
+Commands (run from `apps/frontend/`):
+
+```bash
+bun run test:e2e:install   # one-time: install Chromium via Playwright
+bun run test:e2e           # spawns the backend, starts Vite, runs Chromium
+```
+
+The harness binds the backend to `127.0.0.1:4000` because
+`vite.config.ts` proxies `/api/v1/**` and `/health` to that address;
+tests run serially (`workers: 1`) so the port is never double-bound.
+See `playwright.config.ts` for the full configuration.
+
+## Targeted Tests
+
+```bash
+cargo test -p distill-portal-collector-runtime --test parsers
+cargo test -p distill-portal-backend --test http_api
+cargo test -p distill-portal-e2e --test inspection_surface
+```
+
+## TypeScript Contract Bindings
+
+The Rust contract types in `components/ui-api-contracts/src/lib.rs` are the source of truth. TypeScript declarations under `components/ui-api-contracts/bindings/` are generated from them via the `ts-bindings` cargo feature (off by default) and must be regenerated whenever the Rust contract changes.
+
+Verify the checked-in TS files match the current Rust source (fails on drift):
+
+```bash
+cargo test -p distill-portal-ui-api-contracts --features ts-bindings
+```
+
+Regenerate the checked-in TS files after a contract change:
+
+```bash
+cargo test -p distill-portal-ui-api-contracts --features ts-bindings -- --ignored regenerate_ts_bindings
+```
+
+See `components/ui-api-contracts/README.md` for the tool-choice rationale and the full list of generated files.
+
+## Workspace Verification
+
+```bash
+cargo check --workspace
+cargo test --workspace
+```
+
+codex
+The repo rules confirm this is a frontend-only review unless payload contracts or backend routes are touched. I’m now checking the exact CSS, Esc handling, tests, e2e pulse assertion, and the cross-cutting file/dependency surface.
+exec
+/bin/bash -lc 'grep -A 4 -B 4 "back-to-list" apps/frontend/src/styles/global.css' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   * (rather than in `SessionView.css`) so the pattern stays in one
+   * place and a future maintainer can audit the full narrow-mode
+   * surface in a single file.
+   */
+  main.split-pane[data-narrow-mode="session"] .back-to-list {
+    display: inline-block;
+  }
+}
+
+
+exec
+/bin/bash -lc 'rg -n "back-to-list|global.css|data-narrow-mode" apps/frontend/src/features/sessions/SessionView.css apps/frontend/src/features/sessions/SessionView.test.tsx apps/frontend/src/styles/global.css' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+apps/frontend/src/styles/global.css:16: *     single column; the `data-narrow-mode` attribute on `<main>`
+apps/frontend/src/styles/global.css:110: * the toggle (per spec line 599). The `data-narrow-mode` attribute on
+apps/frontend/src/styles/global.css:115:  main.split-pane[data-narrow-mode="session"] .list-pane {
+apps/frontend/src/styles/global.css:118:  main.split-pane[data-narrow-mode="list"] .session-pane {
+apps/frontend/src/styles/global.css:126:   * co-located with the rest of the data-narrow-mode visibility rules
+apps/frontend/src/styles/global.css:131:  main.split-pane[data-narrow-mode="session"] .back-to-list {
+apps/frontend/src/features/sessions/SessionView.css:20: *   - `.back-to-list`        → quiet text-link button (narrow only)
+apps/frontend/src/features/sessions/SessionView.css:23: * + the split-pane <main> Grid recipe live in `styles/global.css`
+apps/frontend/src/features/sessions/SessionView.css:40:   * global.css). The session pane carries no border — the hairline
+apps/frontend/src/features/sessions/SessionView.css:132: * override in `styles/global.css` (matched against
+apps/frontend/src/features/sessions/SessionView.css:133: * `main.split-pane[data-narrow-mode="session"] .back-to-list`). Per
+apps/frontend/src/features/sessions/SessionView.css:138:.back-to-list {
+apps/frontend/src/features/sessions/SessionView.css:150:.back-to-list:hover,
+apps/frontend/src/features/sessions/SessionView.css:151:.back-to-list:focus-visible {
+apps/frontend/src/features/sessions/SessionView.css:155:.back-to-list:focus-visible {
+apps/frontend/src/features/sessions/SessionView.test.tsx:16://   - back-to-list: rendered only when showBackToList === true; click
+apps/frontend/src/features/sessions/SessionView.test.tsx:18://   - back-to-list visibility CSS smoke test: the narrow-viewport
+apps/frontend/src/features/sessions/SessionView.test.tsx:19://     @media override exists in `styles/global.css` so the button is
+apps/frontend/src/features/sessions/SessionView.test.tsx:157:test("SessionView back-to-list: rendered only when showBackToList=true; click fires onBackToList", () => {
+apps/frontend/src/features/sessions/SessionView.test.tsx:169:  expect(hidden.container.querySelector(".back-to-list")).toBeNull();
+apps/frontend/src/features/sessions/SessionView.test.tsx:186:    ".back-to-list",
+apps/frontend/src/features/sessions/SessionView.test.tsx:196:test("SessionView back-to-list narrow-viewport visibility: global.css carries the @media override that re-enables `display`", async () => {
+apps/frontend/src/features/sessions/SessionView.test.tsx:197:  // Smoke test for codex M1a fix-up #1. The `.back-to-list` selector
+apps/frontend/src/features/sessions/SessionView.test.tsx:200:  // enables it MUST live somewhere — co-located in `global.css` next
+apps/frontend/src/features/sessions/SessionView.test.tsx:201:  // to the other `data-narrow-mode` visibility rules. happy-dom does
+apps/frontend/src/features/sessions/SessionView.test.tsx:206:  const cssPath = new URL("../../styles/global.css", import.meta.url).pathname;
+apps/frontend/src/features/sessions/SessionView.test.tsx:211:  // 2. Within that media context, a rule re-enables `.back-to-list`
+apps/frontend/src/features/sessions/SessionView.test.tsx:212:  //    when `<main class="split-pane" data-narrow-mode="session">`.
+apps/frontend/src/features/sessions/SessionView.test.tsx:219:    /main\.split-pane\[data-narrow-mode="session"\]\s+\.back-to-list\s*\{\s*display:\s*inline(?:-block|-flex)?\s*;?\s*\}/,
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/App.tsx | sed -n '660,760p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   660	    setNarrowMode("list");
+   661	  }, [selectRow]);
+   662	
+   663	  // M1a: global `Esc` handler. Clears the URL `?session=` slice +
+   664	  // selectedRowKey + narrowMode in a single keystroke. Per spec
+   665	  // line 567 + Resolved Decision #17, the handler is SCOPED in two
+   666	  // independent ways:
+   667	  //   (1) NEGATIVE scope (editable-control filter): ignored when
+   668	  //       focus is in `<input>`, `<textarea>`, any `[contenteditable]`
+   669	  //       (any value, including the boolean / empty / "plaintext-only"
+   670	  //       forms — codex M1a fix-up #3), or any `[role="combobox"]`.
+   671	  //       Editable controls get to consume Esc themselves first
+   672	  //       (clear search, dismiss combobox, etc.).
+   673	  //   (2) POSITIVE scope (in-scope surfaces only — codex M1a fix-up
+   674	  //       #2): even when focus is non-editable, Esc fires ONLY when
+   675	  //       the target is (a) a descendant of `<article class="session-
+   676	  //       pane">` OR (b) the currently-selected list row
+   677	  //       (`<tr aria-current="true">`). Esc is IGNORED everywhere
+   678	  //       else (filter buttons, table headers, action-bar checkboxes,
+   679	  //       pagination controls, …). This matches spec line 567.
+   680	  //
+   681	  // Identical behavior across narrow + wide viewports — on narrow
+   682	  // it ALSO resets narrowMode to "list" (no session pane to be in).
+   683	  useEffect(() => {
+   684	    function isEditableTarget(target: EventTarget | null): boolean {
+   685	      if (target === null) return false;
+   686	      const el = target as HTMLElement;
+   687	      // Tag check: input / textarea — both directly consume Esc
+   688	      // semantics in their default behavior.
+   689	      const tag = (el.tagName ?? "").toUpperCase();
+   690	      if (tag === "INPUT" || tag === "TEXTAREA") return true;
+   691	      // contenteditable elements: the plain `[contenteditable]`
+   692	      // attribute selector matches every form HTML allows — the
+   693	      // boolean attribute (`<div contenteditable>`), the empty-string
+   694	      // form (`<div contenteditable="">`), the explicit "true" form,
+   695	      // and the "plaintext-only" variant. Spec line 567 uses the
+   696	      // plain selector for exactly this reason; codex's M1a fix-up #3
+   697	      // pinned the previous narrow `'[contenteditable="true"]'`
+   698	      // selector as a blocking finding because it missed the boolean
+   699	      // / empty-string forms.
+   700	      if (
+   701	        typeof el.closest === "function" &&
+   702	        el.closest("[contenteditable]") !== null
+   703	      ) {
+   704	        return true;
+   705	      }
+   706	      // ARIA combobox role — covers e.g. the future-typeahead
+   707	      // autocomplete patterns.
+   708	      if (
+   709	        typeof el.closest === "function" &&
+   710	        el.closest('[role="combobox"]') !== null
+   711	      ) {
+   712	        return true;
+   713	      }
+   714	      return false;
+   715	    }
+   716	    function isInScope(target: EventTarget | null): boolean {
+   717	      // Positive-scope rule (codex M1a fix-up #2): Esc only fires
+   718	      // when the focus target is inside one of the two in-scope
+   719	      // surfaces. Anywhere else the global Esc handler is a no-op,
+   720	      // even on non-editable controls. This is the exact rule from
+   721	      // spec line 567:
+   722	      //   (a) descendant of `<article class="session-pane">`, OR
+   723	      //   (b) on a selected row `<tr aria-current="true">`.
+   724	      if (target === null) return false;
+   725	      const el = target as HTMLElement;
+   726	      if (typeof el.closest !== "function") return false;
+   727	      if (el.closest("article.session-pane") !== null) return true;
+   728	      if (el.closest('tr[aria-current="true"]') !== null) return true;
+   729	      return false;
+   730	    }
+   731	    function onKeyDown(event: KeyboardEvent) {
+   732	      if (event.key !== "Escape") return;
+   733	      // (1) Negative scope: editable controls consume Esc themselves.
+   734	      if (isEditableTarget(event.target)) return;
+   735	      // (2) Positive scope: only fire when target is in-scope.
+   736	      if (!isInScope(event.target)) return;
+   737	      // setSelectedRowKey(null) + URL clear + narrowMode reset.
+   738	      // selectRow handles the first two; setNarrowMode handles the
+   739	      // third. All three are idempotent so calling them when there
+   740	      // is nothing to clear is a no-op.
+   741	      selectRow(null);
+   742	      setNarrowMode("list");
+   743	    }
+   744	    window.addEventListener("keydown", onKeyDown);
+   745	    return () => {
+   746	      window.removeEventListener("keydown", onKeyDown);
+   747	    };
+   748	  }, [selectRow]);
+   749	
+   750	  // M1a: derive the right-pane state. The four-state machine
+   751	  // (per design.md §4.1) maps the (selectedRowKey, mergedRows,
+   752	  // panel-state) tuple to one of:
+   753	  //   - empty               → no selection
+   754	  //   - loading             → selection set; row not yet merged;
+   755	  //                           any GET still in flight
+   756	  //   - ready-placeholder   → selection set; row IS in merged set
+   757	  //                           (M1a placeholder until M2's tabs)
+   758	  //   - session_not_found   → selection set; row NOT in merged set;
+   759	  //                           ALL three GETs settled (per spec line
+   760	  //                           572 — the "all three settled" gate is
+
+exec
+/bin/bash -lc 'rg -n "Escape|contenteditable|session pane|selected list row|outside the session pane|global Esc|clears selection" apps/frontend/src/App.test.tsx' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+2757://   - global Esc clears selection AND removes ?session= AND IS
+2951:test("M1a: Esc on a descendant of <article class='session-pane'> clears selection AND removes ?session= from URL", async () => {
+2954:  // pane or (b) the currently-selected list row. This test exercises
+2967:  // Dispatch Escape from INSIDE the session pane so the positive-
+2982:        key: "Escape",
+2998:test("M1a: Esc on the selected list row (tr[aria-current='true']) clears selection", async () => {
+3021:        key: "Escape",
+3035:test("M1a: Esc on a button OUTSIDE the session pane and OUTSIDE a selected row does NOT clear selection", async () => {
+3040:  // in-scope surfaces (session pane / selected row) trigger Esc.
+3054:  // input / contenteditable / combobox), and it's outside the
+3055:  // session pane and outside any aria-current row.
+3060:  // Sanity: this button is NOT inside the session pane and NOT
+3075:        key: "Escape",
+3089:test("M1a: Esc IS IGNORED when focus is in [contenteditable] (boolean / empty-value attribute form)", async () => {
+3091:  // the plain `[contenteditable]` attribute selector (not
+3092:  // `[contenteditable="true"]`) so it matches every form HTML
+3093:  // permits: boolean (`<div contenteditable>`), empty-string
+3094:  // (`<div contenteditable="">`), explicit `="true"`, and
+3107:  // Inject a `<div contenteditable>` (boolean attribute → empty-
+3110:  // INSIDE the session pane so the positive-scope check would
+3118:  // exactly (`<div contenteditable>`); HTML serialization stores the
+3120:  editable.setAttribute("contenteditable", "");
+3129:        key: "Escape",
+3135:  // `[contenteditable]` selector caught the empty-value form.
+3148:test("M1a: global Esc is IGNORED when focus is in the SessionFilters search input", async () => {
+3177:        key: "Escape",
+
+exec
+/bin/bash -lc 'git status --short' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+ M apps/frontend/e2e/inspection.spec.ts
+ M apps/frontend/src/App.test.tsx
+ M apps/frontend/src/App.tsx
+ M apps/frontend/src/features/sessions/SessionsTable.css
+ M apps/frontend/src/features/sessions/SessionsTable.tsx
+ M apps/frontend/src/features/sessions/SessionsView.tsx
+ M apps/frontend/src/styles/global.css
+ M progress/phase-5.progress.md
+?? apps/frontend/src/features/sessions/SessionView.css
+?? apps/frontend/src/features/sessions/SessionView.test.tsx
+?? apps/frontend/src/features/sessions/SessionView.tsx
+?? apps/frontend/src/features/sessions/useSelectedSession.test.ts
+?? apps/frontend/src/features/sessions/useSelectedSession.ts
+?? working/phase-5/
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/e2e/inspection.spec.ts | sed -n '450,505p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   450	    //         right-pane mount: the same row remains aria-current
+   451	    //         after the reload.
+   452	    //
+   453	    //     Note: the existing drawer flow (steps 9 + 10) ALSO opens
+   454	    //     when the user clicks a row — that's the M1a "Phase 4
+   455	    //     drawer flow preserved" invariant. M1b will retire it.
+   456	    //     Here we exercise the SEPARATE URL-driven path; the drawer
+   457	    //     does NOT open from a deep-link arrival because no click
+   458	    //     happens.
+   459	    //
+   460	    //     Cross-reference: the unit-level pulse-attribute behavior is
+   461	    //     covered by App.test.tsx tests
+   462	    //       - "M1a: URL-on-mount with ?session=<rowKey> pre-selects +
+   463	    //          matched row carries data-deep-link='true'"
+   464	    //       - "M1a: click-driven selection does NOT set data-deep-link='true'"
+   465	    //       - "M1a: deep-link pulse clears via onAnimationEnd → data-
+   466	    //          deep-link attribute is removed"
+   467	    //     This e2e step is the browser-level cross-check for the
+   468	    //     same machinery (codex round-1 blocking finding #4).
+   469	    await page.goto(`/?session=${encodeURIComponent(FIXTURE_SESSION_KEY)}`);
+   470	    await expect(
+   471	      page.getByRole("heading", { name: "Distill Portal", level: 1 }),
+   472	    ).toBeVisible();
+   473	    // <article class="session-pane"> is in the DOM with a
+   474	    // data-state attribute.
+   475	    const sessionPane = page.locator("article.session-pane");
+   476	    await expect(sessionPane).toHaveCount(1);
+   477	    // Capture the matched row by aria-current first — this is the
+   478	    // stable post-mount selector. Once it appears, the pulse is
+   479	    // either in flight or just-finished; we then make a tight
+   480	    // assertion against data-deep-link with a short timeout to
+   481	    // catch the transient attribute. This mirrors the unit-test
+   482	    // coverage in App.test.tsx (which uses happy-dom + immediate
+   483	    // synchronous assertion); the e2e gives us the browser-level
+   484	    // proof codex's M1a fix-up #4 asked for.
+   485	    const matchedRow = page
+   486	      .locator("tbody tr")
+   487	      .filter({ has: page.locator(`text=${FIXTURE_SESSION_KEY}`) });
+   488	    await expect(matchedRow).toBeVisible({ timeout: 5_000 });
+   489	    // Transient pulse attribute. The pulse runs for 600 ms; the 2 s
+   490	    // safety timer is the hard ceiling. A 1.5 s timeout for the
+   491	    // "attribute is present" assertion is comfortably within the
+   492	    // race window even if WebKit / fixture-server load takes a
+   493	    // beat. If this turns out flaky in real Chromium the fix-up
+   494	    // dispatch brief permits Option B (drop this assertion + add a
+   495	    // cross-reference comment); the cross-reference comment above
+   496	    // is already in place so the fallback is a one-line revert.
+   497	    await expect(matchedRow).toHaveAttribute("data-deep-link", "true", {
+   498	      timeout: 1_500,
+   499	    });
+   500	    // After the pulse settles (≤ 2 s safety timer + a small slack
+   501	    // for the React render cycle), the data-deep-link attribute is
+   502	    // removed. aria-current persists as the stable selection.
+   503	    await expect(matchedRow).not.toHaveAttribute("data-deep-link", "true", {
+   504	      timeout: 3_000,
+   505	    });
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/styles/global.css | sed -n '100,138p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   100	
+   101	@media (min-width: 900px) {
+   102	  .list-pane {
+   103	    border-right: 1px solid var(--color-border);
+   104	  }
+   105	}
+   106	
+   107	/*
+   108	 * Narrow-viewport visibility. Both panes stay React-mounted so the
+   109	 * SessionView's tab state + the list panel's scroll position survive
+   110	 * the toggle (per spec line 599). The `data-narrow-mode` attribute on
+   111	 * `<main>` drives which pane is visible; the other carries
+   112	 * `display: none`.
+   113	 */
+   114	@media (max-width: 899.98px) {
+   115	  main.split-pane[data-narrow-mode="session"] .list-pane {
+   116	    display: none;
+   117	  }
+   118	  main.split-pane[data-narrow-mode="list"] .session-pane {
+   119	    display: none;
+   120	  }
+   121	  /*
+   122	   * "← Back to list" affordance — re-enables the quiet text-link button
+   123	   * that `SessionView.css` declares with `display: none` by default.
+   124	   * Visible only on narrow viewports AND when narrowMode === "session"
+   125	   * (matches design.md §3.5 + spec acceptance item #24). This rule is
+   126	   * co-located with the rest of the data-narrow-mode visibility rules
+   127	   * (rather than in `SessionView.css`) so the pattern stays in one
+   128	   * place and a future maintainer can audit the full narrow-mode
+   129	   * surface in a single file.
+   130	   */
+   131	  main.split-pane[data-narrow-mode="session"] .back-to-list {
+   132	    display: inline-block;
+   133	  }
+   134	}
+   135	
+   136	/*
+   137	 * Reduced-motion zero-out. Spec lines 102–110 verbatim. This is the
+   138	 * single global rule that suppresses every Phase-5 animation under
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/features/sessions/SessionView.css | sed -n '120,162p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   120	}
+   121	.quiet-button:hover {
+   122	  border-color: var(--color-border-strong);
+   123	}
+   124	.quiet-button:focus-visible {
+   125	  outline: 2px solid var(--color-accent);
+   126	  outline-offset: 2px;
+   127	}
+   128	
+   129	/* "← Back to list" quiet text link. Visible only on stacked-narrow
+   130	 * viewports when narrowMode === "session" — the `display: none`
+   131	 * default here is re-enabled by the @media (max-width: 899.98px)
+   132	 * override in `styles/global.css` (matched against
+   133	 * `main.split-pane[data-narrow-mode="session"] .back-to-list`). Per
+   134	 * Resolved Decision #17, this gesture sets narrowMode = "list" ONLY
+   135	 * (preserves selectedRowKey + URL + scroll + tab state — the lighter
+   136	 * "step back without losing the session" gesture; Esc is the heavier
+   137	 * "fully clear selection" gesture). */
+   138	.back-to-list {
+   139	  display: none;
+   140	  appearance: none;
+   141	  background: transparent;
+   142	  border: 0;
+   143	  padding: var(--space-1) var(--space-2);
+   144	  margin: 0 0 var(--space-3) calc(-1 * var(--space-2));
+   145	  color: var(--color-text-muted);
+   146	  font: inherit;
+   147	  font-size: var(--text-sm);
+   148	  cursor: pointer;
+   149	}
+   150	.back-to-list:hover,
+   151	.back-to-list:focus-visible {
+   152	  color: var(--color-text);
+   153	  text-decoration: underline;
+   154	}
+   155	.back-to-list:focus-visible {
+   156	  outline: 2px solid var(--color-accent);
+   157	  outline-offset: 2px;
+   158	}
+
+exec
+/bin/bash -lc 'rg -n "M1a: global Esc clears selection|global Esc clears selection AND removes|Esc clears selection AND removes" apps/frontend/src/App.test.tsx' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+2757://   - global Esc clears selection AND removes ?session= AND IS
+
+exec
+/bin/bash -lc 'git diff --name-only HEAD' in /home/huwei/ai_codings/distill-portal
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/features/sessions/SessionView.test.tsx | sed -n '188,225p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+apps/frontend/e2e/inspection.spec.ts
+apps/frontend/src/App.test.tsx
+apps/frontend/src/App.tsx
+apps/frontend/src/features/sessions/SessionsTable.css
+apps/frontend/src/features/sessions/SessionsTable.tsx
+apps/frontend/src/features/sessions/SessionsView.tsx
+apps/frontend/src/styles/global.css
+progress/phase-5.progress.md
+
+ succeeded in 0ms:
+   188	  expect(btn).not.toBeNull();
+   189	  expect(btn?.textContent).toBe("← Back to list");
+   190	  act(() => {
+   191	    btn?.click();
+   192	  });
+   193	  expect(onBackToList).toHaveBeenCalledTimes(1);
+   194	});
+   195	
+   196	test("SessionView back-to-list narrow-viewport visibility: global.css carries the @media override that re-enables `display`", async () => {
+   197	  // Smoke test for codex M1a fix-up #1. The `.back-to-list` selector
+   198	  // in `SessionView.css` declares `display: none` so the button is
+   199	  // hidden on wide viewports. The narrow-viewport override that re-
+   200	  // enables it MUST live somewhere — co-located in `global.css` next
+   201	  // to the other `data-narrow-mode` visibility rules. happy-dom does
+   202	  // not fully evaluate @media queries, so this assertion is a
+   203	  // regex-on-source smoke test (acceptable per the chunk dispatch
+   204	  // brief). Real-browser visibility is covered by the Playwright
+   205	  // step in `e2e/inspection.spec.ts`.
+   206	  const cssPath = new URL("../../styles/global.css", import.meta.url).pathname;
+   207	  const css = await Bun.file(cssPath).text();
+   208	  // 1. The narrow-viewport @media block exists (matches the existing
+   209	  //    pattern at `(max-width: 899.98px)`).
+   210	  expect(css).toMatch(/@media\s*\(max-width:\s*899\.98px\)/);
+   211	  // 2. Within that media context, a rule re-enables `.back-to-list`
+   212	  //    when `<main class="split-pane" data-narrow-mode="session">`.
+   213	  //    Use a single regex that requires `display:` to be NOT `none`
+   214	  //    so a future regression that copy-pastes the wrong rule fails
+   215	  //    the assertion. We accept any inline-* keyword (inline-block,
+   216	  //    inline-flex, inline) — the design.md §3.5 calls for an inline
+   217	  //    treatment so the button reads as a quiet text link.
+   218	  expect(css).toMatch(
+   219	    /main\.split-pane\[data-narrow-mode="session"\]\s+\.back-to-list\s*\{\s*display:\s*inline(?:-block|-flex)?\s*;?\s*\}/,
+   220	  );
+   221	});
+   222	
+   223	test("SessionView landmarks: <article> wraps the pane with aria-live=polite", () => {
+   224	  const { container } = render(
+   225	    <SessionView
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/App.test.tsx | sed -n '2940,3190p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+  2940	    );
+  2941	    expect(stillPulsing).toBeNull();
+  2942	  });
+  2943	  // The row still carries aria-current — clearing the pulse does
+  2944	  // not clear the selection.
+  2945	  const stillSelected = container.querySelector(
+  2946	    'tbody tr[aria-current="true"]',
+  2947	  );
+  2948	  expect(stillSelected).not.toBeNull();
+  2949	});
+  2950	
+  2951	test("M1a: Esc on a descendant of <article class='session-pane'> clears selection AND removes ?session= from URL", async () => {
+  2952	  // Per codex M1a fix-up #2, Esc has a POSITIVE scope rule: it
+  2953	  // only fires when the target is (a) a descendant of the session
+  2954	  // pane or (b) the currently-selected list row. This test exercises
+  2955	  // (a) — the session-pane path.
+  2956	  resetUrl();
+  2957	  window.history.replaceState(null, "", "/?session=claude_code:m1a-1");
+  2958	  globalThis.fetch =
+  2959	    makeM1aFetchMock() as unknown as typeof globalThis.fetch;
+  2960	  const { container } = render(<App />);
+  2961	  // Wait for the merged row to settle so aria-current is in DOM.
+  2962	  await waitFor(() => {
+  2963	    expect(
+  2964	      container.querySelector('tbody tr[aria-current="true"]'),
+  2965	    ).not.toBeNull();
+  2966	  });
+  2967	  // Dispatch Escape from INSIDE the session pane so the positive-
+  2968	  // scope check (event.target.closest("article.session-pane"))
+  2969	  // succeeds. Use the article element itself as the dispatch target —
+  2970	  // it's a non-editable surface in scope.
+  2971	  const sessionArticle = container.querySelector(
+  2972	    "article.session-pane",
+  2973	  ) as HTMLElement | null;
+  2974	  expect(sessionArticle).not.toBeNull();
+  2975	  const KeyboardEventCtor =
+  2976	    (globalThis as unknown as {
+  2977	      window: { KeyboardEvent: typeof KeyboardEvent };
+  2978	    }).window.KeyboardEvent;
+  2979	  await act(async () => {
+  2980	    sessionArticle!.dispatchEvent(
+  2981	      new KeyboardEventCtor("keydown", {
+  2982	        key: "Escape",
+  2983	        bubbles: true,
+  2984	      }),
+  2985	    );
+  2986	  });
+  2987	  await waitFor(() => {
+  2988	    const stillSelected = container.querySelector(
+  2989	      'tbody tr[aria-current="true"]',
+  2990	    );
+  2991	    expect(stillSelected).toBeNull();
+  2992	  });
+  2993	  // URL no longer carries ?session=.
+  2994	  const params = new URLSearchParams(window.location.search);
+  2995	  expect(params.has("session")).toBe(false);
+  2996	});
+  2997	
+  2998	test("M1a: Esc on the selected list row (tr[aria-current='true']) clears selection", async () => {
+  2999	  // Per codex M1a fix-up #2, Esc's positive-scope rule (b) is the
+  3000	  // selected-row path: focus on the `<tr aria-current="true">`,
+  3001	  // dispatch Esc, selection clears.
+  3002	  resetUrl();
+  3003	  window.history.replaceState(null, "", "/?session=claude_code:m1a-1");
+  3004	  globalThis.fetch =
+  3005	    makeM1aFetchMock() as unknown as typeof globalThis.fetch;
+  3006	  const { container } = render(<App />);
+  3007	  let selectedRow: HTMLTableRowElement | null = null;
+  3008	  await waitFor(() => {
+  3009	    selectedRow = container.querySelector(
+  3010	      'tbody tr[aria-current="true"]',
+  3011	    ) as HTMLTableRowElement | null;
+  3012	    expect(selectedRow).not.toBeNull();
+  3013	  });
+  3014	  const KeyboardEventCtor =
+  3015	    (globalThis as unknown as {
+  3016	      window: { KeyboardEvent: typeof KeyboardEvent };
+  3017	    }).window.KeyboardEvent;
+  3018	  await act(async () => {
+  3019	    selectedRow!.dispatchEvent(
+  3020	      new KeyboardEventCtor("keydown", {
+  3021	        key: "Escape",
+  3022	        bubbles: true,
+  3023	      }),
+  3024	    );
+  3025	  });
+  3026	  await waitFor(() => {
+  3027	    expect(
+  3028	      container.querySelector('tbody tr[aria-current="true"]'),
+  3029	    ).toBeNull();
+  3030	  });
+  3031	  const params = new URLSearchParams(window.location.search);
+  3032	  expect(params.has("session")).toBe(false);
+  3033	});
+  3034	
+  3035	test("M1a: Esc on a button OUTSIDE the session pane and OUTSIDE a selected row does NOT clear selection", async () => {
+  3036	  // Per codex M1a fix-up #2, Esc with focus on (e.g.) a filter-strip
+  3037	  // button, table header, action-bar control, or pagination button
+  3038	  // is OUT-OF-SCOPE — selection must NOT clear. This is the
+  3039	  // positive-scope negation: editable controls aside, only the two
+  3040	  // in-scope surfaces (session pane / selected row) trigger Esc.
+  3041	  resetUrl();
+  3042	  window.history.replaceState(null, "", "/?session=claude_code:m1a-1");
+  3043	  globalThis.fetch =
+  3044	    makeM1aFetchMock() as unknown as typeof globalThis.fetch;
+  3045	  const { container } = render(<App />);
+  3046	  // Wait for the merged row to settle.
+  3047	  await waitFor(() => {
+  3048	    expect(
+  3049	      container.querySelector('tbody tr[aria-current="true"]'),
+  3050	    ).not.toBeNull();
+  3051	  });
+  3052	  // Find an out-of-scope, non-editable button. The Rescan button in
+  3053	  // the action bar is a reliable choice — it's a `<button>` (not an
+  3054	  // input / contenteditable / combobox), and it's outside the
+  3055	  // session pane and outside any aria-current row.
+  3056	  const outOfScopeButton = Array.from(
+  3057	    container.querySelectorAll("button"),
+  3058	  ).find((b) => b.textContent?.trim() === "Rescan");
+  3059	  expect(outOfScopeButton).not.toBeUndefined();
+  3060	  // Sanity: this button is NOT inside the session pane and NOT
+  3061	  // inside an aria-current row.
+  3062	  expect(
+  3063	    outOfScopeButton!.closest("article.session-pane"),
+  3064	  ).toBeNull();
+  3065	  expect(
+  3066	    outOfScopeButton!.closest('tr[aria-current="true"]'),
+  3067	  ).toBeNull();
+  3068	  const KeyboardEventCtor =
+  3069	    (globalThis as unknown as {
+  3070	      window: { KeyboardEvent: typeof KeyboardEvent };
+  3071	    }).window.KeyboardEvent;
+  3072	  await act(async () => {
+  3073	    outOfScopeButton!.dispatchEvent(
+  3074	      new KeyboardEventCtor("keydown", {
+  3075	        key: "Escape",
+  3076	        bubbles: true,
+  3077	      }),
+  3078	    );
+  3079	  });
+  3080	  // Selection MUST still be in place.
+  3081	  const stillSelected = container.querySelector(
+  3082	    'tbody tr[aria-current="true"]',
+  3083	  );
+  3084	  expect(stillSelected).not.toBeNull();
+  3085	  const params = new URLSearchParams(window.location.search);
+  3086	  expect(params.get("session")).toBe("claude_code:m1a-1");
+  3087	});
+  3088	
+  3089	test("M1a: Esc IS IGNORED when focus is in [contenteditable] (boolean / empty-value attribute form)", async () => {
+  3090	  // Per codex M1a fix-up #3, the editable-control selector must use
+  3091	  // the plain `[contenteditable]` attribute selector (not
+  3092	  // `[contenteditable="true"]`) so it matches every form HTML
+  3093	  // permits: boolean (`<div contenteditable>`), empty-string
+  3094	  // (`<div contenteditable="">`), explicit `="true"`, and
+  3095	  // `="plaintext-only"`. This test exercises the empty-string form
+  3096	  // which the previous narrow selector would have missed.
+  3097	  resetUrl();
+  3098	  window.history.replaceState(null, "", "/?session=claude_code:m1a-1");
+  3099	  globalThis.fetch =
+  3100	    makeM1aFetchMock() as unknown as typeof globalThis.fetch;
+  3101	  const { container } = render(<App />);
+  3102	  await waitFor(() => {
+  3103	    expect(
+  3104	      container.querySelector('tbody tr[aria-current="true"]'),
+  3105	    ).not.toBeNull();
+  3106	  });
+  3107	  // Inject a `<div contenteditable>` (boolean attribute → empty-
+  3108	  // string value in the DOM) into the document body so we can
+  3109	  // dispatch Esc with that as event.target. We deliberately put it
+  3110	  // INSIDE the session pane so the positive-scope check would
+  3111	  // otherwise allow Esc through — proving the negative-scope check
+  3112	  // (editable filter) wins.
+  3113	  const sessionArticle = container.querySelector(
+  3114	    "article.session-pane",
+  3115	  ) as HTMLElement;
+  3116	  const editable = document.createElement("div");
+  3117	  // Use `setAttribute` with empty string to mimic the boolean form
+  3118	  // exactly (`<div contenteditable>`); HTML serialization stores the
+  3119	  // attribute with empty string value either way.
+  3120	  editable.setAttribute("contenteditable", "");
+  3121	  sessionArticle.appendChild(editable);
+  3122	  const KeyboardEventCtor =
+  3123	    (globalThis as unknown as {
+  3124	      window: { KeyboardEvent: typeof KeyboardEvent };
+  3125	    }).window.KeyboardEvent;
+  3126	  await act(async () => {
+  3127	    editable.dispatchEvent(
+  3128	      new KeyboardEventCtor("keydown", {
+  3129	        key: "Escape",
+  3130	        bubbles: true,
+  3131	      }),
+  3132	    );
+  3133	  });
+  3134	  // Selection MUST still be in place — the broadened
+  3135	  // `[contenteditable]` selector caught the empty-value form.
+  3136	  const stillSelected = container.querySelector(
+  3137	    'tbody tr[aria-current="true"]',
+  3138	  );
+  3139	  expect(stillSelected).not.toBeNull();
+  3140	  const params = new URLSearchParams(window.location.search);
+  3141	  expect(params.get("session")).toBe("claude_code:m1a-1");
+  3142	  // Cleanup the injected node so it does not bleed into the next
+  3143	  // test (the cleanup() afterEach handles React-rendered DOM but
+  3144	  // not direct DOM mutations like this one).
+  3145	  editable.remove();
+  3146	});
+  3147	
+  3148	test("M1a: global Esc is IGNORED when focus is in the SessionFilters search input", async () => {
+  3149	  resetUrl();
+  3150	  window.history.replaceState(null, "", "/?session=claude_code:m1a-1");
+  3151	  globalThis.fetch =
+  3152	    makeM1aFetchMock() as unknown as typeof globalThis.fetch;
+  3153	  const { container } = render(<App />);
+  3154	  await waitFor(() => {
+  3155	    expect(
+  3156	      container.querySelector('tbody tr[aria-current="true"]'),
+  3157	    ).not.toBeNull();
+  3158	  });
+  3159	  // Find the search input in SessionFilters and make it the
+  3160	  // event target. The Esc handler MUST ignore Esc when the
+  3161	  // event.target is an <input> — preserves the Phase-4 search-input
+  3162	  // UX (its own onKeyDown can clear its value).
+  3163	  const searchInput = container.querySelector(
+  3164	    'input[type="search"], input[type="text"]',
+  3165	  );
+  3166	  expect(searchInput).not.toBeNull();
+  3167	  const KeyboardEventCtor =
+  3168	    (globalThis as unknown as {
+  3169	      window: { KeyboardEvent: typeof KeyboardEvent };
+  3170	    }).window.KeyboardEvent;
+  3171	  await act(async () => {
+  3172	    // Dispatch via the input itself so event.target IS the input.
+  3173	    // The event bubbles up to window, where our global handler
+  3174	    // sits, and the scope check should short-circuit it.
+  3175	    searchInput!.dispatchEvent(
+  3176	      new KeyboardEventCtor("keydown", {
+  3177	        key: "Escape",
+  3178	        bubbles: true,
+  3179	      }),
+  3180	    );
+  3181	  });
+  3182	  // The selection MUST still be in place — Esc was ignored.
+  3183	  const stillSelected = container.querySelector(
+  3184	    'tbody tr[aria-current="true"]',
+  3185	  );
+  3186	  expect(stillSelected).not.toBeNull();
+  3187	  // URL still carries ?session=.
+  3188	  const params = new URLSearchParams(window.location.search);
+  3189	  expect(params.get("session")).toBe("claude_code:m1a-1");
+  3190	});
+
+codex
+The core fix locations match the report so far: the back button override is inside the narrow media block, and the Esc handler now applies editable filtering before positive scope. I’m doing a narrower pass over test assertions and touched-file surface to catch any accidental drift.
+exec
+/bin/bash -lc 'git diff --name-only HEAD -- apps/frontend/package.json apps/frontend/bun.lock package.json bun.lock' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+exec
+/bin/bash -lc 'grep -cE "''^'"\\s*--\" apps/frontend/src/styles/tokens.css" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+44
+
+exec
+/bin/bash -lc 'rg -n "#[0-9a-fA-F]{3,8}" apps/frontend/src/' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+apps/frontend/src/styles/tokens.css:16:  --color-bg: #ffffff;
+apps/frontend/src/styles/tokens.css:17:  --color-surface: #f8f9fb;
+apps/frontend/src/styles/tokens.css:18:  --color-surface-raised: #ffffff;
+apps/frontend/src/styles/tokens.css:19:  --color-border: #e3e5ea;
+apps/frontend/src/styles/tokens.css:20:  --color-border-strong: #c8ccd4;
+apps/frontend/src/styles/tokens.css:21:  --color-text: #14161a;
+apps/frontend/src/styles/tokens.css:22:  --color-text-muted: #5a606b;
+apps/frontend/src/styles/tokens.css:23:  --color-accent: #2864d4;
+apps/frontend/src/styles/tokens.css:24:  --color-accent-hover: #1d4fa8;
+apps/frontend/src/styles/tokens.css:25:  --color-success: #1f7a4a;
+apps/frontend/src/styles/tokens.css:26:  --color-warn: #b86b07;
+apps/frontend/src/styles/tokens.css:27:  --color-error: #b13838;
+apps/frontend/src/styles/tokens.css:61:    --color-bg: #0f1115;
+apps/frontend/src/styles/tokens.css:62:    --color-surface: #151821;
+apps/frontend/src/styles/tokens.css:63:    --color-surface-raised: #1b1f2a;
+apps/frontend/src/styles/tokens.css:64:    --color-border: #262b36;
+apps/frontend/src/styles/tokens.css:65:    --color-border-strong: #3a404d;
+apps/frontend/src/styles/tokens.css:66:    --color-text: #e8eaef;
+apps/frontend/src/styles/tokens.css:67:    --color-text-muted: #9098a6;
+apps/frontend/src/styles/tokens.css:68:    --color-accent: #6da5ff;
+apps/frontend/src/styles/tokens.css:69:    --color-accent-hover: #8bbbff;
+apps/frontend/src/styles/tokens.css:70:    --color-success: #5fb68a;
+apps/frontend/src/styles/tokens.css:71:    --color-warn: #e0a75a;
+apps/frontend/src/styles/tokens.css:72:    --color-error: #e57d7d;
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/e2e/inspection.spec.ts | sed -n '505,520p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   505	    });
+   506	    // Once the row merges in, the data-state flips to
+   507	    // "ready-placeholder". (M2 will swap this for the four-tab
+   508	    // strip; M1a only renders the placeholder copy.)
+   509	    await expect(sessionPane).toHaveAttribute(
+   510	      "data-state",
+   511	      "ready-placeholder",
+   512	      { timeout: 5_000 },
+   513	    );
+   514	    // The matched row carries aria-current="true" after the pulse
+   515	    // settles. aria-current is the stable post-pulse attribute.
+   516	    const ariaCurrentRow = page.locator(`tr[aria-current="true"]`);
+   517	    await expect(ariaCurrentRow).toBeVisible({ timeout: 5_000 });
+   518	    await expect(ariaCurrentRow).toContainText(FIXTURE_SESSION_KEY);
+   519	
+   520	    // Reload the page; the URL state must survive and the same
+
+exec
+/bin/bash -lc 'rg -n "void buildUrl|buildUrl|matchMedia|click-time intersection|intersection" apps/frontend/src/App.tsx apps/frontend/src/App.test.tsx apps/frontend/src/features/sessions' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+apps/frontend/src/App.test.tsx:9:// values, click-time intersection in `handleImport` extended to filter
+apps/frontend/src/App.test.tsx:23://   (4) F2 click-time intersection regression: a rescan that prunes
+apps/frontend/src/App.test.tsx:577:  // Without the click-time visible-intersection filter in `handleImport`,
+apps/frontend/src/App.test.tsx:955:  // Coverage of the actual click-time intersection happens in the F2
+apps/frontend/src/App.test.tsx:1210:// (a) FILTER-only click-time intersection regression — direct mirror of
+apps/frontend/src/App.test.tsx:1215://     filter-window extension to the click-time intersection, the
+apps/frontend/src/App.test.tsx:1224:test("M3: filter mutation + click-time intersection — POST contains only the visible-after-filter key", async () => {
+apps/frontend/src/App.test.tsx:1342:  // intersection drops the hidden claude_code key.
+apps/frontend/src/App.test.tsx:1837:test("M5: pagination-cross-page click-time intersection — pruned page-1 key drops; surviving page-1 keys stay (cross-page accumulation)", async () => {
+apps/frontend/src/App.test.tsx:1855:  // intersection (over filteredRows + isImportable) drops row-0010.
+apps/frontend/src/App.test.tsx:1945:  // intersection in `handleImport` defends against that race: the
+apps/frontend/src/App.test.tsx:2556:  //     `sourceState = [A, B]`, so its click-time intersection
+apps/frontend/src/App.tsx:20://     the click-time intersection at retry time (mirrors the M3
+apps/frontend/src/App.tsx:32:// surfaces the raw-minus-effective gap; the click-time intersection
+apps/frontend/src/App.tsx:78:  buildUrl,
+apps/frontend/src/App.tsx:249:  // their stale selection in the count. The click-time intersection in
+apps/frontend/src/App.tsx:256:  // intersection is again the authoritative POST-time filter.
+apps/frontend/src/App.tsx:380:  // click-time intersection in `handleImport` reads from this same set
+apps/frontend/src/App.tsx:441:  // the click-time intersection from current state, not from the
+apps/frontend/src/App.tsx:490:    //   (a) F2 visible-intersection: a rescan that has just pruned a
+apps/frontend/src/App.tsx:577:  // Selected count for the action bar mirrors the same intersection
+apps/frontend/src/App.tsx:764:  // Note: `buildUrl` is referenced just to keep it in the import
+apps/frontend/src/App.tsx:767:  void buildUrl; // see comment above
+apps/frontend/src/App.tsx:802:    if (typeof window.matchMedia !== "function") return false;
+apps/frontend/src/App.tsx:803:    return window.matchMedia("(max-width: 899.98px)").matches;
+apps/frontend/src/App.tsx:807:    if (typeof window.matchMedia !== "function") return;
+apps/frontend/src/App.tsx:808:    const mq = window.matchMedia("(max-width: 899.98px)");
+apps/frontend/src/features/sessions/filterSessions.test.ts:6://   - Multi-axis combinations (3-axis intersection per the spec DoD).
+apps/frontend/src/features/sessions/useToastQueue.ts:37:   *  invoked, with the click-time intersection re-derivation rules
+apps/frontend/src/features/sessions/useSelectedSession.ts:14://   - selectRow(key)  → setState(key) AND replaceState(buildUrl(key)).
+apps/frontend/src/features/sessions/useSelectedSession.ts:19://   - buildUrl(key)   → reads the entire current URLSearchParams,
+apps/frontend/src/features/sessions/useSelectedSession.ts:46:export function buildUrl(key: string | null): string {
+apps/frontend/src/features/sessions/useSelectedSession.ts:83:    window.history.replaceState(null, "", buildUrl(rowKey));
+apps/frontend/src/features/sessions/SessionDetail.test.tsx:131:// intersection test does the same thing for the same reason.
+apps/frontend/src/features/sessions/useSelectedSession.test.ts:13://   - buildUrl preserves all other query params verbatim
+apps/frontend/src/features/sessions/useSelectedSession.test.ts:22:import { useSelectedSession, buildUrl } from "./useSelectedSession";
+apps/frontend/src/features/sessions/useSelectedSession.test.ts:127:test("buildUrl preserves all other query params verbatim", () => {
+apps/frontend/src/features/sessions/useSelectedSession.test.ts:130:  const url1 = buildUrl("x");
+apps/frontend/src/features/sessions/useSelectedSession.test.ts:138:  const url2 = buildUrl(null);
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/App.test.tsx | sed -n '2748,2768p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+  2748	// =============================================================
+  2749	// Phase 5 / M1a: split-pane shell + URL-synced selection.
+  2750	// =============================================================
+  2751	//
+  2752	// Tests added per the M1a chunk dispatch brief. They cover:
+  2753	//   - split-pane mounts: <aside> + <article> landmarks both rendered
+  2754	//   - URL-on-mount: ?session=foo pre-selects on initial render
+  2755	//   - popstate round trip: dispatching popstate after URL changes
+  2756	//     updates the right-pane content
+  2757	//   - global Esc clears selection AND removes ?session= AND IS
+  2758	//     IGNORED when focus is in the search input
+  2759	//   - deep-link pulse: matched row carries data-deep-link="true"
+  2760	//     only on URL-driven mount; click-driven selection does NOT
+  2761	//     carry the attribute
+  2762	//   - deep-link pulse cleanup: simulating onAnimationEnd OR the
+  2763	//     2 s safety timer clears pendingDeepLinkPulseRowKey
+  2764	//
+  2765	// All tests reset `window.location` between runs so the URL
+  2766	// state from one test does not bleed forward.
+  2767	
+  2768	const M1A_SOURCE_FIXTURE: SourceSessionView[] = [
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/App.tsx | sed -n '760,835p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   760	  //                           572 — the "all three settled" gate is
+   761	  //                           load-bearing because resolving "missing
+   762	  //                           row" too early would flash spurious
+   763	  //                           copy while fetches are still in flight)
+   764	  // Note: `buildUrl` is referenced just to keep it in the import
+   765	  // graph for future call sites (Esc + selectRow already use it via
+   766	  // the hook).
+   767	  void buildUrl; // see comment above
+   768	  let sessionViewState:
+   769	    | "empty"
+   770	    | "loading"
+   771	    | "ready-placeholder"
+   772	    | "session_not_found";
+   773	  if (selectedRowKey === null) {
+   774	    sessionViewState = "empty";
+   775	  } else {
+   776	    const matchedRow = mergedRows.find((r) => r.rowKey === selectedRowKey);
+   777	    if (matchedRow !== undefined) {
+   778	      sessionViewState = "ready-placeholder";
+   779	    } else if (
+   780	      sourceState.kind === "loading" ||
+   781	      storedState.kind === "loading" ||
+   782	      errorsState.kind === "loading"
+   783	    ) {
+   784	      // While any of the three GETs is still in flight, render the
+   785	      // generic "loading" copy. Resolving "missing row" too early
+   786	      // would flash session_not_found while the merged list is
+   787	      // still settling.
+   788	      sessionViewState = "loading";
+   789	    } else {
+   790	      sessionViewState = "session_not_found";
+   791	    }
+   792	  }
+   793	
+   794	  // M1a: detect the narrow viewport so we can decide whether the
+   795	  // "← Back to list" affordance should render. The CSS-driven
+   796	  // `display: none` rules already hide the wrong pane below 900 px;
+   797	  // this gate just keeps the back-to-list button DOM-present only
+   798	  // on narrow + session mode (avoids a wide-viewport user finding
+   799	  // it via screen reader or aria-* tooling).
+   800	  const [isNarrow, setIsNarrow] = useState<boolean>(() => {
+   801	    if (typeof window === "undefined") return false;
+   802	    if (typeof window.matchMedia !== "function") return false;
+   803	    return window.matchMedia("(max-width: 899.98px)").matches;
+   804	  });
+   805	  useEffect(() => {
+   806	    if (typeof window === "undefined") return;
+   807	    if (typeof window.matchMedia !== "function") return;
+   808	    const mq = window.matchMedia("(max-width: 899.98px)");
+   809	    const onChange = (e: MediaQueryListEvent) => setIsNarrow(e.matches);
+   810	    // addEventListener is the modern API; addListener is the legacy
+   811	    // fallback. happy-dom + Chromium ship the former.
+   812	    if (typeof mq.addEventListener === "function") {
+   813	      mq.addEventListener("change", onChange);
+   814	    } else if (typeof (mq as unknown as { addListener?: typeof onChange }).addListener === "function") {
+   815	      (mq as unknown as { addListener: (l: typeof onChange) => void }).addListener(onChange);
+   816	    }
+   817	    return () => {
+   818	      if (typeof mq.removeEventListener === "function") {
+   819	        mq.removeEventListener("change", onChange);
+   820	      } else if (
+   821	        typeof (mq as unknown as { removeListener?: typeof onChange }).removeListener === "function"
+   822	      ) {
+   823	        (mq as unknown as { removeListener: (l: typeof onChange) => void }).removeListener(onChange);
+   824	      }
+   825	    };
+   826	  }, []);
+   827	  const showBackToList = isNarrow && narrowMode === "session";
+   828	
+   829	  return (
+   830	    <>
+   831	      {/* M1a: page title + scan-errors callout sit above the split-
+   832	          pane <main>. They are NOT inside .list-pane / .session-pane
+   833	          because they apply to the whole inspection surface, not a
+   834	          single side. The toast queue stays a sibling of <main>
+   835	          (Phase-4 pattern preserved). */}
+
+exec
+/bin/bash -lc 'rg -n "addListener|removeListener|matchMedia" apps/frontend/src/App.tsx' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+802:    if (typeof window.matchMedia !== "function") return false;
+803:    return window.matchMedia("(max-width: 899.98px)").matches;
+807:    if (typeof window.matchMedia !== "function") return;
+808:    const mq = window.matchMedia("(max-width: 899.98px)");
+810:    // addEventListener is the modern API; addListener is the legacy
+814:    } else if (typeof (mq as unknown as { addListener?: typeof onChange }).addListener === "function") {
+815:      (mq as unknown as { addListener: (l: typeof onChange) => void }).addListener(onChange);
+821:        typeof (mq as unknown as { removeListener?: typeof onChange }).removeListener === "function"
+823:        (mq as unknown as { removeListener: (l: typeof onChange) => void }).removeListener(onChange);
+
+exec
+/bin/bash -lc 'git status --short --untracked-files=all' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+ M apps/frontend/e2e/inspection.spec.ts
+ M apps/frontend/src/App.test.tsx
+ M apps/frontend/src/App.tsx
+ M apps/frontend/src/features/sessions/SessionsTable.css
+ M apps/frontend/src/features/sessions/SessionsTable.tsx
+ M apps/frontend/src/features/sessions/SessionsView.tsx
+ M apps/frontend/src/styles/global.css
+ M progress/phase-5.progress.md
+?? apps/frontend/src/features/sessions/SessionView.css
+?? apps/frontend/src/features/sessions/SessionView.test.tsx
+?? apps/frontend/src/features/sessions/SessionView.tsx
+?? apps/frontend/src/features/sessions/useSelectedSession.test.ts
+?? apps/frontend/src/features/sessions/useSelectedSession.ts
+?? working/phase-5/designs/m1a-shell/colors.md
+?? working/phase-5/designs/m1a-shell/design.md
+?? working/phase-5/designs/m1a-shell/motion.md
+?? working/phase-5/designs/m1a-shell/prototype.html
+?? working/phase-5/designs/m1a-shell/wireframes/narrow-list.txt
+?? working/phase-5/designs/m1a-shell/wireframes/narrow-session.txt
+?? working/phase-5/designs/m1a-shell/wireframes/states.txt
+?? working/phase-5/designs/m1a-shell/wireframes/wide.txt
+
+exec
+/bin/bash -lc 'git diff --stat HEAD' in /home/huwei/ai_codings/distill-portal
+exec
+/bin/bash -lc 'git diff --name-only HEAD -- apps/frontend/src/styles/tokens.css apps/frontend/package.json apps/frontend/bun.lock' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+ apps/frontend/e2e/inspection.spec.ts               |  99 ++++
+ apps/frontend/src/App.test.tsx                     | 511 +++++++++++++++++++++
+ apps/frontend/src/App.tsx                          | 414 ++++++++++++++---
+ .../src/features/sessions/SessionsTable.css        |  62 +++
+ .../src/features/sessions/SessionsTable.tsx        |  46 ++
+ .../src/features/sessions/SessionsView.tsx         |  23 +
+ apps/frontend/src/styles/global.css                | 125 ++++-
+ progress/phase-5.progress.md                       |  27 +-
+ 8 files changed, 1236 insertions(+), 71 deletions(-)
+
+ succeeded in 0ms:
+exec
+/bin/bash -lc 'rg -n "#[0-9a-fA-F]{3,8}" apps/frontend/src/ | wc -l' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+24
+
+codex
+The cross-cutting checks are clean at the text level: package files and token files are untouched, hex and token counts match the coordinator report, and the optional `void buildUrl` scaffold remains while the matchMedia legacy fallback is present. I’m running a focused frontend test pass over the changed unit-test files before finalizing.
+exec
+/bin/bash -lc 'bun test src/App.test.tsx src/features/sessions/SessionView.test.tsx' in /home/huwei/ai_codings/distill-portal/apps/frontend
+ succeeded in 1104ms:
+
+ 47 pass
+ 0 fail
+ 273 expect() calls
+Ran 47 tests across 2 files. [1123.00ms]
+
+codex
+- **Verdict**: approved with nits
+
+- **Round 1 Blocker Resolution**: Fix #1 applied. `apps/frontend/src/styles/global.css:114-134` contains the narrow `@media (max-width: 899.98px)` block with `main.split-pane[data-narrow-mode="session"] .back-to-list { display: inline-block; }`, colocated with the existing list/session pane visibility rules. `apps/frontend/src/features/sessions/SessionView.css:138-139` still defaults `.back-to-list` to `display: none`, and `apps/frontend/src/features/sessions/SessionView.test.tsx:196-220` smoke-tests the `global.css` override.
+
+Fix #2 applied. `apps/frontend/src/App.tsx:716-729` adds `isInScope(target)` and checks both `article.session-pane` descendants and `tr[aria-current="true"]`; `apps/frontend/src/App.tsx:731-742` runs `isEditableTarget` before `isInScope`, preserving editable-control Esc behavior. The new tests cover session-pane clear, selected-row clear, out-of-scope no-op, and contenteditable no-op at `apps/frontend/src/App.test.tsx:2951-3146`. The old over-permissive “global Esc clears selection” test name is not present as an active test.
+
+Fix #3 applied. `apps/frontend/src/App.tsx:700-703` now uses `el.closest("[contenteditable]")`. The regression test uses an empty-value/boolean-style contenteditable element via `editable.setAttribute("contenteditable", "")` at `apps/frontend/src/App.test.tsx:3107-3121`, which the old `[contenteditable="true"]` selector would not catch.
+
+Fix #4 applied. `apps/frontend/e2e/inspection.spec.ts:497-499` asserts the transient `data-deep-link="true"` attribute with a `1500ms` timeout, and `apps/frontend/e2e/inspection.spec.ts:503-505` asserts post-pulse removal with a `3000ms` timeout. The coordinator’s Chromium e2e rerun passed, and the timing is reasonable for the documented 600ms pulse plus 2s safety timer.
+
+- **New Findings (in the fixup pass)**: none
+
+- **Missing Evidence**: none
+
+- **Required Changes**: none
+
+- **Notes**: Optional nit remains: `void buildUrl;` dead scaffold is still present at `apps/frontend/src/App.tsx:764-767`. The matchMedia legacy fallback is present at `apps/frontend/src/App.tsx:810-824`. Focused verification passed locally: `bun test src/App.test.tsx src/features/sessions/SessionView.test.tsx` reported 47 pass / 0 fail.
+2026-04-28T07:57:06.091908Z ERROR codex_core::session: failed to record rollout items: thread 019dd315-938b-7721-987b-b26b44ac9e12 not found
+tokens used
+78,012
+- **Verdict**: approved with nits
+
+- **Round 1 Blocker Resolution**: Fix #1 applied. `apps/frontend/src/styles/global.css:114-134` contains the narrow `@media (max-width: 899.98px)` block with `main.split-pane[data-narrow-mode="session"] .back-to-list { display: inline-block; }`, colocated with the existing list/session pane visibility rules. `apps/frontend/src/features/sessions/SessionView.css:138-139` still defaults `.back-to-list` to `display: none`, and `apps/frontend/src/features/sessions/SessionView.test.tsx:196-220` smoke-tests the `global.css` override.
+
+Fix #2 applied. `apps/frontend/src/App.tsx:716-729` adds `isInScope(target)` and checks both `article.session-pane` descendants and `tr[aria-current="true"]`; `apps/frontend/src/App.tsx:731-742` runs `isEditableTarget` before `isInScope`, preserving editable-control Esc behavior. The new tests cover session-pane clear, selected-row clear, out-of-scope no-op, and contenteditable no-op at `apps/frontend/src/App.test.tsx:2951-3146`. The old over-permissive “global Esc clears selection” test name is not present as an active test.
+
+Fix #3 applied. `apps/frontend/src/App.tsx:700-703` now uses `el.closest("[contenteditable]")`. The regression test uses an empty-value/boolean-style contenteditable element via `editable.setAttribute("contenteditable", "")` at `apps/frontend/src/App.test.tsx:3107-3121`, which the old `[contenteditable="true"]` selector would not catch.
+
+Fix #4 applied. `apps/frontend/e2e/inspection.spec.ts:497-499` asserts the transient `data-deep-link="true"` attribute with a `1500ms` timeout, and `apps/frontend/e2e/inspection.spec.ts:503-505` asserts post-pulse removal with a `3000ms` timeout. The coordinator’s Chromium e2e rerun passed, and the timing is reasonable for the documented 600ms pulse plus 2s safety timer.
+
+- **New Findings (in the fixup pass)**: none
+
+- **Missing Evidence**: none
+
+- **Required Changes**: none
+
+- **Notes**: Optional nit remains: `void buildUrl;` dead scaffold is still present at `apps/frontend/src/App.tsx:764-767`. The matchMedia legacy fallback is present at `apps/frontend/src/App.tsx:810-824`. Focused verification passed locally: `bun test src/App.test.tsx src/features/sessions/SessionView.test.tsx` reported 47 pass / 0 fail.

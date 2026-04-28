@@ -120,3 +120,65 @@ td.select-col {
 .raw-link {
   color: var(--color-accent);
 }
+
+/*
+ * Phase-5 / M1a row variants. Spec §Row visual treatment lines
+ * 533–545; design.md §3.6, §4.3.
+ *
+ * The hover + selected + selected-hover + deep-link-pulse recipes
+ * are all `color-mix(...)` against `var(--color-accent)` so M2's
+ * oklch redefinition of `--color-accent` will retint them
+ * automatically — no keyframe / no rule rewrite at M2.
+ *
+ * The 2 px sienna left edge on the selected row uses
+ * `box-shadow: inset 2px 0 0 var(--color-accent)` (NOT a
+ * `border-left`) so adding the inset does not change row width or
+ * shift the first cell — selecting/deselecting is byte-equivalent
+ * in cell positions (designer §7.5).
+ *
+ * Click-driven selection NEVER fires the pulse (spec line 585) —
+ * the parent only sets `data-deep-link="true"` on URL-driven mount.
+ *
+ * Reduced-motion zero-out lives in `styles/global.css`.
+ */
+table tbody tr:hover {
+  background-color: color-mix(in srgb, var(--color-text) 4%, transparent);
+}
+
+table tbody tr[aria-current="true"] {
+  background-color: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+
+table tbody tr[aria-current="true"]:hover {
+  background-color: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+table tbody tr[data-deep-link="true"] {
+  /* 600 ms ease-out one-shot. Per the spec's allow-list (§Acceptance
+   * Criteria line 1100) `background-color` is the only animatable
+   * property that may carry a one-shot reveal here. The 600 ms
+   * literal is the spec's `--motion-pulse` token from M2's motion
+   * scale; M1a hard-codes it because the token does not exist yet.
+   * The keyframe peak (22%) settles to the resting selected tint
+   * (8%) — designer §7.8 — so there is no flash from the pulse
+   * fading INTO a different shade. */
+  animation: deep-link-pulse 600ms ease-out 1;
+}
+
+@keyframes deep-link-pulse {
+  0% {
+    background-color: color-mix(
+      in srgb,
+      var(--color-accent) 22%,
+      transparent
+    );
+  }
+  100% {
+    background-color: color-mix(
+      in srgb,
+      var(--color-accent) 8%,
+      transparent
+    );
+  }
+}

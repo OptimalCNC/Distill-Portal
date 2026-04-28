@@ -73,6 +73,27 @@ export type SessionsTableProps = {
    *  restore focus on close. Optional for backward compatibility with
    *  M2/M3 callers that don't render a drawer. Defaults to a no-op. */
   onOpenDetail?: (rowKey: string, triggerEl: HTMLElement | null) => void;
+  /** M1a: rowKey of the currently URL-selected session. The matched
+   *  row carries `aria-current="true"` for assistive tech and the
+   *  selected-row visual treatment. `null` means no selection. */
+  selectedRowKey?: string | null;
+  /** M1a: setter for the URL-synced selection. Called on row click
+   *  (NOT on checkbox-cell click — the importability rule's
+   *  stopPropagation guard remains load-bearing). The Phase-4
+   *  `onOpenDetail` callback ALSO fires on the same click so the
+   *  drawer flow stays reachable until M1b retires it. */
+  onSelectRow?: (rowKey: string) => void;
+  /** M1a: rowKey of the row that should fire the deep-link pulse on
+   *  the current paint. Set on initial mount only when
+   *  `URLSearchParams.get("session")` was non-null; cleared by the
+   *  parent via `onAnimationEnd` OR a 2 s safety timer. Click-driven
+   *  selection MUST NOT set this — the pulse marks URL-driven
+   *  arrivals only (spec line 585 + Resolved Decision #19). */
+  pendingDeepLinkPulseRowKey?: string | null;
+  /** M1a: notify the parent that the deep-link pulse animation has
+   *  ended on `rowKey` so the parent can clear
+   *  `pendingDeepLinkPulseRowKey`. Optional. */
+  onDeepLinkPulseEnd?: (rowKey: string) => void;
 };
 
 export function SessionsTable({
@@ -82,6 +103,10 @@ export function SessionsTable({
   onToggleAll,
   now,
   onOpenDetail,
+  selectedRowKey = null,
+  onSelectRow,
+  pendingDeepLinkPulseRowKey = null,
+  onDeepLinkPulseEnd,
 }: SessionsTableProps) {
   if (rows.length === 0) {
     return (
@@ -166,12 +191,33 @@ export function SessionsTable({
             const handleRowOpen = (
               triggerEl: HTMLElement | null,
             ) => {
+              // M1a: a row "open" gesture has TWO side effects:
+              //   1. Phase-4 `onOpenDetail` (still mounts the drawer
+              //      so the focus-trap walk + e2e steps stay green
+              //      until M1b retires this).
+              //   2. M1a `onSelectRow` (drives URL-synced selection
+              //      via the App-level useSelectedSession hook so
+              //      the right pane swaps to ready-placeholder).
+              // The two are intentional duplicates during M1a; M1b
+              // will retire the drawer flow and leave `onSelectRow`
+              // alone.
               if (onOpenDetail) onOpenDetail(row.rowKey, triggerEl);
+              if (onSelectRow) onSelectRow(row.rowKey);
             };
+            const isSelected = selectedRowKey === row.rowKey;
+            const isPulseTarget =
+              pendingDeepLinkPulseRowKey === row.rowKey;
             return (
               <tr
                 key={row.rowKey}
                 tabIndex={0}
+                aria-current={isSelected ? "true" : undefined}
+                data-deep-link={isPulseTarget ? "true" : undefined}
+                onAnimationEnd={
+                  isPulseTarget && onDeepLinkPulseEnd
+                    ? () => onDeepLinkPulseEnd(row.rowKey)
+                    : undefined
+                }
                 onClick={(event) => {
                   // Walk up from the click target to see whether the
                   // event came from inside the checkbox column. A
