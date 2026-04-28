@@ -13,13 +13,111 @@
 //   9. Sort field <select> change invokes setFilter("sort", { ... }).
 //   10. Sort direction <select> change invokes setFilter("sort", { ... }).
 //   11. Active chip carries the `.chip.active` class + `aria-pressed=true`.
-import { afterEach, expect, mock, test } from "bun:test";
-import { cleanup, fireEvent, render } from "@testing-library/react";
-import { SessionFilters } from "./SessionFilters";
+//   12. M1b: above 1100 px the filter strip renders inline (the
+//       `<details>` open attribute is true; the `<summary>` is hidden
+//       via CSS — happy-dom does not evaluate @media queries, so we
+//       assert via the `open` attribute presence).
+//   13. M1b: below 1100 px the strip wraps inside `<details>` with
+//       `open=false` by default.
+//   14. M1b: a manual user toggle of `<details>` below 1100 px
+//       persists across resize events that stay in the same band.
+//   15. M1b: active-filter-count chip is suppressed at 0; renders
+//       `${count} active` for each of the 7 axes individually.
+//   16. M1b: chip count is 7 when ALL seven axes differ from default.
+//   17. M1b: `countActiveFilters` pure helper exposed alongside the
+//       component for re-use by App.tsx tests / future call sites.
+import { afterEach, beforeEach, expect, mock, test } from "bun:test";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import { SessionFilters, countActiveFilters } from "./SessionFilters";
 import { DEFAULT_FILTERS, type SessionFiltersState } from "./useSessionFilters";
+
+// M1b matchMedia shim. happy-dom ships a basic `window.matchMedia`
+// stub that always returns `matches: false` and does not fire change
+// events; we override it here with a controllable mock so the tests
+// can drive the 1100 px breakpoint deterministically. Mirrors the
+// pattern used in App.test.tsx for the narrow-viewport listener.
+type MQListener = (e: MediaQueryListEvent) => void;
+type MQEntry = {
+  query: string;
+  matches: boolean;
+  listeners: Set<MQListener>;
+};
+const mediaQueryRegistry = new Map<string, MQEntry>();
+
+function setMediaMatch(query: string, matches: boolean) {
+  const existing = mediaQueryRegistry.get(query);
+  if (existing && existing.matches === matches) return;
+  if (existing) {
+    existing.matches = matches;
+    // Fire change events on a clone so listeners that mutate the set
+    // (the cleanup paths in useEffect) do not corrupt iteration.
+    const event = { matches, media: query } as MediaQueryListEvent;
+    for (const listener of Array.from(existing.listeners)) {
+      listener(event);
+    }
+  } else {
+    mediaQueryRegistry.set(query, {
+      query,
+      matches,
+      listeners: new Set(),
+    });
+  }
+}
+
+const originalMatchMedia = (
+  globalThis as unknown as { window: { matchMedia?: typeof window.matchMedia } }
+).window.matchMedia;
+
+function installMatchMediaShim() {
+  (
+    globalThis as unknown as {
+      window: { matchMedia: (q: string) => MediaQueryList };
+    }
+  ).window.matchMedia = (query: string) => {
+    if (!mediaQueryRegistry.has(query)) {
+      mediaQueryRegistry.set(query, {
+        query,
+        matches: false,
+        listeners: new Set(),
+      });
+    }
+    const entry = mediaQueryRegistry.get(query)!;
+    return {
+      get matches() {
+        return entry.matches;
+      },
+      media: query,
+      onchange: null,
+      addListener: (l: MQListener) => entry.listeners.add(l),
+      removeListener: (l: MQListener) => entry.listeners.delete(l),
+      addEventListener: (_t: string, l: MQListener) => entry.listeners.add(l),
+      removeEventListener: (_t: string, l: MQListener) =>
+        entry.listeners.delete(l),
+      dispatchEvent: (_e: Event) => true,
+    } as unknown as MediaQueryList;
+  };
+}
+
+function restoreMatchMedia() {
+  if (originalMatchMedia) {
+    (
+      globalThis as unknown as {
+        window: { matchMedia?: typeof window.matchMedia };
+      }
+    ).window.matchMedia = originalMatchMedia;
+  }
+  mediaQueryRegistry.clear();
+}
+
+beforeEach(() => {
+  installMatchMediaShim();
+  // Default to "wide" — most tests assume the inline strip behavior.
+  setMediaMatch("(min-width: 1100px)", true);
+});
 
 afterEach(() => {
   cleanup();
+  restoreMatchMedia();
 });
 
 function harness(overrides: Partial<SessionFiltersState> = {}) {
@@ -229,4 +327,215 @@ test("SessionFilters: active tool chip carries .chip.active + aria-pressed=true"
   expect(codexChip).not.toBeUndefined();
   expect(codexChip!.classList.contains("active")).toBe(true);
   expect(codexChip!.getAttribute("aria-pressed")).toBe("true");
+});
+
+// =============================================================
+// M1b: <details> wrap below 1100 px + active-filter-count chip.
+// =============================================================
+
+test("SessionFilters M1b: above 1100 px renders inline (the <details> wrapper carries open=true)", () => {
+  setMediaMatch("(min-width: 1100px)", true);
+  const { container } = harness();
+  const details = container.querySelector<HTMLDetailsElement>(
+    "details.filters-wrap",
+  );
+  expect(details).not.toBeNull();
+  // open attribute is true above 1100 px (default open band).
+  expect(details!.hasAttribute("open")).toBe(true);
+  // Filter body still renders.
+  expect(container.querySelector(".session-filters")).not.toBeNull();
+  // Sanity: the body carries the role="group" wrapper that Phase 4
+  // installed for assistive tech.
+  expect(
+    container.querySelector('[role="group"][aria-label="Session filters"]'),
+  ).not.toBeNull();
+});
+
+test("SessionFilters M1b: below 1100 px wraps in <details open=false> by default", () => {
+  setMediaMatch("(min-width: 1100px)", false);
+  const { container } = harness();
+  const details = container.querySelector<HTMLDetailsElement>(
+    "details.filters-wrap",
+  );
+  expect(details).not.toBeNull();
+  expect(details!.hasAttribute("open")).toBe(false);
+});
+
+test("SessionFilters M1b: <details> user-toggle persists across resize events that stay below 1100 px", () => {
+  // Start below the breakpoint; the disclosure defaults closed.
+  setMediaMatch("(min-width: 1100px)", false);
+  const { container } = harness();
+  const details = container.querySelector<HTMLDetailsElement>(
+    "details.filters-wrap",
+  );
+  expect(details).not.toBeNull();
+  expect(details!.hasAttribute("open")).toBe(false);
+  // User opens the disclosure manually — emulate the native `<details>`
+  // toggle by setting `open` on the element AND firing the `toggle`
+  // event so React's onToggle handler runs.
+  act(() => {
+    details!.open = true;
+    const Ctor = (
+      globalThis as unknown as { window: { Event: typeof Event } }
+    ).window.Event;
+    details!.dispatchEvent(new Ctor("toggle", { bubbles: false }));
+  });
+  expect(details!.hasAttribute("open")).toBe(true);
+  // Fire a resize that STAYS below 1100 px. The matchMedia listener
+  // is wired with `change`; firing change with the same matches value
+  // is a no-op for the breakpoint-cross state. The disclosure must
+  // stay open.
+  act(() => {
+    setMediaMatch("(min-width: 1100px)", false);
+  });
+  expect(details!.hasAttribute("open")).toBe(true);
+});
+
+test("SessionFilters M1b: crossing the 1100 px breakpoint upward forces the disclosure open (new band default)", () => {
+  setMediaMatch("(min-width: 1100px)", false);
+  const { container } = harness();
+  const details = container.querySelector<HTMLDetailsElement>(
+    "details.filters-wrap",
+  );
+  expect(details!.hasAttribute("open")).toBe(false);
+  // Cross the breakpoint upward — the new band's default is open.
+  act(() => {
+    setMediaMatch("(min-width: 1100px)", true);
+  });
+  expect(details!.hasAttribute("open")).toBe(true);
+});
+
+test("SessionFilters M1b: chip suppressed when count = 0 (default filters)", () => {
+  setMediaMatch("(min-width: 1100px)", false);
+  const { container } = harness();
+  expect(container.querySelector(".filter-count-chip")).toBeNull();
+});
+
+test("SessionFilters M1b: chip renders for each of the 7 axes individually", () => {
+  setMediaMatch("(min-width: 1100px)", false);
+  // Each axis individually flipped from default → chip count 1.
+  const axes: Array<Partial<SessionFiltersState>> = [
+    { tool: "codex" },
+    { storage: "stored" },
+    { status: ["outdated"] },
+    { project: "/p/alpha" },
+    { search: "needle" },
+    { importableOnly: true },
+    { sort: { field: "title", direction: "asc" } },
+  ];
+  for (const overrides of axes) {
+    const { container } = harness(overrides);
+    const chip = container.querySelector(".filter-count-chip");
+    expect(chip).not.toBeNull();
+    expect(chip?.textContent).toBe("1 active");
+    cleanup();
+  }
+});
+
+test("SessionFilters M1b: chip count is 7 when ALL axes differ from default", () => {
+  setMediaMatch("(min-width: 1100px)", false);
+  const { container } = harness({
+    tool: "codex",
+    storage: "stored",
+    status: ["outdated"],
+    project: "/p/alpha",
+    search: "needle",
+    importableOnly: true,
+    sort: { field: "title", direction: "asc" },
+  });
+  const chip = container.querySelector(".filter-count-chip");
+  expect(chip).not.toBeNull();
+  expect(chip?.textContent).toBe("7 active");
+});
+
+test("SessionFilters M1b: <details> summary has accessible name 'Filters' below 1100 px (codex round 1 fix)", () => {
+  // Below the breakpoint the <summary> is the visible disclosure
+  // toggle; screen-reader users need an accessible name describing
+  // what is being expanded/collapsed. Round-1 codex review caught
+  // the previous `aria-hidden="true"` wrap which left the summary
+  // either nameless (count=0) or labeled only with the count chip
+  // (count>0).
+  setMediaMatch("(min-width: 1100px)", false);
+  const { container } = harness();
+  const summary = container.querySelector<HTMLElement>(
+    "details.filters-wrap > summary",
+  );
+  expect(summary).not.toBeNull();
+  // The "Filters" label MUST be present in the accessible text — the
+  // simplest assertion is that it lives in `textContent` AND that no
+  // descendant carries `aria-hidden="true"` masking it from the AT.
+  expect(summary!.textContent).toMatch(/Filters/);
+  const filtersSpan = Array.from(summary!.querySelectorAll("span")).find(
+    (el) => el.textContent === "Filters",
+  );
+  expect(filtersSpan).not.toBeUndefined();
+  expect(filtersSpan!.getAttribute("aria-hidden")).toBeNull();
+});
+
+test("SessionFilters M1b: summary accessible name includes count when filters are active (codex round 1 fix)", () => {
+  // When the count chip renders ("3 active"), the summary's
+  // accessible name reads "Filters 3 active" (the visible "Filters"
+  // text + the chip text), so screen-reader users hear both the
+  // section name and the active-count summary on the disclosure.
+  setMediaMatch("(min-width: 1100px)", false);
+  const { container } = harness({
+    tool: "codex",
+    storage: "stored",
+    status: ["outdated"],
+  });
+  const summary = container.querySelector<HTMLElement>(
+    "details.filters-wrap > summary",
+  );
+  expect(summary).not.toBeNull();
+  expect(summary!.textContent).toMatch(/Filters/);
+  expect(summary!.textContent).toMatch(/3 active/);
+});
+
+test("countActiveFilters: pure helper agrees with the 7-axis predicate table", () => {
+  // 0: defaults
+  expect(countActiveFilters(DEFAULT_FILTERS)).toBe(0);
+  // 1: each axis flipped
+  expect(countActiveFilters({ ...DEFAULT_FILTERS, tool: "codex" })).toBe(1);
+  expect(countActiveFilters({ ...DEFAULT_FILTERS, storage: "stored" })).toBe(1);
+  expect(
+    countActiveFilters({ ...DEFAULT_FILTERS, status: ["outdated"] }),
+  ).toBe(1);
+  expect(
+    countActiveFilters({ ...DEFAULT_FILTERS, project: "/p/alpha" }),
+  ).toBe(1);
+  expect(
+    countActiveFilters({ ...DEFAULT_FILTERS, search: "needle" }),
+  ).toBe(1);
+  // Whitespace-only search counts as default (axis active predicate
+  // is "non-empty after trim").
+  expect(countActiveFilters({ ...DEFAULT_FILTERS, search: "   " })).toBe(0);
+  expect(
+    countActiveFilters({ ...DEFAULT_FILTERS, importableOnly: true }),
+  ).toBe(1);
+  expect(
+    countActiveFilters({
+      ...DEFAULT_FILTERS,
+      sort: { field: "title", direction: "asc" },
+    }),
+  ).toBe(1);
+  // Sort with same field but flipped direction also counts.
+  expect(
+    countActiveFilters({
+      ...DEFAULT_FILTERS,
+      sort: { field: "source_updated_at", direction: "asc" },
+    }),
+  ).toBe(1);
+  // 7: all flipped
+  expect(
+    countActiveFilters({
+      ...DEFAULT_FILTERS,
+      tool: "codex",
+      storage: "stored",
+      status: ["outdated"],
+      project: "/p/alpha",
+      search: "needle",
+      importableOnly: true,
+      sort: { field: "title", direction: "asc" },
+    }),
+  ).toBe(7);
 });

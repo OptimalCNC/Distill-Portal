@@ -12,17 +12,21 @@
 // affordance toggles ALL importable rows in the current filter window.
 // Non-importable rows are invisible to the bulk action.
 //
-// Per spec §Data Model in the Browser, a row whose `statusConflict` is
-// true gets a small "(refresh)" affordance next to its inline status
-// badge — the M2 minimum for the "fetched state changed during load —
-// refresh" hint. The drawer header in M4 ALSO gets its own "Conflict"
-// badge; per the open risk in `progress/phase-4.progress.md` the
-// row-side affordance MUST stay (the drawer-side one supplements
-// rather than replaces it).
+// Per Phase-5 spec §Compact list rows (lines 520–531) the table is
+// compressed to FIVE columns: Select + Title + Status + Project +
+// Updated. The Title cell carries a two-line stack: bold title + tool
+// badge inline (line 1); muted mono rowKey + optional `(refresh)`
+// marker (line 2). The dropped Phase-4 columns (Tool / Stored Copy /
+// Source Path) remain reachable via the still-mounted Phase-4
+// `<Drawer>` until M2 ships the Metadata tab.
 //
-// Per spec, a row whose `sourcePathIsStale` is true labels its
-// source-path cell with a `title=` hover hint clarifying that the
-// path is the last-known location, not currently discoverable.
+// Per spec, a row whose `statusConflict` is true gets a small
+// "(refresh)" affordance inside the Title cell — telegraphing the
+// "fetched state changed during load — refresh" hint. M1b warms the
+// marker color from `--color-text-muted` (Phase 4) to `--color-warn`
+// per design.md §3.2 so the marker scans as a state hint rather than
+// incidental copy (WCAG-AA contrast verified in
+// working/phase-5/designs/m1b-shell/colors.md).
 //
 // As of M3 the "Updated" cell renders a relative-time string against
 // a single `now` captured at refetch time in `App.tsx` (passed in as a
@@ -30,17 +34,15 @@
 // stays available via the `title=` hover hint for users who need the
 // absolute value.
 //
-// As of M4 (Chunk E1) the row itself becomes the drawer trigger: a
-// click anywhere on the row OR pressing Enter while the row is
-// focused calls `onOpenDetail(row.rowKey, triggerEl)`. The trigger
-// element is forwarded so the parent can stash it in a ref and
-// restore focus to it after the drawer closes (happy-dom does not
-// implement the platform focus-restoration on `dialog.close()`; real
-// Chromium does, but the explicit ref makes the behaviour
-// deterministic across both targets). The checkbox cell stops
-// propagation so toggling selection never opens the drawer (a11y bug
-// magnet). `onOpenDetail` is optional with a no-op default for
-// backward compatibility with M2/M3 tests that did not pass it.
+// As of M1b (Phase 5) the row click semantic shifts: a click anywhere
+// on the row OR pressing Enter while the row is focused calls
+// `onSelectRow(row.rowKey)` ONLY. The Phase-4 `onOpenDetail(rowKey,
+// triggerEl)` call is REMOVED from the row click path — the drawer no
+// longer auto-mounts on row click. The new entry point is the
+// vestigial "Open detail" button rendered by `SessionView` in its
+// `ready-placeholder` state. The checkbox cell still stops
+// propagation so toggling selection never triggers `onSelectRow`
+// (a11y bug magnet preserved verbatim from Phase 4).
 //
 // As of M6 (Chunk G) the status pill is rendered inline (the dedicated
 // `StatusBadge` component was retired). The transform —
@@ -50,7 +52,8 @@
 // `<span class="badge {variant}">{label}</span>`.
 //
 // CSS lives in the sibling `SessionsTable.css` (selectors
-// `.table-wrap`, table chrome, `.badge.*`, `.raw-link`, `.select-col`).
+// `.table-wrap`, table chrome, `.badge.*`, `.title-cell*`,
+// `.select-col`).
 // Global utility classes (`.muted`, `.mono`, `.stack`, `.empty`) live
 // in `styles/global.css`; the filter-bar CSS is in
 // `SessionFilters.css`.
@@ -68,20 +71,17 @@ export type SessionsTableProps = {
   onToggleAll: () => void;
   /** Pinned-`now` ISO string used by the relative-time cell renderer. */
   now: string;
-  /** Open the detail drawer for `rowKey`. The second argument is the
-   *  trigger DOM element so the parent can stash it in a ref and
-   *  restore focus on close. Optional for backward compatibility with
-   *  M2/M3 callers that don't render a drawer. Defaults to a no-op. */
-  onOpenDetail?: (rowKey: string, triggerEl: HTMLElement | null) => void;
   /** M1a: rowKey of the currently URL-selected session. The matched
    *  row carries `aria-current="true"` for assistive tech and the
    *  selected-row visual treatment. `null` means no selection. */
   selectedRowKey?: string | null;
-  /** M1a: setter for the URL-synced selection. Called on row click
-   *  (NOT on checkbox-cell click — the importability rule's
-   *  stopPropagation guard remains load-bearing). The Phase-4
-   *  `onOpenDetail` callback ALSO fires on the same click so the
-   *  drawer flow stays reachable until M1b retires it. */
+  /** M1a/M1b: setter for the URL-synced selection. Called on row
+   *  click (NOT on checkbox-cell click — the importability rule's
+   *  stopPropagation guard remains load-bearing). M1b removed the
+   *  Phase-4 `onOpenDetail` call from the row click path; the
+   *  vestigial "Open detail" button in SessionView is the new drawer
+   *  entry point (see `working/phase-5/designs/m1b-shell/design.md`
+   *  §3.5). */
   onSelectRow?: (rowKey: string) => void;
   /** M1a: rowKey of the row that should fire the deep-link pulse on
    *  the current paint. Set on initial mount only when
@@ -102,7 +102,6 @@ export function SessionsTable({
   onToggle,
   onToggleAll,
   now,
-  onOpenDetail,
   selectedRowKey = null,
   onSelectRow,
   pendingDeepLinkPulseRowKey = null,
@@ -155,13 +154,10 @@ export function SessionsTable({
                 onChange={onToggleAll}
               />
             </th>
-            <th>Status</th>
-            <th>Tool</th>
             <th>Title</th>
+            <th>Status</th>
             <th>Project</th>
             <th>Updated</th>
-            <th>Stored Copy</th>
-            <th>Source Path</th>
           </tr>
         </thead>
         <tbody>
@@ -170,38 +166,11 @@ export function SessionsTable({
             const checked =
               row.sourceSessionKey !== null &&
               selected.has(row.sourceSessionKey);
-            // Stored-copy display: stored UID + ingested-at when present;
-            // otherwise the "not stored" sentinel.
-            const storedUidLine =
-              row.storedSessionUid !== null
-                ? row.storedSessionUid
-                : "not stored";
-            const ingestedLine = `ingested: ${row.ingestedAt ?? "—"}`;
-            // The View Raw anchor is rendered next to the stored UID
-            // when there is a stored copy — it's the M2 carry-over from
-            // the dual-table layout's stored-side anchor.
-            const rawLinkHref =
-              row.storedSessionUid !== null
-                ? `/api/v1/sessions/${row.storedSessionUid}/raw`
-                : null;
-            const metadataHref =
-              row.storedSessionUid !== null
-                ? `/api/v1/sessions/${row.storedSessionUid}`
-                : null;
-            const handleRowOpen = (
-              triggerEl: HTMLElement | null,
-            ) => {
-              // M1a: a row "open" gesture has TWO side effects:
-              //   1. Phase-4 `onOpenDetail` (still mounts the drawer
-              //      so the focus-trap walk + e2e steps stay green
-              //      until M1b retires this).
-              //   2. M1a `onSelectRow` (drives URL-synced selection
-              //      via the App-level useSelectedSession hook so
-              //      the right pane swaps to ready-placeholder).
-              // The two are intentional duplicates during M1a; M1b
-              // will retire the drawer flow and leave `onSelectRow`
-              // alone.
-              if (onOpenDetail) onOpenDetail(row.rowKey, triggerEl);
+            const handleRowOpen = () => {
+              // M1b: row "open" gesture is now URL-synced selection
+              // ONLY. The Phase-4 `onOpenDetail` drawer auto-mount has
+              // been retired — the vestigial "Open detail" button in
+              // `SessionView` is the new drawer entry point.
               if (onSelectRow) onSelectRow(row.rowKey);
             };
             const isSelected = selectedRowKey === row.rowKey;
@@ -222,15 +191,15 @@ export function SessionsTable({
                   // Walk up from the click target to see whether the
                   // event came from inside the checkbox column. A
                   // click on the checkbox cell (or anything inside
-                  // it) toggles selection only — it MUST NOT open
-                  // the drawer (a11y bug magnet). The
+                  // it) toggles selection only — it MUST NOT trigger
+                  // the row-open path (a11y bug magnet). The
                   // `event.stopPropagation()` on the cell handles
                   // most cases; this guard is the belt-and-braces
                   // backup in case the propagation interception is
                   // bypassed by an event-time bubble re-fire.
                   const target = event.target as HTMLElement | null;
                   if (target?.closest("td.select-col") !== null) return;
-                  handleRowOpen(event.currentTarget);
+                  handleRowOpen();
                 }}
                 onKeyDown={(event) => {
                   if (event.key !== "Enter") return;
@@ -242,14 +211,14 @@ export function SessionsTable({
                   // can still trigger native actions in some
                   // contexts).
                   event.preventDefault();
-                  handleRowOpen(event.currentTarget);
+                  handleRowOpen();
                 }}
               >
                 <td
                   className="select-col"
                   // Stop click propagation BEFORE the row's onClick
-                  // sees it — toggling selection should never open
-                  // the drawer.
+                  // sees it — toggling selection should never trigger
+                  // the row-open path.
                   onClick={(event) => event.stopPropagation()}
                 >
                   {importable && row.sourceSessionKey !== null ? (
@@ -262,59 +231,46 @@ export function SessionsTable({
                   ) : null}
                 </td>
                 <td>
+                  <div className="title-cell">
+                    <div className="title-cell-line1">
+                      <span className="title-cell-title">
+                        {row.title ?? "(untitled)"}
+                      </span>
+                      <span className="title-cell-tool">{row.tool}</span>
+                    </div>
+                    <div className="title-cell-line2">
+                      <span className="title-cell-rowkey">
+                        {row.rowKey}
+                      </span>
+                      {row.statusConflict ? (
+                        <span
+                          className="title-cell-refresh"
+                          title="Source and stored status disagreed during load — refresh to re-fetch."
+                        >
+                          (refresh)
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                </td>
+                <td>
                   <span
                     className={`badge ${row.status.replace(/_/g, "-")}`}
                   >
                     {row.status.replace(/_/g, " ")}
                   </span>
-                  {row.statusConflict ? (
-                    <>
-                      {" "}
-                      <span
-                        className="muted"
-                        title="Source and stored status disagreed during load — refresh to re-fetch."
-                      >
-                        (refresh)
-                      </span>
-                    </>
-                  ) : null}
                 </td>
-                <td className="mono">{row.tool}</td>
-                <td className="stack">
-                  <strong>{row.title ?? "(untitled)"}</strong>
-                  <span className="muted mono">{row.rowKey}</span>
-                </td>
-                <td>{row.projectPath ?? "—"}</td>
                 <td
-                  className="mono"
+                  className="project-cell"
+                  title={row.projectPath ?? undefined}
+                >
+                  {row.projectPath ?? "—"}
+                </td>
+                <td
+                  className="mono updated-cell"
                   title={row.sourceUpdatedAt ?? undefined}
                 >
                   {relativeTimeFrom(now, row.sourceUpdatedAt)}
-                </td>
-                <td className="stack">
-                  {metadataHref !== null ? (
-                    <a className="raw-link mono" href={metadataHref}>
-                      {storedUidLine}
-                    </a>
-                  ) : (
-                    <span className="mono muted">{storedUidLine}</span>
-                  )}
-                  <span className="muted mono">{ingestedLine}</span>
-                  {rawLinkHref !== null ? (
-                    <a className="raw-link" href={rawLinkHref}>
-                      View Raw
-                    </a>
-                  ) : null}
-                </td>
-                <td
-                  className="mono"
-                  title={
-                    row.sourcePathIsStale
-                      ? "last seen source path — source file no longer discoverable"
-                      : undefined
-                  }
-                >
-                  {row.sourcePath}
                 </td>
               </tr>
             );

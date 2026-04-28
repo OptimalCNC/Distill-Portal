@@ -244,42 +244,41 @@ test("mounted App fetches all three panels and renders the unified table", async
     [SOURCE_SESSIONS_PATH, STORED_SESSIONS_PATH, SCAN_ERRORS_PATH].sort(),
   );
 
-  // (2) Source-fixture session_key appears once (in the merged table).
+  // (2) Source-fixture session_key appears once (in the merged table —
+  //     M1b renders it inside the Title cell's stacked rowKey line).
   expect(
     container.textContent?.includes("claude_code:fixture-abc"),
   ).toBe(true);
 
-  // (3) Stored fixture session_uid appears in the merged table (the
-  //     `up_to_date` join path emits the UID in the stored-copy cell).
-  expect(container.textContent?.includes("abc-uid-123")).toBe(true);
-
-  // (4) Scan-error message appears in the ScanErrorsCallout.
+  // (3) Scan-error message appears in the ScanErrorsCallout.
   expect(
     container.textContent?.includes("Malformed NDJSON on line 3"),
   ).toBe(true);
 
-  // (5) Status badge renders with the expected class for the `up_to_date`
+  // (4) Status badge renders with the expected class for the `up_to_date`
   //     row (joined source ⊕ stored). The badge JSX is inlined at the
   //     SessionsTable + SessionDetail call sites (M6 retired the
   //     dedicated `StatusBadge` component); the DOM shape is preserved.
   const badges = container.querySelectorAll("span.badge.up-to-date");
   expect(badges.length).toBeGreaterThanOrEqual(1);
 
-  // (6) Raw-download anchor targets the exact backend path. The unified
-  //     table emits the View Raw anchor whenever a stored UID is present.
+  // (5) M1b dropped the Stored Copy column from the table — the
+  //     `View Raw` / metadata anchors no longer surface here. They
+  //     remain reachable via the still-mounted Phase-4 `<Drawer>`
+  //     (M2's Metadata tab will eventually replace that surface).
+  //     Sanity: confirm the raw anchor is NOT in the inline DOM.
   const rawAnchor = container.querySelector(
     'a[href="/api/v1/sessions/abc-uid-123/raw"]',
   );
-  expect(rawAnchor).not.toBeNull();
-  expect(rawAnchor?.textContent).toBe("View Raw");
+  expect(rawAnchor).toBeNull();
 
-  // (7) Exactly one merged `<table>` for the unified list. The
+  // (6) Exactly one merged `<table>` for the unified list. The
   //     ScanErrorsCallout's table is in addition (one for the unified
   //     list, one for the scan-errors callout).
   const tables = container.querySelectorAll("table");
   expect(tables.length).toBe(2);
 
-  // (8) The fixture `up_to_date` row is NOT importable — there should
+  // (7) The fixture `up_to_date` row is NOT importable — there should
   //     be no per-row checkbox for it. Only the disabled header
   //     checkbox is present.
   const importCheckbox = container.querySelector(
@@ -714,8 +713,12 @@ test("per-panel error isolation: source 500 leaves stored rows rendered in the u
     expect(alerts.length).toBeGreaterThanOrEqual(1);
   });
 
-  // Stored fixture session_uid is in the DOM -> stored-side rendered.
-  expect(container.textContent?.includes("abc-uid-123")).toBe(true);
+  // M1b dropped the Stored Copy column from the table; the stored
+  // UID surfaces only via the still-mounted Phase-4 `<Drawer>`.
+  // Confirm the stored row IS in the merged set by its synthesized
+  // `stored:` rowKey (rendered inside the Title cell's stacked
+  // rowKey line — see SessionsTable's `.title-cell-rowkey`).
+  expect(container.textContent?.includes("stored:abc-uid-123")).toBe(true);
 
   // The source-failure banner is in the DOM and identifies the source side.
   const alerts = Array.from(container.querySelectorAll('[role="alert"]'));
@@ -831,11 +834,13 @@ test("per-panel error isolation: scan-errors 500 leaves the unified table render
     expect(alerts.length).toBe(1);
   });
 
-  // Unified table renders both fixtures (joined into one row).
+  // Unified table renders both fixtures (joined into one row). M1b
+  // surfaces the source `session_key` inside the Title cell stack;
+  // the dropped Stored Copy column means the stored UID is no longer
+  // in the inline table DOM (drawer-only).
   expect(
     container.textContent?.includes("claude_code:fixture-abc"),
   ).toBe(true);
-  expect(container.textContent?.includes("abc-uid-123")).toBe(true);
 
   // The surviving alert mentions the scan-errors fetch.
   const alerts = container.querySelectorAll('[role="alert"]');
@@ -1152,16 +1157,25 @@ test("statusConflict: a both-row with disagreeing source/stored statuses renders
 
   const { container } = render(<App />);
   await screen.findByText("claude_code:conflict-key");
-  // The (refresh) hint span is in the DOM near the badge.
-  const refreshSpan = Array.from(container.querySelectorAll("span.muted"))
-    .find((el) => el.textContent === "(refresh)");
-  expect(refreshSpan).not.toBeUndefined();
+  // M1b moved the (refresh) marker INSIDE the Title cell stack — it
+  // is rendered with the dedicated `.title-cell-refresh` class on a
+  // `--color-warn`-tinted italic span (design.md §3.2). The hover
+  // hint copy is preserved verbatim from Phase 4.
+  const refreshSpan = container.querySelector(".title-cell-refresh");
+  expect(refreshSpan).not.toBeNull();
+  expect(refreshSpan?.textContent).toBe("(refresh)");
   expect(refreshSpan?.getAttribute("title")).toBe(
     "Source and stored status disagreed during load — refresh to re-fetch.",
   );
 });
 
-test("stored_only + source_missing: source-path cell renders the last-known path with title= hover hint", async () => {
+test("stored_only + source_missing: M1b dropped the Source Path column — the row still renders, the hover-hint signal is now reachable via the still-mounted Drawer only", async () => {
+  // Per spec §Compact list rows (lines 520–531) the Source Path column
+  // is gone in M1b. The staleness signal (`row.sourcePathIsStale`) no
+  // longer surfaces in the inline DOM; it remains accessible via the
+  // still-mounted Phase-4 `<Drawer>` until M2's Metadata tab takes
+  // over. This test confirms (a) the row still renders and (b) the
+  // last-known source path no longer leaks into the inline table DOM.
   const STORED_ONLY: StoredSessionView[] = [
     {
       status: "source_missing",
@@ -1191,18 +1205,26 @@ test("stored_only + source_missing: source-path cell renders the last-known path
   globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
   const { container } = render(<App />);
-  await screen.findByText("/last/known/path/stale1.jsonl");
-  // Source-path cell is the rightmost <td> in the unified table's row.
+  // Title is "Stale"; rowKey for stored_only rows is `stored:<uid>`.
+  await screen.findByText("stored:uid-stale-1");
   const tables = container.querySelectorAll("table");
   expect(tables.length).toBeGreaterThanOrEqual(1);
   const unifiedTable = tables[0]!;
   const row = unifiedTable.querySelector("tbody tr");
   expect(row).not.toBeNull();
-  const sourcePathCell = row!.querySelector("td:last-child");
-  expect(sourcePathCell?.textContent).toBe("/last/known/path/stale1.jsonl");
-  expect(sourcePathCell?.getAttribute("title")).toBe(
-    "last seen source path — source file no longer discoverable",
+  // The Source Path is no longer in the inline DOM.
+  expect(
+    container.textContent?.includes("/last/known/path/stale1.jsonl"),
+  ).toBe(false);
+  // No `title=` hover hint with the stale-source-path copy.
+  const cellsWithStaleHint = Array.from(
+    unifiedTable.querySelectorAll("td"),
+  ).filter(
+    (td) =>
+      td.getAttribute("title") ===
+      "last seen source path — source file no longer discoverable",
   );
+  expect(cellsWithStaleHint.length).toBe(0);
 });
 
 // ---------- Phase 4 Milestone 3 additions ----------
@@ -1710,7 +1732,10 @@ test("M3 empty state — Partial fetch failure (source 500) preserves stored row
   );
   globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
   const { container } = render(<App />);
-  await screen.findByText("uid-survived");
+  // M1b: the stored UID is no longer in the inline DOM (the Stored
+  // Copy column was dropped). The synthesized `stored:<uid>` rowKey
+  // surfaces inside the Title cell stack instead.
+  await screen.findByText("stored:uid-survived");
   // The per-section banner is present.
   const alerts = Array.from(container.querySelectorAll('[role="alert"]'));
   const sourceAlert = alerts.find((el) =>
@@ -1718,7 +1743,7 @@ test("M3 empty state — Partial fetch failure (source 500) preserves stored row
   );
   expect(sourceAlert).not.toBeUndefined();
   // The stored-only survivor row is in the DOM (i.e. the table renders).
-  expect(container.textContent?.includes("uid-survived")).toBe(true);
+  expect(container.textContent?.includes("stored:uid-survived")).toBe(true);
 });
 
 test("M3: SessionFilters control bar is rendered above the table", async () => {
@@ -2886,12 +2911,14 @@ test("M1a: click-driven selection does NOT set data-deep-link='true'", async () 
     container.querySelector('tbody tr[data-deep-link="true"]'),
   ).toBeNull();
   // Click the title cell of the first row (NOT the checkbox cell —
-  // the checkbox-cell guard short-circuits the row open).
+  // the checkbox-cell guard short-circuits the row open). M1b moved
+  // the title's two-line stack inside `.title-cell` (the `td.stack`
+  // class lived on the Phase-4 column wrapper that's now gone).
   const tr = container.querySelector(
     "tbody tr",
   ) as HTMLTableRowElement | null;
   expect(tr).not.toBeNull();
-  const titleCell = tr!.querySelector("td.stack") as HTMLTableCellElement;
+  const titleCell = tr!.querySelector(".title-cell") as HTMLElement;
   await act(async () => {
     titleCell.click();
   });
@@ -3222,6 +3249,111 @@ test("M1a: popstate round trip — dispatching popstate after URL change syncs s
   // No deep-link pulse — popstate after initial mount does not
   // re-arm the one-shot pulse mechanism.
   expect(selected?.getAttribute("data-deep-link")).toBeNull();
+});
+
+// =============================================================
+// Phase 5 / M1b: row click does NOT auto-mount the dialog;
+// vestigial "Open detail" button is the new drawer entry point;
+// only one ActionBar instance in the DOM (sticky-footer relocation).
+// =============================================================
+
+test("M1b: row click does NOT mount the dialog (no auto-open)", async () => {
+  resetUrl();
+  globalThis.fetch =
+    makeM1aFetchMock() as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:m1a-1");
+  // Click the title cell of the first row (NOT the checkbox cell).
+  const tr = container.querySelector(
+    "tbody tr",
+  ) as HTMLTableRowElement | null;
+  expect(tr).not.toBeNull();
+  const titleCell = tr!.querySelector(".title-cell") as HTMLElement;
+  await act(async () => {
+    titleCell.click();
+  });
+  // The row is selected (aria-current="true"), but the drawer is NOT
+  // open. M1b retired the Phase-4 row-click → drawer auto-mount in
+  // favour of the vestigial "Open detail" button.
+  const selected = container.querySelector(
+    'tbody tr[aria-current="true"]',
+  );
+  expect(selected).not.toBeNull();
+  const dialog = container.querySelector(
+    "dialog.drawer",
+  ) as HTMLDialogElement | null;
+  expect(dialog).not.toBeNull();
+  expect(dialog!.open).toBe(false);
+});
+
+test("M1b: row click followed by 'Open detail' click mounts the dialog with the matched row", async () => {
+  resetUrl();
+  globalThis.fetch =
+    makeM1aFetchMock() as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:m1a-1");
+  // Step 1: click a row to select it (URL-synced).
+  const tr = container.querySelector(
+    "tbody tr",
+  ) as HTMLTableRowElement | null;
+  expect(tr).not.toBeNull();
+  const titleCell = tr!.querySelector(".title-cell") as HTMLElement;
+  await act(async () => {
+    titleCell.click();
+  });
+  // Step 2: the right pane is now in `ready-placeholder`; the
+  // vestigial "Open detail" button is rendered there.
+  const article = container.querySelector("article.session-pane");
+  await waitFor(() => {
+    expect(article?.getAttribute("data-state")).toBe("ready-placeholder");
+  });
+  const openDetail = Array.from(
+    article!.querySelectorAll("button"),
+  ).find((b) => b.textContent === "Open detail") as
+    | HTMLButtonElement
+    | undefined;
+  expect(openDetail).not.toBeUndefined();
+  // Capture which row the user actually selected so we can match the
+  // drawer body against THAT row's identity (default sort may put
+  // either fixture row first depending on tie-breaking).
+  const selectedRowKey =
+    container.querySelector('tbody tr[aria-current="true"]')
+      ?.querySelector(".title-cell-rowkey")?.textContent ?? "";
+  expect(selectedRowKey.startsWith("claude_code:m1a-")).toBe(true);
+  // Step 3: click Open detail → drawer mounts.
+  await act(async () => {
+    openDetail!.click();
+  });
+  const dialog = container.querySelector(
+    "dialog.drawer",
+  ) as HTMLDialogElement | null;
+  expect(dialog).not.toBeNull();
+  await waitFor(() => {
+    expect(dialog!.open).toBe(true);
+  });
+  // The drawer body shows the matched row's session_key (Phase-4
+  // SessionDetail body preserved through M5). The session-key string
+  // is part of the SessionDetail metadata <dl> render.
+  await waitFor(() => {
+    expect(dialog!.textContent?.includes(selectedRowKey)).toBe(true);
+  });
+});
+
+test("M1b: <ActionBar> renders exactly once in the DOM (inside the sticky footer)", async () => {
+  resetUrl();
+  globalThis.fetch =
+    makeM1aFetchMock() as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:m1a-1");
+  // Exactly one .action-bar in the DOM. The standalone instance that
+  // lived in `<section className="panel">` in M1a was removed; the
+  // canonical one lives inside the sticky `.list-pane-footer`.
+  const actionBars = container.querySelectorAll(".action-bar");
+  expect(actionBars.length).toBe(1);
+  // It sits inside the sticky list-pane footer.
+  const footers = container.querySelectorAll(".list-pane-footer");
+  expect(footers.length).toBe(1);
+  expect(footers[0]?.querySelector(".action-bar")).not.toBeNull();
 });
 
 test("M1a: session_not_found state renders only AFTER all three GETs settle", async () => {

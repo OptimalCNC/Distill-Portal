@@ -1,0 +1,59 @@
+Wide viewport (>= 1100 px) -- list pane on the left, session pane on the right.
+ASCII wireframe of the M1b list-pane recomposition. Spec lines 520-557.
+
+  /-------- 1400 px max-width container --------/
+
+  +------------------ <main class="split-pane"> ------------------+
+  |                                                                |
+  |  <aside class="list-pane">    | <article class="session-pane"> |
+  |  -----------------------------+--                              |
+  |                               |                                |
+  |  +-- session-filters strip ---|--+   placeholder copy:         |
+  |  | Tool   [All][Claude][Codex]   |    "Session view coming     |
+  |  | Storage [All][Stored][...]    |     in Milestone 2."        |
+  |  | Status  [All][Up][Out][...]   |                             |
+  |  | Project [____________]        |   [Open detail]   <-- M1b   |
+  |  | Search  [____________]        |   vestigial text-link;      |
+  |  | Sort    [Source updated][^]   |   transparent bg, muted     |
+  |  +-------------------------------+   resting color, sienna     |
+  |                               |     focus-visible ring.       |
+  |  +-- table (5 cols) ----------|--+                             |
+  |  |[ ] Title       Status  Proj Updated                         |
+  |  |[ ] Refactor... claude  /home 2 m ago                        |
+  |  |[X] Codex...    codex   /home 4 h ago  <-- aria-current=true |
+  |  |[ ] Sticky...   codex   /home 1 d ago                        |
+  |  |[ ] (refresh marker on line 2 of Title)                       |
+  |  | ...                                                         |
+  |  +-------------------------------+                             |
+  |                               |                                |
+  |  +-- list-pane-footer (sticky) -+   <-- position: sticky;      |
+  |  | [50] [< Prev][Next >] Page 1/4   bottom: 0;                 |
+  |  | -----                            border-top: 1px solid      |
+  |  | [Rescan] last 14m ago [Imp 0]    var(--color-border);       |
+  |  +-------------------------------+   background: var(--color-bg);|
+  |                                                                |
+  +----------------------------------------------------------------+
+        ^ hairline gutter (border-right on .list-pane)
+          single 1 px line at var(--color-border) -- M1a signature
+          detail #4. No grid-gap, no styled rail, no shadow.
+
+KEY CHANGES VS M1a:
+- Table compresses 8 cols -> 5 cols.
+- ActionBar + Pagination relocate from inline panels into
+  .list-pane-footer (sticky strip at bottom).
+- Filter strip wraps inside <details> below 1100 px (above 1100 px
+  the strip reads as the existing Phase 4 inline strip -- no <details>
+  chrome visible).
+- Session pane gains the vestigial "Open detail" text-link button
+  in the ready-placeholder state. Row click no longer auto-mounts
+  the drawer.
+
+ARCHIVE-ROOM AESTHETIC:
+- Hairlines, no shadows.
+- One accent (sienna) used surgically: selected-row tint (8%) + 2 px
+  inset left edge; deep-link pulse keyframe peak (22%); chip active
+  state (15% bg + 70% text + 35% border); focus-visible outlines.
+- Sharp panels (no rounded outer corners on the split-pane shell);
+  4 px radius preserved on buttons + status pills.
+- Quiet typography: system-sans body; mono for rowKey + tool badge +
+  Updated cell (column alignment).

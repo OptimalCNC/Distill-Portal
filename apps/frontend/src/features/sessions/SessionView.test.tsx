@@ -1,18 +1,24 @@
-// Component tests for the M1a right-pane placeholder.
+// Component tests for the M1a/M1b right-pane placeholder.
 //
 // SessionView is a presentational component: its state is driven by
 // the `state` prop (one of "empty" / "loading" / "ready-placeholder"
 // / "session_not_found") plus a `showBackToList` toggle for stacked-
 // narrow viewports. State transitions are owned by App.tsx; this
 // component only renders the four states + dispatches the three
-// callbacks (onBackToList / onClearSelection / onTryRescan).
+// callbacks (onBackToList / onClearSelection / onTryRescan / onOpenDetail).
 //
 // Coverage:
-//   - empty: preface text matches spec lines 591–593 verbatim
-//   - loading: "Reading session…" with no spinner
-//   - ready-placeholder: "Session view coming…" + NO "Open detail"
-//     button (M1b adds it)
-//   - session_not_found: heading + hint + two buttons
+//   - empty: preface text matches spec lines 591–593 verbatim; NO
+//     "Open detail" button
+//   - loading: "Reading session…" with no spinner; NO "Open detail"
+//     button
+//   - ready-placeholder: "Session view coming…" + the M1b vestigial
+//     "Open detail" button (verbatim copy per spec line 977). Click
+//     invokes `onOpenDetail` exactly once with the button as the
+//     trigger element so the parent can stash it for focus
+//     restoration on drawer close.
+//   - session_not_found: heading + hint + two buttons; NO
+//     "Open detail" button
 //   - back-to-list: rendered only when showBackToList === true; click
 //     fires onBackToList
 //   - back-to-list visibility CSS smoke test: the narrow-viewport
@@ -88,7 +94,7 @@ test("SessionView loading: renders 'Reading session…' with no spinner", () => 
   expect(article?.getAttribute("aria-busy")).toBe("true");
 });
 
-test("SessionView ready-placeholder: renders 'Session view coming in Milestone 2.' and NO 'Open detail' button", () => {
+test("SessionView ready-placeholder: renders 'Session view coming in Milestone 2.' AND the M1b vestigial 'Open detail' button", () => {
   const { container } = render(
     <SessionView
       state="ready-placeholder"
@@ -101,15 +107,67 @@ test("SessionView ready-placeholder: renders 'Session view coming in Milestone 2
   expect(
     container.textContent?.includes("Session view coming in Milestone 2."),
   ).toBe(true);
-  // M1a does NOT render the vestigial "Open detail" button — that's
-  // M1b. The Phase-4 row-click → drawer flow is preserved (verified
-  // separately in App.test.tsx + the e2e spec).
+  // M1b adds the vestigial "Open detail" button verbatim per spec line 977.
   const buttons = Array.from(container.querySelectorAll("button"));
   const openDetail = buttons.find((b) => b.textContent === "Open detail");
-  expect(openDetail).toBeUndefined();
+  expect(openDetail).not.toBeUndefined();
+  expect(openDetail?.classList.contains("open-detail")).toBe(true);
   // data-state reflects the prop.
   const article = container.querySelector("article.session-pane");
   expect(article?.getAttribute("data-state")).toBe("ready-placeholder");
+});
+
+test("SessionView ready-placeholder: clicking 'Open detail' invokes onOpenDetail exactly once with the button as triggerEl", () => {
+  const onOpenDetail = mock((_trigger: HTMLElement | null) => {});
+  const { container } = render(
+    <SessionView
+      state="ready-placeholder"
+      showBackToList={false}
+      onBackToList={NOOP}
+      onClearSelection={NOOP}
+      onTryRescan={NOOP}
+      onOpenDetail={onOpenDetail}
+    />,
+  );
+  const button = Array.from(container.querySelectorAll("button")).find(
+    (b) => b.textContent === "Open detail",
+  ) as HTMLButtonElement | undefined;
+  expect(button).not.toBeUndefined();
+  act(() => {
+    button!.click();
+  });
+  expect(onOpenDetail).toHaveBeenCalledTimes(1);
+  // The trigger element forwarded to the parent is the button itself —
+  // App.tsx stashes it as the Drawer's `restoreFocusRef` so close
+  // restores focus to the button (NOT the row, per M1b semantic shift).
+  expect(onOpenDetail.mock.calls[0]?.[0]).toBe(button);
+});
+
+test("SessionView: vestigial 'Open detail' button absent in empty / loading / session_not_found states", () => {
+  // The button is intentionally tied to the "ready-placeholder" state
+  // — drawer auto-mount makes no sense in empty (nothing selected),
+  // loading (row not yet merged), or session_not_found (the URL
+  // points at a row that isn't in the merged set).
+  const states: Array<"empty" | "loading" | "session_not_found"> = [
+    "empty",
+    "loading",
+    "session_not_found",
+  ];
+  for (const state of states) {
+    const { container } = render(
+      <SessionView
+        state={state}
+        showBackToList={false}
+        onBackToList={NOOP}
+        onClearSelection={NOOP}
+        onTryRescan={NOOP}
+      />,
+    );
+    const buttons = Array.from(container.querySelectorAll("button"));
+    const openDetail = buttons.find((b) => b.textContent === "Open detail");
+    expect(openDetail).toBeUndefined();
+    cleanup();
+  }
 });
 
 test("SessionView session_not_found: renders heading + hint + two buttons (Clear selection / Try Rescan)", () => {

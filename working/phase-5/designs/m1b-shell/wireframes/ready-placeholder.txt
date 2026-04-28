@@ -1,0 +1,61 @@
+Right pane in "ready-placeholder" state -- row selected, drawer not yet open.
+ASCII wireframe of the M1b vestigial Open detail button positioning.
+Spec line 977.
+
+  +------ <article class="session-pane" data-state="ready-placeholder"> ------+
+  |                                                                            |
+  |    (centered .session-state, max-width 70ch, margin 0 auto;                |
+  |     padding from .session-pane: var(--space-8) var(--space-6))             |
+  |                                                                            |
+  |                                                                            |
+  |    Session view coming in Milestone 2.   <-- placeholder-line              |
+  |                                              --color-text-muted, --text-sm |
+  |                                                                            |
+  |    Open detail                            <-- vestigial Open detail button |
+  |                                              parallel to M1a .back-to-list:|
+  |                                              transparent bg, no border,    |
+  |                                              --color-text-muted resting    |
+  |                                              -> --color-text on hover/focus|
+  |                                              underline on hover/focus      |
+  |                                              focus-visible: 2px sienna     |
+  |                                              outline + 2px offset          |
+  |                                                                            |
+  |                                                                            |
+  +----------------------------------------------------------------------------+
+
+POSITIONING DECISION (designer's recommendation):
+- Vestigial button BELOW the placeholder line.
+- Rationale: the placeholder line is the contextual lede; the action
+  verb sits AFTER the explanation, mirroring the editorial cadence of
+  M1a's empty-pane two-paragraph preface ("Select a session..." +
+  "The session view shows..."). Putting the button above would read as
+  a primary CTA; putting it below reads as "by the way, here is the
+  temporary affordance" -- which is exactly what "vestigial" wants.
+
+NOT RENDERED in:
+- empty state (no row selected -- nothing to open)
+- loading state (row not yet merged -- drawer would show empty body)
+- session_not_found state (the "Clear selection" + "Try Rescan" quiet
+  buttons own that state's affordance vocabulary)
+
+CLICK FLOW:
+1. User clicks "Open detail".
+2. App.tsx captures the button DOM node into triggerRef.
+3. Drawer mounts with <SessionDetail row={selectedRow}> body.
+4. User Esc / clicks Close / clicks backdrop -> drawer closes.
+5. Focus restoration: returns to the vestigial button (NOT the
+   originating row, which was the Phase 4 path).
+
+KEYBOARD:
+- Tab from the placeholder line lands on the button.
+- Tab past the button moves focus to the next interactive element
+  in the right pane (none in M1b; M2's tab strip will fill this slot).
+
+DELETION IN M2:
+- Remove <button class="open-detail">{...}</button> JSX from
+  SessionView.tsx.
+- Remove .open-detail CSS recipe from SessionView.css.
+- Remove onOpenDetail prop + handler.
+- One-component sweep; no token churn; no other component updates.
+- The button's deliberate quietness is what makes the M2 deletion
+  trivial.

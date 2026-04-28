@@ -1,0 +1,1612 @@
+<!--
+  Phase 5 / M1b — compact list + sticky list-pane footer + filter <details>
+  wrap + vestigial "Open detail" button. Working prototype.
+
+  Reference-only artifact. The developer re-implements against
+  React + per-component sibling CSS. Open this file directly in any
+  browser; no build step.
+
+  Visual cohesion: builds on the M1a Archive-room delivery
+  (working/phase-5/designs/m1a-shell/prototype.html). Hairline-over-shadow,
+  one accent (sienna), sharp panels, restrained motion. NO M2 tokens —
+  Phase 4 baseline tokens + the M1a structural literals only.
+
+  Spec citations point at working/phase-5.md @ 05467ad. Inline comments
+  flag spec line ranges where the styling decision is load-bearing.
+
+  State picker at the top exercises every variant the implementation
+  must cover (rows, sticky footer, filter <details>, vestigial button).
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Phase 5 / M1b — compact list + sticky footer + filter wrap + vestigial button</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* ---------------------------------------------------------------
+     * Reset (mirrors apps/frontend/src/styles/reset.css behavior).
+     * --------------------------------------------------------------- */
+    *, *::before, *::after { box-sizing: border-box; }
+    html { color-scheme: light dark; }
+    body { margin: 0; }
+
+    /* ---------------------------------------------------------------
+     * Tokens (verbatim from apps/frontend/src/styles/tokens.css —
+     * Phase-4 baseline; M1b adds NO new tokens). The hex literals below
+     * are the SOLE permitted hex literals; every other value in this
+     * file is var(--token) or a color-mix recipe.
+     * --------------------------------------------------------------- */
+    :root {
+      --color-bg: #ffffff;
+      --color-surface: #f8f9fb;
+      --color-surface-raised: #ffffff;
+      --color-border: #e3e5ea;
+      --color-border-strong: #c8ccd4;
+      --color-text: #14161a;
+      --color-text-muted: #5a606b;
+      --color-accent: #2864d4;
+      --color-accent-hover: #1d4fa8;
+      --color-success: #1f7a4a;
+      --color-warn: #b86b07;
+      --color-error: #b13838;
+
+      --space-1: 0.25rem;
+      --space-2: 0.5rem;
+      --space-3: 0.75rem;
+      --space-4: 1rem;
+      --space-6: 1.5rem;
+      --space-8: 2rem;
+
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-lg: 12px;
+
+      --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --text-xs: 0.72rem;
+      --text-sm: 0.85rem;
+      --text-base: 0.95rem;
+      --text-lg: 1.15rem;
+      --text-xl: 1.35rem;
+
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.08);
+
+      --color-backdrop: rgba(0, 0, 0, 0.45);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-bg: #0f1115;
+        --color-surface: #151821;
+        --color-surface-raised: #1b1f2a;
+        --color-border: #262b36;
+        --color-border-strong: #3a404d;
+        --color-text: #e8eaef;
+        --color-text-muted: #9098a6;
+        --color-accent: #6da5ff;
+        --color-accent-hover: #8bbbff;
+        --color-success: #5fb68a;
+        --color-warn: #e0a75a;
+        --color-error: #e57d7d;
+        --color-backdrop: rgba(0, 0, 0, 0.6);
+      }
+    }
+
+    /* ---------------------------------------------------------------
+     * Body shell + utilities (mirrors apps/frontend/src/styles/global.css).
+     * --------------------------------------------------------------- */
+    body {
+      padding: var(--space-6);
+      font-family: var(--font-sans);
+      background: var(--color-bg);
+      color: var(--color-text);
+    }
+
+    code, kbd, samp, pre { font-family: var(--font-mono); }
+
+    .muted { color: var(--color-text-muted); }
+    .mono  { font-family: var(--font-mono); font-size: var(--text-sm); }
+    .stack { display: flex; flex-direction: column; gap: var(--space-1); }
+
+    /* ---------------------------------------------------------------
+     * State-picker chrome (NOT part of the M1b production surface —
+     * this is the prototype's switching console only).
+     * --------------------------------------------------------------- */
+    .picker {
+      max-width: 1400px;
+      margin: 0 auto var(--space-6);
+      padding: var(--space-4);
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: var(--space-4);
+    }
+    .picker h2 {
+      grid-column: 1 / -1;
+      margin: 0 0 var(--space-2);
+      font-size: var(--text-lg);
+      letter-spacing: 0.02em;
+    }
+    .picker p {
+      grid-column: 1 / -1;
+      margin: 0 0 var(--space-2);
+      font-size: var(--text-sm);
+      color: var(--color-text-muted);
+      max-width: 80ch;
+    }
+    .picker fieldset {
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      padding: var(--space-2) var(--space-3);
+      background: var(--color-bg);
+    }
+    .picker legend {
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--color-text-muted);
+      padding: 0 var(--space-1);
+    }
+    .picker label {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-size: var(--text-sm);
+      padding: var(--space-1) 0;
+      cursor: pointer;
+    }
+    .picker label input { margin: 0; }
+
+    /* ---------------------------------------------------------------
+     * Page shell — mirrors the M1a split-pane Grid.
+     * Spec §Inspection Surface Layout lines 495-518.
+     * --------------------------------------------------------------- */
+    main.split-pane {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      /* The fixed height is a prototype-only affordance so the sticky
+       * footer can be exercised inside the constrained list pane.
+       * In production, the sticky footer sticks to the page viewport
+       * (no .list-pane overflow:auto in M1a/M1b). */
+      min-height: 720px;
+    }
+
+    @media (min-width: 900px) {
+      main.split-pane {
+        grid-template-columns: minmax(300px, 380px) 1fr;
+      }
+    }
+
+    /* ---------------------------------------------------------------
+     * List pane (left). The hairline gutter is `border-right` on
+     * .list-pane (signature-detail #4 from M1a; spec lines 60, 72).
+     *
+     * M1b adds: position: relative + display: flex + a list-pane-footer
+     * sticky child. The list pane in production does NOT carry
+     * overflow:auto in M1a/M1b — the sticky footer therefore sticks to
+     * the closest scrolling ancestor (page viewport), which delivers
+     * the intended "footer always visible on tall lists" UX.
+     *
+     * For the prototype only, we add a contained scroll context so the
+     * "scrolled" state can be demonstrated without scrolling the whole
+     * page. Production code can leave overflow on the page viewport.
+     * --------------------------------------------------------------- */
+    .list-pane {
+      min-inline-size: 0;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      background: var(--color-bg);
+    }
+
+    @media (min-width: 900px) {
+      .list-pane { border-right: 1px solid var(--color-border); }
+    }
+
+    /* The list-pane scroll context (prototype-only). */
+    .list-pane-body {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    /* ---------------------------------------------------------------
+     * Session pane (right) — the M1a placeholder. M1b adds the
+     * vestigial "Open detail" button to the ready-placeholder state.
+     * Spec line 977.
+     * --------------------------------------------------------------- */
+    .session-pane {
+      padding: var(--space-8) var(--space-6);
+      min-inline-size: 0;
+    }
+    .session-state {
+      max-width: 70ch;
+      margin: 0 auto;
+    }
+    .session-state > * + * { margin-top: var(--space-3); }
+
+    .placeholder-line {
+      font-size: var(--text-sm);
+      color: var(--color-text-muted);
+      margin: 0;
+    }
+
+    /* M1b VESTIGIAL "Open detail" button. Spec line 977. Visual
+     * treatment parallel to M1a's .back-to-list quiet text-link
+     * (transparent bg, no border, muted color, underline on
+     * hover/focus, sienna focus ring with 2 px offset). The button is
+     * intentionally vestigial — quiet, low-anchor, easy to remove in
+     * M2 when the Tabs primitive lands.
+     *
+     * Position: directly UNDER the "Session view coming in Milestone 2"
+     * placeholder. Designer chose "below" over "above" because the
+     * placeholder line is the contextual lede; the action verb sits
+     * after the explanation, mirroring the editorial cadence of the
+     * empty pane preface. */
+    .open-detail {
+      display: inline-block;
+      appearance: none;
+      background: transparent;
+      border: 0;
+      padding: var(--space-1) var(--space-2);
+      margin: 0 0 0 calc(-1 * var(--space-2));
+      color: var(--color-text-muted);
+      font: inherit;
+      font-size: var(--text-sm);
+      cursor: pointer;
+    }
+    .open-detail:hover,
+    .open-detail:focus-visible {
+      color: var(--color-text);
+      text-decoration: underline;
+    }
+    .open-detail:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 2px;
+    }
+    .open-detail:active {
+      color: var(--color-accent-hover);
+    }
+    /* Forced-state demonstrators for the prototype's state picker. */
+    .open-detail.demo-hover {
+      color: var(--color-text);
+      text-decoration: underline;
+    }
+    .open-detail.demo-focus {
+      color: var(--color-text);
+      text-decoration: underline;
+      outline: 2px solid var(--color-accent);
+      outline-offset: 2px;
+    }
+    .open-detail.demo-active { color: var(--color-accent-hover); }
+
+    /* ---------------------------------------------------------------
+     * SessionFilters strip — Phase 4 baseline shape preserved.
+     * Spec §Filter bar placement lines 547-549.
+     *
+     * M1b wraps the strip inside a <details> element below 1100 px
+     * (spec §Structural literals line 930). Above 1100 px, the
+     * <details> renders open and the marker is suppressed so the
+     * strip reads as the existing Phase 4 inline strip.
+     *
+     * Default open state: open above 1100 px, closed below — the
+     * developer wires this with a matchMedia listener mirroring the
+     * App.tsx narrow-mode pattern at lines 800-826 of M1a.
+     * --------------------------------------------------------------- */
+    .session-filters {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      padding: var(--space-3) var(--space-3) var(--space-3);
+    }
+    .filter-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .filter-label {
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--color-text-muted);
+      min-width: 4rem;
+    }
+    .chip {
+      display: inline-block;
+      padding: var(--space-1) var(--space-3);
+      border-radius: 999px;
+      font-size: var(--text-sm);
+      font-family: var(--font-sans);
+      background: var(--color-surface);
+      color: var(--color-text-muted);
+      border: 1px solid var(--color-border);
+      cursor: pointer;
+    }
+    .chip:hover:not(:disabled) {
+      border-color: var(--color-border-strong);
+    }
+    .chip.active {
+      background: color-mix(in srgb, var(--color-accent) 15%, var(--color-surface));
+      color: color-mix(in srgb, var(--color-accent) 70%, var(--color-text));
+      border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-surface));
+    }
+    .session-filters input,
+    .session-filters select {
+      font: inherit;
+      font-size: var(--text-sm);
+      padding: var(--space-1) var(--space-2);
+      border: 1px solid var(--color-border-strong);
+      border-radius: var(--radius-sm);
+      background: var(--color-surface-raised);
+      color: var(--color-text);
+    }
+    .session-filters input[type="text"],
+    .session-filters input[type="search"] {
+      min-width: 12rem;
+    }
+
+    /* The <details> wrap is always rendered in production; whether it
+     * "engages" (acts as a disclosure) is a function of the breakpoint.
+     * Above 1100 px it is open + marker-suppressed + summary-suppressed
+     * so the existing Phase 4 inline strip reads through.
+     *
+     * Below 1100 px it engages: <summary>Filters {N active}</summary>
+     * appears, the user can toggle the disclosure, and a hairline
+     * bottom border separates the summary from the body when open.
+     *
+     * The default open state is set by the consumer based on the
+     * matchMedia query — the prototype simulates this via a React-like
+     * state attribute on <main> ([data-narrow-filters="open"|"closed"]).
+     */
+    .filters-wrap {
+      /* default styling — apply below 1100 px in production */
+      border-bottom: 1px solid var(--color-border);
+    }
+    .filters-wrap > summary {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-3);
+      font-size: var(--text-sm);
+      font-weight: 600;
+      color: var(--color-text);
+      cursor: pointer;
+      list-style: revert; /* keep the native ::marker chevron */
+      user-select: none;
+    }
+    .filters-wrap > summary:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 2px;
+      border-radius: var(--radius-sm);
+    }
+    .filters-wrap[open] > summary {
+      border-bottom: 1px solid var(--color-border);
+    }
+    /* Chip in the summary line — small, muted, hairline-only. NOT the
+     * pill-style chip recipe (.chip) used by filter affordances. The
+     * count is suppressed entirely when 0. */
+    .filter-count-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 0 var(--space-2);
+      min-height: 1.4em;
+      font-size: var(--text-xs);
+      font-weight: 400;
+      color: var(--color-text-muted);
+      background: transparent;
+      border: 1px solid var(--color-border);
+      border-radius: 999px;
+      letter-spacing: 0.02em;
+    }
+    /* Above 1100 px: suppress the disclosure chrome and force the
+     * filter body open. The strip then reads as the existing Phase 4
+     * inline strip. */
+    @media (min-width: 1100px) {
+      .filters-wrap {
+        border-bottom: 0;
+      }
+      .filters-wrap > summary {
+        display: none;
+      }
+      /* Force the body to render even when the developer's matchMedia
+       * code hasn't set the open attribute yet. */
+      .filters-wrap > .session-filters {
+        display: flex !important;
+      }
+    }
+
+    /* ---------------------------------------------------------------
+     * SessionsTable — compact 4-essential rows + Select column.
+     * Spec §Compact list rows lines 520-531; §Row visual treatment
+     * lines 533-545.
+     *
+     * Columns post-compression:
+     *   1. Select   (checkbox; importability rule preserved from Phase 4)
+     *   2. Title    (bold + tool badge inline + muted mono rowKey on
+     *                subline + (refresh) marker if statusConflict)
+     *   3. Status   (existing Phase 4 status pill)
+     *   4. Project  (truncated; full path on title= hover)
+     *   5. Updated  (relative time; absolute ISO on title= hover)
+     *
+     * DROPPED: Tool / Stored Copy / Source Path. Reachable via the
+     * still-mounted Phase 4 drawer (until M2 Metadata tab takes over).
+     * --------------------------------------------------------------- */
+    .table-wrap {
+      flex: 1 1 auto;
+      overflow-x: auto;
+      border: 0;
+      /* min-height kept loose — sticky footer eats the residual space
+       * when rows do not fill the pane. */
+    }
+
+    .sessions-table {
+      width: 100%;
+      border-collapse: collapse;
+      /* No min-width clamp at 720 px (Phase 4 had it for the 8-column
+       * table). The 4-essential layout fits in the 300-380 px list
+       * pane comfortably and supports horizontal-scroll-free reading
+       * down to ~280 px. */
+    }
+
+    .sessions-table th,
+    .sessions-table td {
+      /* Row anatomy per spec line 543: 8 px vertical padding, 12 px
+       * horizontal padding, 8 px cell gutter. */
+      padding: var(--space-2) var(--space-3);
+      border-bottom: 1px solid var(--color-border);
+      text-align: left;
+      vertical-align: middle;
+      font-size: var(--text-sm);
+    }
+
+    .sessions-table th {
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--color-text-muted);
+      background: var(--color-surface);
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .sessions-table tr {
+      /* min-height per spec line 543. Browsers honor min-height on
+       * <tr> via the cells' content-box; here we set both for
+       * defense-in-depth. */
+      min-height: 36px;
+    }
+    .sessions-table tbody td {
+      min-height: 36px;
+    }
+
+    .sessions-table th.select-col,
+    .sessions-table td.select-col {
+      width: 2.25rem;
+      padding-right: var(--space-1);
+      text-align: center;
+    }
+
+    /* Title cell — two-line stack with 4 px gap (spec line 543). */
+    .title-cell {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1); /* 4 px */
+      min-width: 0;
+    }
+    .title-cell-line1 {
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-2);
+      min-width: 0;
+    }
+    .title-cell-title {
+      font-weight: 600;
+      color: var(--color-text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .title-cell-tool {
+      flex-shrink: 0;
+      display: inline-block;
+      padding: 0 var(--space-2);
+      font-size: var(--text-xs);
+      font-family: var(--font-mono);
+      color: var(--color-text-muted);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      letter-spacing: 0.02em;
+      line-height: 1.6;
+    }
+    .title-cell-line2 {
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-2);
+      font-size: var(--text-xs);
+      color: var(--color-text-muted);
+      min-width: 0;
+    }
+    .title-cell-rowkey {
+      font-family: var(--font-mono);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .title-cell-refresh {
+      flex-shrink: 0;
+      font-size: var(--text-xs);
+      color: var(--color-warn);
+      font-style: italic;
+    }
+
+    /* Project cell — single-line ellipsis truncation. */
+    .project-cell {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 12rem;
+      color: var(--color-text);
+    }
+
+    /* Updated cell — mono for monospace alignment of relative times. */
+    .updated-cell {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--color-text-muted);
+      white-space: nowrap;
+    }
+
+    /* Status pill (existing Phase 4 recipe — tokens.css colors). */
+    .badge {
+      display: inline-block;
+      padding: var(--space-1) var(--space-2);
+      border-radius: 999px;
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-family: var(--font-mono);
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+    .badge.up-to-date {
+      background: color-mix(in srgb, var(--color-success) 15%, var(--color-surface));
+      color: color-mix(in srgb, var(--color-success) 70%, var(--color-text));
+      border-color: color-mix(in srgb, var(--color-success) 35%, var(--color-surface));
+    }
+    .badge.not-stored {
+      background: color-mix(in srgb, var(--color-accent) 15%, var(--color-surface));
+      color: color-mix(in srgb, var(--color-accent) 70%, var(--color-text));
+      border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-surface));
+    }
+    .badge.outdated {
+      background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+      color: color-mix(in srgb, var(--color-warn) 70%, var(--color-text));
+      border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+    }
+    .badge.source-missing {
+      background: color-mix(in srgb, var(--color-error) 15%, var(--color-surface));
+      color: color-mix(in srgb, var(--color-error) 70%, var(--color-text));
+      border-color: color-mix(in srgb, var(--color-error) 35%, var(--color-surface));
+    }
+
+    /* M1a row variants PRESERVED VERBATIM. Spec §Row visual treatment
+     * lines 533-545. Recipes consume var(--color-accent) / --color-text
+     * so M2's oklch redefinition automatically retints them. */
+    .sessions-table tbody tr {
+      cursor: pointer;
+    }
+    .sessions-table tbody tr:hover,
+    .sessions-table tbody tr.demo-hover {
+      background-color: color-mix(in srgb, var(--color-text) 4%, transparent);
+    }
+    .sessions-table tbody tr[aria-current="true"] {
+      background-color: color-mix(in srgb, var(--color-accent) 8%, transparent);
+      box-shadow: inset 2px 0 0 var(--color-accent);
+    }
+    .sessions-table tbody tr[aria-current="true"]:hover,
+    .sessions-table tbody tr[aria-current="true"].demo-hover {
+      background-color: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    }
+    .sessions-table tbody tr[data-deep-link="true"] {
+      animation: deep-link-pulse 600ms ease-out 1;
+    }
+    @keyframes deep-link-pulse {
+      0%   { background-color: color-mix(in srgb, var(--color-accent) 22%, transparent); }
+      100% { background-color: color-mix(in srgb, var(--color-accent)  8%, transparent); }
+    }
+
+    /* Focus-visible row outline — Phase 4 baseline preserved. */
+    .sessions-table tbody tr:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: -2px;
+    }
+
+    /* ---------------------------------------------------------------
+     * Sticky list-pane footer. Spec §Action bar placement line 553;
+     * §Pagination placement line 555.
+     *
+     * Layout: Pagination ABOVE ActionBar inside .list-pane-footer
+     * (Pagination "lives between the table and the action bar").
+     * Position: position: sticky; bottom: 0; z-index: 1.
+     * Visual: hairline border-top, opaque var(--color-bg), no shadow
+     * (Archive-room hairline-over-shadow).
+     * --------------------------------------------------------------- */
+    .list-pane-footer {
+      position: sticky;
+      bottom: 0;
+      z-index: 1;
+      background: var(--color-bg);
+      border-top: 1px solid var(--color-border);
+      padding: var(--space-2) var(--space-3) var(--space-3);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+
+    /* Pagination strip (existing Phase 4 recipe; merely relocated). */
+    .pagination {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-1) 0;
+    }
+    .pagination-page-size {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .pagination-page-size-label {
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--color-text-muted);
+    }
+    .pagination select {
+      font: inherit;
+      font-size: var(--text-sm);
+      padding: var(--space-1) var(--space-2);
+      border: 1px solid var(--color-border-strong);
+      border-radius: var(--radius-sm);
+      background: var(--color-surface-raised);
+      color: var(--color-text);
+    }
+    .pagination button {
+      font: inherit;
+      font-size: var(--text-sm);
+      padding: var(--space-1) var(--space-3);
+      border: 1px solid var(--color-border-strong);
+      border-radius: var(--radius-sm);
+      background: var(--color-surface);
+      color: var(--color-text);
+      cursor: pointer;
+    }
+    .pagination button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .pagination-caption {
+      color: var(--color-text-muted);
+      font-size: var(--text-sm);
+    }
+
+    /* ActionBar (existing Phase 4 recipe; merely relocated). The
+     * sticky modifier `.action-bar.sticky` is no longer needed inside
+     * the list-pane-footer because the footer itself is sticky — but
+     * we keep the .action-bar class so the existing CSS recipe cascades
+     * unchanged. */
+    .action-bar {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      padding-top: var(--space-2);
+      border-top: 1px solid var(--color-border);
+    }
+    .action-bar-buttons {
+      display: flex;
+      flex-direction: row;
+      gap: var(--space-2);
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .action-bar button {
+      font: inherit;
+      padding: var(--space-1) var(--space-3);
+      border: 1px solid var(--color-border-strong);
+      border-radius: var(--radius-sm);
+      background: var(--color-surface);
+      color: var(--color-text);
+      cursor: pointer;
+    }
+    .action-bar button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .action-bar-last-rescan {
+      font-size: var(--text-xs);
+      margin-right: var(--space-2);
+      color: var(--color-text-muted);
+    }
+
+    /* ---------------------------------------------------------------
+     * Mock drawer — representational only. The real drawer ships as
+     * the existing Phase 4 <Drawer> with <SessionDetail> body. M1b
+     * does NOT modify the drawer; it merely changes the trigger from
+     * "row click" to "vestigial Open detail button click".
+     * --------------------------------------------------------------- */
+    .mock-drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background: var(--color-backdrop);
+      display: none;
+      z-index: 100;
+    }
+    .mock-drawer-backdrop[data-open="true"] { display: block; }
+    .mock-drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: min(92vw, 640px);
+      background: var(--color-bg);
+      border-left: 1px solid var(--color-border);
+      padding: var(--space-6);
+      overflow-y: auto;
+      transform: translateX(100%);
+      transition: transform 200ms ease-out;
+    }
+    .mock-drawer-backdrop[data-open="true"] .mock-drawer {
+      transform: translateX(0);
+    }
+    .mock-drawer h2 {
+      margin: 0 0 var(--space-4);
+      font-size: var(--text-lg);
+    }
+    .mock-drawer-close {
+      font: inherit;
+      font-size: var(--text-sm);
+      padding: var(--space-1) var(--space-3);
+      border: 1px solid var(--color-border-strong);
+      border-radius: var(--radius-sm);
+      background: var(--color-surface);
+      color: var(--color-text);
+      cursor: pointer;
+    }
+
+    /* Reduced-motion zero-out (verbatim from M1a global.css). */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    /* ---------------------------------------------------------------
+     * Section labels for the prototype's annotated demos.
+     * --------------------------------------------------------------- */
+    .demo-section-label {
+      max-width: 1400px;
+      margin: var(--space-8) auto var(--space-2);
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--color-text-muted);
+      padding: 0 var(--space-1);
+    }
+    .demo-section-label::before {
+      content: "§ ";
+      color: var(--color-accent);
+    }
+
+    .demo-pair {
+      max-width: 1400px;
+      margin: 0 auto var(--space-6);
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: var(--space-4);
+    }
+    .demo-pair > figure {
+      margin: 0;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      background: var(--color-bg);
+    }
+    .demo-pair > figure > figcaption {
+      padding: var(--space-2) var(--space-3);
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--color-text-muted);
+      background: var(--color-surface);
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    /* The "ready-placeholder" pane mini-demo. */
+    .placeholder-demo {
+      padding: var(--space-6);
+      min-height: 160px;
+    }
+  </style>
+</head>
+<body>
+
+<header style="max-width:1400px;margin:0 auto var(--space-4);">
+  <h1 style="margin:0 0 var(--space-1);font-size:var(--text-xl);">Phase 5 / M1b — compact list + sticky footer + filter wrap + vestigial Open detail</h1>
+  <p class="muted" style="margin:0;font-size:var(--text-sm);max-width:80ch;">
+    Reference prototype. Builds on M1a (Archive-room aesthetic — warm-paper light / deep-ink dark, sienna single accent, hairlines over shadows, sharp panels, restrained motion).
+    M1b adds NO new tokens; the M2 Design Language token rollout (Fraunces, oklch palette, motion tokens) lands in M2.
+  </p>
+</header>
+
+<!-- ===================================================================
+     STATE PICKER — exercises every M1b variant in the live demo below.
+     The demos further down are static (not picker-controlled) so the
+     reader can compare variants side-by-side.
+     =================================================================== -->
+<section class="picker" aria-label="Live demo state picker">
+  <h2>Live demo state picker</h2>
+  <p>The single live demo (further down) reads from these controls. Static side-by-side compares of each variant follow the live demo.</p>
+
+  <fieldset>
+    <legend>Selected row index</legend>
+    <label><input type="radio" name="selected" value="0" /> row 0 (no selection)</label>
+    <label><input type="radio" name="selected" value="1" checked /> row 1</label>
+    <label><input type="radio" name="selected" value="2" /> row 2</label>
+    <label><input type="radio" name="selected" value="3" /> row 3</label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Deep-link pulse</legend>
+    <label><button type="button" id="btn-pulse">Trigger pulse on selected row</button></label>
+    <p class="muted" style="font-size:var(--text-xs);margin:var(--space-1) 0 0;">URL-driven mount only in production; click-driven selection NEVER pulses (spec line 585).</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Active-filter count chip</legend>
+    <label><input type="radio" name="filtercount" value="0" checked /> 0 active (chip suppressed)</label>
+    <label><input type="radio" name="filtercount" value="1" /> 1 active</label>
+    <label><input type="radio" name="filtercount" value="3" /> 3 active</label>
+    <label><input type="radio" name="filtercount" value="7" /> 7 active (max)</label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Filter <details> mode</legend>
+    <label><input type="radio" name="filtermode" value="auto" checked /> auto (matchMedia 1100 px)</label>
+    <label><input type="radio" name="filtermode" value="open" /> force open</label>
+    <label><input type="radio" name="filtermode" value="closed" /> force closed</label>
+    <p class="muted" style="font-size:var(--text-xs);margin:var(--space-1) 0 0;">Resize to ≤ 1100 px to see the disclosure engage in auto mode.</p>
+  </fieldset>
+</section>
+
+<!-- ===================================================================
+     LIVE DEMO — the integrated split-pane scaffold with all M1b changes.
+     =================================================================== -->
+<main class="split-pane" id="live-demo" data-narrow-mode="list">
+
+  <aside class="list-pane" aria-label="Sessions list">
+    <!-- M1b: <details> wraps SessionFilters below 1100 px.
+         Default open above 1100 px; closed below. The implementation
+         uses a matchMedia listener (mirroring App.tsx narrow-mode
+         pattern) to set the `open` attribute on first paint AND on
+         resize crossings. The user's manual toggle below 1100 px is
+         preserved (the listener should NOT clobber it). -->
+    <details class="filters-wrap" id="filters-details" open>
+      <summary>
+        <span aria-hidden="true">Filters</span>
+        <span class="filter-count-chip" id="filter-count-chip" hidden>0 active</span>
+        <span class="visually-hidden" style="position:absolute;left:-9999px;">
+          Toggle filters
+        </span>
+      </summary>
+
+      <div class="session-filters" role="group" aria-label="Session filters">
+        <div class="filter-row">
+          <span class="filter-label">Tool</span>
+          <button type="button" class="chip active">All</button>
+          <button type="button" class="chip">Claude Code</button>
+          <button type="button" class="chip">Codex</button>
+        </div>
+        <div class="filter-row">
+          <span class="filter-label">Storage</span>
+          <button type="button" class="chip active">All</button>
+          <button type="button" class="chip">Stored</button>
+          <button type="button" class="chip">Not stored</button>
+        </div>
+        <div class="filter-row">
+          <span class="filter-label">Status</span>
+          <button type="button" class="chip active">All</button>
+          <button type="button" class="chip">Up to date</button>
+          <button type="button" class="chip">Outdated</button>
+          <button type="button" class="chip">Not stored</button>
+          <button type="button" class="chip">Source missing</button>
+          <button type="button" class="chip">Importable only</button>
+        </div>
+        <div class="filter-row">
+          <label class="filter-label" for="proj">Project</label>
+          <input id="proj" type="text" placeholder="Any project" />
+        </div>
+        <div class="filter-row">
+          <label class="filter-label" for="search">Search</label>
+          <input id="search" type="search" placeholder="Title, id, path, project" />
+        </div>
+        <div class="filter-row">
+          <label class="filter-label" for="sort">Sort</label>
+          <select id="sort">
+            <option>Source updated</option>
+            <option>Created</option>
+            <option>Ingested</option>
+            <option>Title</option>
+            <option>Project</option>
+          </select>
+          <select aria-label="Sort direction">
+            <option>Desc</option>
+            <option>Asc</option>
+          </select>
+        </div>
+      </div>
+    </details>
+
+    <div class="list-pane-body">
+      <div class="table-wrap">
+        <table class="sessions-table" id="sessions-table">
+          <thead>
+            <tr>
+              <th class="select-col">
+                <input type="checkbox" aria-label="Select all importable sessions" />
+              </th>
+              <th>Title</th>
+              <th>Status</th>
+              <th>Project</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody id="sessions-tbody">
+            <!-- rows injected by script -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- M1b: sticky list-pane footer hosts Pagination ABOVE ActionBar.
+         spec lines 553, 555. position: sticky; bottom: 0; z-index: 1.
+         Hairline border-top + opaque background; NO drop shadow. -->
+    <div class="list-pane-footer">
+      <div class="pagination">
+        <div class="pagination-page-size">
+          <label class="pagination-page-size-label" for="page-size">Per page</label>
+          <select id="page-size">
+            <option>50</option>
+            <option>100</option>
+            <option>200</option>
+          </select>
+        </div>
+        <button type="button" disabled aria-label="Previous page">‹ Prev</button>
+        <button type="button">Next ›</button>
+        <span class="pagination-caption">Page 1 of 4 · 178 results</span>
+      </div>
+      <div class="action-bar">
+        <div class="action-bar-buttons">
+          <button type="button">Rescan</button>
+          <span class="action-bar-last-rescan muted" title="2026-04-28T14:31:09Z">last rescan from this browser 14 m ago</span>
+          <button type="button" disabled>Import 0 selected</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <article class="session-pane" data-state="ready-placeholder" aria-live="polite">
+    <div class="session-state">
+      <p class="placeholder-line">Session view coming in Milestone 2.</p>
+      <!-- M1b: vestigial "Open detail" button. Renders ONLY when
+           state === "ready-placeholder". Spec line 977. -->
+      <button
+        type="button"
+        class="open-detail"
+        id="open-detail-btn"
+        aria-label="Open session detail in drawer"
+      >Open detail</button>
+    </div>
+  </article>
+</main>
+
+<!-- ===================================================================
+     STATIC VARIANT GALLERY — every state side-by-side for review.
+     =================================================================== -->
+
+<p class="demo-section-label">Compact-row state matrix (M1a recipe preserved)</p>
+<div class="demo-pair">
+  <figure>
+    <figcaption>default</figcaption>
+    <div class="table-wrap" style="border-bottom:1px solid var(--color-border);">
+      <table class="sessions-table">
+        <tbody>
+          <tr>
+            <td class="select-col"><input type="checkbox" /></td>
+            <td>
+              <div class="title-cell">
+                <div class="title-cell-line1">
+                  <span class="title-cell-title">Refactor message parsers</span>
+                  <span class="title-cell-tool">claude_code</span>
+                </div>
+                <div class="title-cell-line2">
+                  <span class="title-cell-rowkey">cs/aab17b22</span>
+                </div>
+              </div>
+            </td>
+            <td><span class="badge up-to-date">up to date</span></td>
+            <td class="project-cell" title="/home/dev/distill-portal">/home/dev/distill-portal</td>
+            <td class="updated-cell" title="2026-04-28T15:21:09Z">2 m ago</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </figure>
+
+  <figure>
+    <figcaption>hover</figcaption>
+    <div class="table-wrap" style="border-bottom:1px solid var(--color-border);">
+      <table class="sessions-table">
+        <tbody>
+          <tr class="demo-hover">
+            <td class="select-col"><input type="checkbox" /></td>
+            <td>
+              <div class="title-cell">
+                <div class="title-cell-line1">
+                  <span class="title-cell-title">Codex archive viewer</span>
+                  <span class="title-cell-tool">codex</span>
+                </div>
+                <div class="title-cell-line2">
+                  <span class="title-cell-rowkey">cx/9bf02e10</span>
+                </div>
+              </div>
+            </td>
+            <td><span class="badge outdated">outdated</span></td>
+            <td class="project-cell" title="/home/dev/codex-archive">/home/dev/codex-archive</td>
+            <td class="updated-cell" title="2026-04-28T11:04:02Z">4 h ago</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </figure>
+
+  <figure>
+    <figcaption>selected (aria-current="true")</figcaption>
+    <div class="table-wrap" style="border-bottom:1px solid var(--color-border);">
+      <table class="sessions-table">
+        <tbody>
+          <tr aria-current="true">
+            <td class="select-col"><input type="checkbox" /></td>
+            <td>
+              <div class="title-cell">
+                <div class="title-cell-line1">
+                  <span class="title-cell-title">M1b shell design loop</span>
+                  <span class="title-cell-tool">claude_code</span>
+                </div>
+                <div class="title-cell-line2">
+                  <span class="title-cell-rowkey">cs/00000001</span>
+                </div>
+              </div>
+            </td>
+            <td><span class="badge not-stored">not stored</span></td>
+            <td class="project-cell" title="/home/dev/distill-portal">/home/dev/distill-portal</td>
+            <td class="updated-cell" title="2026-04-28T15:21:09Z">just now</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </figure>
+
+  <figure>
+    <figcaption>selected + hover</figcaption>
+    <div class="table-wrap" style="border-bottom:1px solid var(--color-border);">
+      <table class="sessions-table">
+        <tbody>
+          <tr aria-current="true" class="demo-hover">
+            <td class="select-col"><input type="checkbox" /></td>
+            <td>
+              <div class="title-cell">
+                <div class="title-cell-line1">
+                  <span class="title-cell-title">Sticky footer rhythm</span>
+                  <span class="title-cell-tool">codex</span>
+                </div>
+                <div class="title-cell-line2">
+                  <span class="title-cell-rowkey">cx/2a1f06c3</span>
+                </div>
+              </div>
+            </td>
+            <td><span class="badge up-to-date">up to date</span></td>
+            <td class="project-cell" title="/home/dev/distill-portal">/home/dev/distill-portal</td>
+            <td class="updated-cell" title="2026-04-28T13:16:09Z">2 h ago</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </figure>
+
+  <figure>
+    <figcaption>title cell with (refresh) marker</figcaption>
+    <div class="table-wrap" style="border-bottom:1px solid var(--color-border);">
+      <table class="sessions-table">
+        <tbody>
+          <tr>
+            <td class="select-col"><input type="checkbox" /></td>
+            <td>
+              <div class="title-cell">
+                <div class="title-cell-line1">
+                  <span class="title-cell-title">Disagreement resolved</span>
+                  <span class="title-cell-tool">codex</span>
+                </div>
+                <div class="title-cell-line2">
+                  <span class="title-cell-rowkey">cx/baadf00d</span>
+                  <span
+                    class="title-cell-refresh"
+                    title="Source and stored status disagreed during load — refresh to re-fetch."
+                  >(refresh)</span>
+                </div>
+              </div>
+            </td>
+            <td><span class="badge outdated">outdated</span></td>
+            <td class="project-cell" title="/home/ops/codex-runs">/home/ops/codex-runs</td>
+            <td class="updated-cell" title="2026-04-28T08:02:00Z">7 h ago</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </figure>
+
+  <figure>
+    <figcaption>deep-link pulse (URL-driven mount)</figcaption>
+    <div class="table-wrap" style="border-bottom:1px solid var(--color-border);">
+      <table class="sessions-table">
+        <tbody>
+          <tr aria-current="true" data-deep-link="true" id="static-pulse-row">
+            <td class="select-col"><input type="checkbox" /></td>
+            <td>
+              <div class="title-cell">
+                <div class="title-cell-line1">
+                  <span class="title-cell-title">Arrived via ?session=</span>
+                  <span class="title-cell-tool">claude_code</span>
+                </div>
+                <div class="title-cell-line2">
+                  <span class="title-cell-rowkey">cs/deadbeef</span>
+                </div>
+              </div>
+            </td>
+            <td><span class="badge up-to-date">up to date</span></td>
+            <td class="project-cell" title="/home/dev/distill-portal">/home/dev/distill-portal</td>
+            <td class="updated-cell" title="2026-04-28T09:40:21Z">5 h ago</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="padding:var(--space-2) var(--space-3);font-size:var(--text-xs);color:var(--color-text-muted);margin:0;">
+      <button type="button" id="restart-pulse" class="open-detail" style="font-size:var(--text-xs);">↻ Replay pulse</button>
+    </p>
+  </figure>
+</div>
+
+<p class="demo-section-label">Filter strip — three breakpoint states</p>
+<div class="demo-pair">
+  <figure>
+    <figcaption>≥ 1100 px — inline strip (no &lt;details&gt;)</figcaption>
+    <div style="padding:var(--space-3);">
+      <p class="muted" style="margin:0 0 var(--space-2);font-size:var(--text-xs);">
+        Above 1100 px the &lt;details&gt; chrome (summary + chevron) is suppressed by CSS; the body renders open. Resize the browser to 1101 px+ to see this state in the live demo.
+      </p>
+    </div>
+  </figure>
+
+  <figure>
+    <figcaption>&lt; 1100 px, default (closed) with chip</figcaption>
+    <details class="filters-wrap" style="border:0;border-bottom:1px solid var(--color-border);">
+      <summary>
+        <span aria-hidden="true">Filters</span>
+        <span class="filter-count-chip">3 active</span>
+      </summary>
+      <div class="session-filters">
+        <div class="filter-row"><span class="filter-label">Tool</span><button type="button" class="chip active">All</button><button type="button" class="chip">Claude Code</button></div>
+        <div class="filter-row"><span class="filter-label">Status</span><button type="button" class="chip">All</button><button type="button" class="chip active">Outdated</button></div>
+      </div>
+    </details>
+  </figure>
+
+  <figure>
+    <figcaption>&lt; 1100 px, opened</figcaption>
+    <details class="filters-wrap" open style="border:0;border-bottom:1px solid var(--color-border);">
+      <summary>
+        <span aria-hidden="true">Filters</span>
+        <span class="filter-count-chip">7 active</span>
+      </summary>
+      <div class="session-filters">
+        <div class="filter-row">
+          <span class="filter-label">Tool</span>
+          <button type="button" class="chip">All</button>
+          <button type="button" class="chip active">Claude Code</button>
+          <button type="button" class="chip">Codex</button>
+        </div>
+        <div class="filter-row">
+          <span class="filter-label">Storage</span>
+          <button type="button" class="chip">All</button>
+          <button type="button" class="chip active">Stored</button>
+          <button type="button" class="chip">Not stored</button>
+        </div>
+        <div class="filter-row">
+          <span class="filter-label">Status</span>
+          <button type="button" class="chip">All</button>
+          <button type="button" class="chip active">Outdated</button>
+          <button type="button" class="chip active">Importable only</button>
+        </div>
+      </div>
+    </details>
+  </figure>
+</div>
+
+<p class="demo-section-label">Active-filter chip variants</p>
+<div class="demo-pair">
+  <figure>
+    <figcaption>0 active — chip suppressed</figcaption>
+    <div style="padding:var(--space-3);">
+      <span style="font-size:var(--text-sm);font-weight:600;">Filters</span>
+      <span class="muted" style="font-size:var(--text-xs);margin-left:var(--space-2);">(no chip — the count is hidden when 0)</span>
+    </div>
+  </figure>
+  <figure>
+    <figcaption>1 active</figcaption>
+    <div style="padding:var(--space-3);">
+      <span style="font-size:var(--text-sm);font-weight:600;">Filters</span>
+      <span class="filter-count-chip" style="margin-left:var(--space-2);">1 active</span>
+    </div>
+  </figure>
+  <figure>
+    <figcaption>3 active</figcaption>
+    <div style="padding:var(--space-3);">
+      <span style="font-size:var(--text-sm);font-weight:600;">Filters</span>
+      <span class="filter-count-chip" style="margin-left:var(--space-2);">3 active</span>
+    </div>
+  </figure>
+  <figure>
+    <figcaption>7 active (max — all axes differ from default)</figcaption>
+    <div style="padding:var(--space-3);">
+      <span style="font-size:var(--text-sm);font-weight:600;">Filters</span>
+      <span class="filter-count-chip" style="margin-left:var(--space-2);">7 active</span>
+    </div>
+  </figure>
+</div>
+
+<p class="demo-section-label">Vestigial "Open detail" button states</p>
+<div class="demo-pair">
+  <figure>
+    <figcaption>default (rest)</figcaption>
+    <div class="placeholder-demo">
+      <p class="placeholder-line">Session view coming in Milestone 2.</p>
+      <button type="button" class="open-detail">Open detail</button>
+    </div>
+  </figure>
+  <figure>
+    <figcaption>hover</figcaption>
+    <div class="placeholder-demo">
+      <p class="placeholder-line">Session view coming in Milestone 2.</p>
+      <button type="button" class="open-detail demo-hover">Open detail</button>
+    </div>
+  </figure>
+  <figure>
+    <figcaption>focus-visible</figcaption>
+    <div class="placeholder-demo">
+      <p class="placeholder-line">Session view coming in Milestone 2.</p>
+      <button type="button" class="open-detail demo-focus">Open detail</button>
+    </div>
+  </figure>
+  <figure>
+    <figcaption>active (pressed)</figcaption>
+    <div class="placeholder-demo">
+      <p class="placeholder-line">Session view coming in Milestone 2.</p>
+      <button type="button" class="open-detail demo-active">Open detail</button>
+    </div>
+  </figure>
+</div>
+
+<p class="demo-section-label">Sticky footer — at-rest vs scrolled</p>
+<div class="demo-pair">
+  <figure>
+    <figcaption>at-rest (rows do not overflow)</figcaption>
+    <div style="position:relative;height:260px;display:flex;flex-direction:column;background:var(--color-bg);">
+      <div style="flex:1;padding:var(--space-3);font-size:var(--text-sm);color:var(--color-text-muted);">
+        <p style="margin:0;">3 rows visible · sticky footer is anchored to the bottom of the pane.</p>
+      </div>
+      <div class="list-pane-footer" style="position:static;">
+        <div class="pagination">
+          <span class="pagination-caption">Page 1 of 1 · 3 results</span>
+        </div>
+        <div class="action-bar">
+          <div class="action-bar-buttons">
+            <button type="button">Rescan</button>
+            <button type="button" disabled>Import 0 selected</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </figure>
+  <figure>
+    <figcaption>scrolled (rows pass under the footer)</figcaption>
+    <div style="position:relative;height:260px;display:flex;flex-direction:column;background:var(--color-bg);">
+      <div style="flex:1;overflow-y:auto;padding:0;">
+        <table class="sessions-table">
+          <tbody>
+            <tr><td class="select-col"></td><td>row 1</td><td><span class="badge up-to-date">up to date</span></td><td>—</td><td>1 m ago</td></tr>
+            <tr><td class="select-col"></td><td>row 2</td><td><span class="badge outdated">outdated</span></td><td>—</td><td>2 m ago</td></tr>
+            <tr><td class="select-col"></td><td>row 3</td><td><span class="badge not-stored">not stored</span></td><td>—</td><td>3 m ago</td></tr>
+            <tr><td class="select-col"></td><td>row 4</td><td><span class="badge up-to-date">up to date</span></td><td>—</td><td>4 m ago</td></tr>
+            <tr><td class="select-col"></td><td>row 5</td><td><span class="badge up-to-date">up to date</span></td><td>—</td><td>5 m ago</td></tr>
+            <tr><td class="select-col"></td><td>row 6</td><td><span class="badge source-missing">source missing</span></td><td>—</td><td>6 m ago</td></tr>
+            <tr><td class="select-col"></td><td>row 7</td><td><span class="badge up-to-date">up to date</span></td><td>—</td><td>7 m ago</td></tr>
+            <tr><td class="select-col"></td><td>row 8</td><td><span class="badge up-to-date">up to date</span></td><td>—</td><td>8 m ago</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="list-pane-footer" style="position:sticky;">
+        <div class="pagination">
+          <button type="button" disabled aria-label="Previous page">‹ Prev</button>
+          <button type="button">Next ›</button>
+          <span class="pagination-caption">Page 1 of 4 · 178 results</span>
+        </div>
+        <div class="action-bar">
+          <div class="action-bar-buttons">
+            <button type="button">Rescan</button>
+            <button type="button" disabled>Import 0 selected</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </figure>
+</div>
+
+<!-- Mock drawer for the "Open detail" click flow demonstration -->
+<div class="mock-drawer-backdrop" id="mock-backdrop">
+  <div class="mock-drawer" role="dialog" aria-modal="true" aria-labelledby="mock-drawer-title">
+    <h2 id="mock-drawer-title">Session detail (mock drawer)</h2>
+    <p class="muted" style="font-size:var(--text-sm);">
+      Representational only. The real drawer is the still-mounted Phase 4 <code>&lt;Drawer&gt;</code> with <code>&lt;SessionDetail&gt;</code> body. M1b only changes the trigger from "row click" to "vestigial Open detail button click" — it does not modify the drawer itself.
+    </p>
+    <p style="font-size:var(--text-sm);">
+      Focus restoration: when this closes, focus returns to the vestigial button (NOT the originating row, which was the Phase 4 path).
+    </p>
+    <p>
+      <button type="button" class="mock-drawer-close" id="mock-close">Close</button>
+    </p>
+  </div>
+</div>
+
+<script>
+  // -----------------------------------------------------------------
+  // Sample data for the live demo's compact rows. All four
+  // status-pill variants represented so the prototype exercises the
+  // M1a recipe verbatim against M1b's compressed columns.
+  // -----------------------------------------------------------------
+  const ROWS = [
+    {
+      rowKey: "cs/aab17b22",
+      title: "Refactor message parsers",
+      tool: "claude_code",
+      status: "up-to-date",
+      statusLabel: "up to date",
+      project: "/home/dev/distill-portal",
+      updatedAbsolute: "2026-04-28T15:21:09Z",
+      updatedRelative: "2 m ago",
+      statusConflict: false,
+    },
+    {
+      rowKey: "cx/9bf02e10",
+      title: "Codex archive viewer",
+      tool: "codex",
+      status: "outdated",
+      statusLabel: "outdated",
+      project: "/home/dev/codex-archive-with-a-very-long-path-for-truncation-demo",
+      updatedAbsolute: "2026-04-28T11:04:02Z",
+      updatedRelative: "4 h ago",
+      statusConflict: true,
+    },
+    {
+      rowKey: "cs/00000001",
+      title: "M1b shell design loop",
+      tool: "claude_code",
+      status: "not-stored",
+      statusLabel: "not stored",
+      project: "/home/dev/distill-portal",
+      updatedAbsolute: "2026-04-28T15:21:09Z",
+      updatedRelative: "just now",
+      statusConflict: false,
+    },
+    {
+      rowKey: "cx/2a1f06c3",
+      title: "Sticky footer rhythm",
+      tool: "codex",
+      status: "source-missing",
+      statusLabel: "source missing",
+      project: "/home/ops/codex-runs",
+      updatedAbsolute: "2026-04-28T13:16:09Z",
+      updatedRelative: "2 h ago",
+      statusConflict: false,
+    },
+  ];
+
+  const tbody = document.getElementById("sessions-tbody");
+  const filterCountChip = document.getElementById("filter-count-chip");
+  const detailsEl = document.getElementById("filters-details");
+
+  function renderRows() {
+    const selected = parseInt(
+      (document.querySelector('input[name="selected"]:checked') || { value: "0" }).value,
+      10
+    );
+    tbody.innerHTML = "";
+    ROWS.forEach((row, i) => {
+      const tr = document.createElement("tr");
+      tr.tabIndex = 0;
+      if (i + 1 === selected) tr.setAttribute("aria-current", "true");
+      tr.innerHTML = `
+        <td class="select-col" onclick="event.stopPropagation()">
+          <input type="checkbox" aria-label="Select ${row.rowKey}" />
+        </td>
+        <td>
+          <div class="title-cell">
+            <div class="title-cell-line1">
+              <span class="title-cell-title">${row.title}</span>
+              <span class="title-cell-tool">${row.tool}</span>
+            </div>
+            <div class="title-cell-line2">
+              <span class="title-cell-rowkey">${row.rowKey}</span>
+              ${row.statusConflict ? '<span class="title-cell-refresh" title="Source and stored status disagreed during load — refresh to re-fetch.">(refresh)</span>' : ""}
+            </div>
+          </div>
+        </td>
+        <td><span class="badge ${row.status}">${row.statusLabel}</span></td>
+        <td class="project-cell" title="${row.project}">${row.project}</td>
+        <td class="updated-cell" title="${row.updatedAbsolute}">${row.updatedRelative}</td>
+      `;
+      tr.addEventListener("click", (e) => {
+        const target = e.target;
+        if (target && target.closest("td.select-col")) return;
+        // M1b: row click ONLY calls onSelectRow(rowKey). Drawer no
+        // longer auto-mounts on row click. The vestigial Open detail
+        // button is the new entry point.
+        document.querySelectorAll('input[name="selected"]').forEach((r) => {
+          if (parseInt(r.value, 10) === i + 1) r.checked = true;
+        });
+        renderRows();
+      });
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderFilterChip() {
+    const count = parseInt(
+      (document.querySelector('input[name="filtercount"]:checked') || { value: "0" }).value,
+      10
+    );
+    if (count === 0) {
+      filterCountChip.hidden = true;
+    } else {
+      filterCountChip.hidden = false;
+      filterCountChip.textContent = `${count} active`;
+    }
+  }
+
+  function applyFilterMode() {
+    const mode = (document.querySelector('input[name="filtermode"]:checked') || { value: "auto" }).value;
+    if (mode === "open") {
+      detailsEl.open = true;
+    } else if (mode === "closed") {
+      detailsEl.open = false;
+    } else {
+      // auto — let the matchMedia listener govern
+      const wide = window.matchMedia("(min-width: 1100px)").matches;
+      detailsEl.open = wide;
+    }
+  }
+
+  // matchMedia listener (mirrors App.tsx narrow-mode pattern at lines
+  // 800-826 of M1a). The implementation should NOT clobber the user's
+  // manual toggle below 1100 px — flag preserved across resize
+  // crossings is left to the developer.
+  const mq = window.matchMedia("(min-width: 1100px)");
+  function onMqChange() {
+    const mode = (document.querySelector('input[name="filtermode"]:checked') || { value: "auto" }).value;
+    if (mode === "auto") detailsEl.open = mq.matches;
+  }
+  if (mq.addEventListener) mq.addEventListener("change", onMqChange);
+  else mq.addListener(onMqChange); // legacy Safari fallback
+
+  // Wire picker controls
+  document.querySelectorAll('input[name="selected"]').forEach((el) => {
+    el.addEventListener("change", renderRows);
+  });
+  document.querySelectorAll('input[name="filtercount"]').forEach((el) => {
+    el.addEventListener("change", renderFilterChip);
+  });
+  document.querySelectorAll('input[name="filtermode"]').forEach((el) => {
+    el.addEventListener("change", applyFilterMode);
+  });
+
+  // Pulse trigger
+  document.getElementById("btn-pulse").addEventListener("click", () => {
+    const selected = parseInt(
+      (document.querySelector('input[name="selected"]:checked') || { value: "0" }).value,
+      10
+    );
+    if (selected < 1) return;
+    const tr = tbody.children[selected - 1];
+    if (!tr) return;
+    tr.removeAttribute("data-deep-link");
+    // force reflow so the keyframe restarts
+    void tr.offsetWidth;
+    tr.setAttribute("data-deep-link", "true");
+    tr.addEventListener(
+      "animationend",
+      () => tr.removeAttribute("data-deep-link"),
+      { once: true }
+    );
+  });
+
+  // Static gallery pulse replay
+  document.getElementById("restart-pulse").addEventListener("click", () => {
+    const tr = document.getElementById("static-pulse-row");
+    tr.removeAttribute("data-deep-link");
+    void tr.offsetWidth;
+    tr.setAttribute("data-deep-link", "true");
+  });
+
+  // Vestigial Open detail button → mock drawer
+  const backdrop = document.getElementById("mock-backdrop");
+  const triggerBtn = document.getElementById("open-detail-btn");
+  document.getElementById("open-detail-btn").addEventListener("click", () => {
+    backdrop.dataset.open = "true";
+    document.getElementById("mock-close").focus();
+  });
+  document.getElementById("mock-close").addEventListener("click", () => {
+    backdrop.dataset.open = "false";
+    // Focus restoration target: the vestigial button (NOT the row).
+    triggerBtn.focus();
+  });
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) {
+      backdrop.dataset.open = "false";
+      triggerBtn.focus();
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && backdrop.dataset.open === "true") {
+      backdrop.dataset.open = "false";
+      triggerBtn.focus();
+    }
+  });
+
+  // Initial render
+  renderRows();
+  renderFilterChip();
+  applyFilterMode();
+</script>
+
+</body>
+</html>

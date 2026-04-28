@@ -8,8 +8,25 @@
  *   - `.panel` — section wrapper used by SessionsView (and by any
  *     consumer who needs a vertically-stacked column-with-gap container).
  *   - `.panel h2` — section title font size + zeroed margin.
+ *   - `.list-pane-footer` — Phase-5 / M1b sticky strip at the bottom
+ *     of the list pane. Pagination ABOVE ActionBar (Table →
+ *     Pagination → ActionBar reading order per spec line 555 +
+ *     design.md §3.3). The strip carries `position: sticky;
+ *     bottom: 0; z-index: 1; border-top: 1px solid
+ *     var(--color-border)` per design.md §3.3 — hairline-over-shadow
+ *     editorial principle (no drop shadow on the footer; the
+ *     hairline is the sole separator from the table content above).
+ *     The inner `ActionBar` retains its Phase-4 `border-top` so two
+ *     hairlines stack inside the footer (the outer separates
+ *     footer-from-table; the inner separates Pagination-from-
+ *     ActionBar). This is intentional per the UI/UX reviewer's notes.
  *
- * No structural literals; every value is token-driven.
+ * Phase-5 / M1b structural literals (`working/phase-5.md` §Structural
+ * literals lines 926–946):
+ *   - `position: sticky; bottom: 0` + `z-index: 1` on
+ *     `.list-pane-footer` (sticky list-pane footer recipe).
+ *   - `1px solid var(--color-border)` on `.list-pane-footer`'s
+ *     `border-top`.
  */
 
 .panel {
@@ -21,4 +38,16 @@
 .panel h2 {
   margin: 0;
   font-size: var(--text-xl);
+}
+
+.list-pane-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--color-bg);
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }

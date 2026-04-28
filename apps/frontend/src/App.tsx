@@ -58,10 +58,13 @@ import type {
   SourceSessionView,
   StoredSessionView,
 } from "./lib/contracts";
-import { ActionBar } from "./components/ActionBar";
 import { ScanErrorsCallout } from "./components/ScanErrorsCallout";
 import { Toast } from "./components/Toast";
-import { SessionsView, type PanelState } from "./features/sessions/SessionsView";
+import {
+  SessionsView,
+  type PanelState,
+  type SessionsViewHandle,
+} from "./features/sessions/SessionsView";
 import { mergeSessions } from "./features/sessions/mergeSessions";
 import { isImportable } from "./features/sessions/types";
 import {
@@ -649,6 +652,25 @@ export function App() {
     void refetchAll();
   }, [refetchAll]);
 
+  // M1b: ref handle into SessionsView's drawer-trigger flow. The
+  // vestigial "Open detail" button in `SessionView` invokes
+  // `handleOpenDetailFromSessionView` below; that callback resolves
+  // the current `selectedRowKey` against the merged set and
+  // delegates to `SessionsView.openDetail`. Drawer state stays
+  // encapsulated in `SessionsView` (Phase 4 pattern preserved per
+  // the planner's recommendation; minimizes diff vs lifting it
+  // entirely into App.tsx).
+  const sessionsViewRef = useRef<SessionsViewHandle | null>(null);
+  const handleOpenDetailFromSessionView = useCallback(
+    (triggerEl: HTMLElement | null) => {
+      if (selectedRowKey === null) return;
+      const handle = sessionsViewRef.current;
+      if (handle === null) return;
+      handle.openDetail(selectedRowKey, triggerEl);
+    },
+    [selectedRowKey],
+  );
+
   // M1a: Clear selection from the session_not_found state.
   // Identical to Esc's effect on the URL: clears selectedRowKey
   // and removes the `?session=` query param. Does NOT clear
@@ -836,26 +858,18 @@ export function App() {
       <h1>Distill Portal</h1>
       <main className="split-pane" data-narrow-mode={narrowMode}>
         {/* List pane: <aside aria-label="Sessions list"> per design
-            §3.3. Phase-4 list chrome (filter strip, 8-column table,
-            pagination, action bar) renders inside this landmark
-            unchanged in M1a. M1b will compress the table to 4
-            columns and relocate Pagination + ActionBar into a sticky
-            list-panel footer; M1a leaves them. */}
+            §3.3. M1b compressed the SessionsTable to the 5-column
+            (Select + Title + Status + Project + Updated) layout and
+            relocated `<Pagination>` + `<ActionBar>` into the sticky
+            `.list-pane-footer` strip inside `<SessionsView>`. The
+            standalone `<ActionBar>` invocation that lived here in
+            M1a was removed — there is now exactly one `<ActionBar>`
+            instance in the DOM (inside the footer). */}
         <aside className="list-pane" aria-label="Sessions list">
           <section className="panel">
             <h2>Sessions</h2>
-            <ActionBar
-              selectedCount={selectedCount}
-              hiddenByFilterCount={hiddenByFilterCount}
-              pending={pending}
-              onRescan={handleRescan}
-              onImport={handleImport}
-              onClearHidden={onClearHidden}
-              onClearSelection={onClearSelection}
-              lastRescanAt={lastRescanAt}
-              now={now}
-            />
             <SessionsView
+              ref={sessionsViewRef}
               sourceState={sourceState}
               storedState={storedState}
               mergedRows={mergedRows}
@@ -878,6 +892,13 @@ export function App() {
               }}
               onRescan={handleRescan}
               rescanPending={pending === "rescan"}
+              pending={pending}
+              selectedCount={selectedCount}
+              hiddenByFilterCount={hiddenByFilterCount}
+              onImport={handleImport}
+              onClearHidden={onClearHidden}
+              onClearSelection={onClearSelection}
+              lastRescanAt={lastRescanAt}
               now={now}
               selectedRowKey={selectedRowKey}
               onSelectRow={handleSelectRow}
@@ -908,6 +929,7 @@ export function App() {
           onBackToList={handleBackToList}
           onClearSelection={handleClearSelectionFromNotFound}
           onTryRescan={handleTryRescan}
+          onOpenDetail={handleOpenDetailFromSessionView}
         />
       </main>
       {/* Toast queue lives outside <main> for DOM placement (it's a

@@ -1,0 +1,51 @@
+Narrow viewport (< 1100 px) -- filter strip wraps in <details>, default closed.
+ASCII wireframe of the M1b filter wrap (default state on first paint).
+Spec line 549, line 930 (1100 px breakpoint).
+
+  +-- <main class="split-pane" data-narrow-mode="list"> ------+
+  |                                                            |
+  |  <aside class="list-pane">                                 |
+  |                                                            |
+  |  +-- <details class="filters-wrap"> -- (closed) -----+    |
+  |  | > Filters [3 active]                              |    |
+  |  +----------------------------------------------------+    |
+  |     ^ summary ^             ^ chip (filter-count-chip)     |
+  |     ^ chevron via native ::marker (browser-default)        |
+  |     ^ "Filters" text in --color-text, --text-sm, weight 600|
+  |     ^ chip: hairline-only border, var(--color-text-muted),  |
+  |       --text-xs                                            |
+  |                                                            |
+  |  +-- table (5 cols) -------------------------------+      |
+  |  |[ ] Title       Status   Proj    Updated         |      |
+  |  |[ ] Refactor... claude   /home   2 m ago         |      |
+  |  | ...                                              |      |
+  |  +--------------------------------------------------+      |
+  |                                                            |
+  |  +-- list-pane-footer (sticky) -------------------+        |
+  |  | [50] [< Prev][Next >]  Page 1 of 4 . 178 res   |        |
+  |  | --------                                       |        |
+  |  | [Rescan] last 14m ago  [Import 0 selected]    |        |
+  |  +-------------------------------------------------+        |
+  |                                                            |
+  +------------------------------------------------------------+
+
+NOTES:
+- "[3 active]" chip suppressed when count === 0 (rendered with `hidden`
+  attribute -- both visually invisible AND removed from accessibility
+  tree).
+- Chip suppressed on the summary when count === 0 -- summary then reads
+  "Filters" alone with the chevron.
+- Default open state is governed by a matchMedia listener
+  ("(min-width: 1100px)") mirroring App.tsx narrow-mode listener at
+  lines 800-826. The user's manual toggle below 1100 px is preserved
+  (the listener does NOT clobber it on intra-breakpoint resizes).
+- Browser-native open/close is INSTANT -- no CSS transition added
+  (the <details> block-size exemption per spec line 1100 is deferred
+  to M5 SkimView).
+
+INTERACTION:
+- Tab focuses the <summary>; Enter/Space toggles.
+- Focus-visible: 2 px solid var(--color-accent) outline, 2 px offset
+  (parallel to M1a's .back-to-list).
+- When closed, the filter chips inside the body are NOT in Tab order
+  (browser-native).

@@ -1,6 +1,9 @@
 // Right-pane placeholder for the Phase-5 split-pane master-detail
-// layout. M1a ships the SHELL only — the four-tab Tabs primitive
-// (Transcript / Skim / Raw / Metadata) lands in M2.
+// layout. M1a shipped the SHELL only; M1b adds the vestigial
+// "Open detail" text-link button in the `ready-placeholder` state
+// (still backed by the Phase-4 `<Drawer>` until M6 retires it).
+// The four-tab Tabs primitive (Transcript / Skim / Raw / Metadata)
+// lands in M2.
 //
 // State machine driven by a `data-state` attribute on the wrapping
 // `<article>` (chosen over conditional className per design.md
@@ -21,15 +24,20 @@
 //                             is still in flight. Single quiet
 //                             "Reading session…" line in
 //                             `var(--color-text-muted)`.
-//   - "ready-placeholder"   → row IS selected and merged in. M1a
-//                             renders a brief "Session view coming
-//                             in Milestone 2" line. M1b will add
-//                             the vestigial "Open detail" button
-//                             pointing at the still-mounted Phase-4
-//                             Drawer; M1a deliberately does NOT
-//                             render it (the row click already opens
-//                             the drawer in M1a, so the vestigial
-//                             button is M1b material).
+//   - "ready-placeholder"   → row IS selected and merged in. Renders
+//                             the placeholder line + the M1b
+//                             vestigial "Open detail" text-link
+//                             button. The button mirrors the M1a
+//                             `.back-to-list` recipe (transparent
+//                             bg, no border, muted resting color,
+//                             underline on hover/focus, sienna
+//                             focus ring with 2 px offset). Clicking
+//                             it opens the still-mounted Phase-4
+//                             `<Drawer>` via the parent's
+//                             `onOpenDetail` callback. M2 will
+//                             delete this button when the Tabs
+//                             primitive ships — the surface is
+//                             intentionally low-anchor.
 //   - "session_not_found"   → the URL `?session=<key>` has no
 //                             matching row AFTER all three GETs
 //                             have settled. Two-line message +
@@ -66,6 +74,13 @@ export type SessionViewProps = {
   onClearSelection: () => void;
   /** Called when the user clicks "Try Rescan" in the session_not_found state. */
   onTryRescan: () => void;
+  /** M1b: called when the user clicks the vestigial "Open detail"
+   *  button in the `ready-placeholder` state. The trigger element
+   *  (the button itself) is forwarded so the parent can stash it
+   *  in a ref and restore focus on close. Optional — when omitted,
+   *  the click is a no-op (defensive default for tests / future
+   *  M2 deletion path). */
+  onOpenDetail?: (triggerEl: HTMLElement | null) => void;
 };
 
 export function SessionView({
@@ -74,6 +89,7 @@ export function SessionView({
   onBackToList,
   onClearSelection,
   onTryRescan,
+  onOpenDetail,
 }: SessionViewProps) {
   return (
     <article
@@ -94,7 +110,9 @@ export function SessionView({
       <div className="session-state">
         {state === "empty" ? <EmptyPaneCopy /> : null}
         {state === "loading" ? <LoadingCopy /> : null}
-        {state === "ready-placeholder" ? <ReadyPlaceholderCopy /> : null}
+        {state === "ready-placeholder" ? (
+          <ReadyPlaceholderCopy onOpenDetail={onOpenDetail} />
+        ) : null}
         {state === "session_not_found" ? (
           <SessionNotFoundCopy
             onClearSelection={onClearSelection}
@@ -138,11 +156,33 @@ function LoadingCopy() {
   return <p className="loading-line">Reading session…</p>;
 }
 
-function ReadyPlaceholderCopy() {
+function ReadyPlaceholderCopy({
+  onOpenDetail,
+}: {
+  onOpenDetail?: (triggerEl: HTMLElement | null) => void;
+}) {
   return (
-    <p className="placeholder-line">
-      Session view coming in Milestone 2.
-    </p>
+    <>
+      <p className="placeholder-line">
+        Session view coming in Milestone 2.
+      </p>
+      {/* M1b vestigial "Open detail" text-link button. Renders ONLY
+       * in the `ready-placeholder` state (not in empty / loading /
+       * session_not_found). The Phase-4 `<Drawer>` + `<SessionDetail>`
+       * remain mounted; clicking this button is the M1b drawer
+       * entry point (row click no longer auto-mounts the drawer).
+       * The button is intentionally low-anchor; M2's Tabs primitive
+       * will replace it. */}
+      <button
+        type="button"
+        className="open-detail"
+        onClick={(event) => {
+          if (onOpenDetail) onOpenDetail(event.currentTarget);
+        }}
+      >
+        Open detail
+      </button>
+    </>
   );
 }
 

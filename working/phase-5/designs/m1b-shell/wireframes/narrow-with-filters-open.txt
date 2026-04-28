@@ -1,0 +1,52 @@
+Narrow viewport (< 1100 px) -- filter strip wraps in <details>, opened by user.
+ASCII wireframe of the M1b filter wrap when the user toggles the disclosure.
+
+  +-- <main class="split-pane" data-narrow-mode="list"> ----------+
+  |                                                                |
+  |  <aside class="list-pane">                                     |
+  |                                                                |
+  |  +-- <details class="filters-wrap" open> ---------------------+|
+  |  | v Filters [3 active]                                       ||
+  |  +-+---------------------------------------------------------+|
+  |    | Tool      [All][Claude Code][Codex]                     ||
+  |    | Storage   [All][Stored][Not stored]                     ||
+  |    | Status    [All][Up to date][Outdated]...[Importable only]||
+  |    | Project   [____________]                                 ||
+  |    | Search    [____________]                                 ||
+  |    | Sort      [Source updated v]  [Desc v]                  ||
+  |    +---------------------------------------------------------+|
+  |                                                                |
+  |  +-- table (5 cols) -----------------------------------------+ |
+  |  |[ ] Title       Status   Proj    Updated                   | |
+  |  | ...                                                        | |
+  |  +-----------------------------------------------------------+ |
+  |                                                                |
+  |  +-- list-pane-footer (sticky) ----------------------------+   |
+  |  | [50] [< Prev][Next >]  Page 1 of 4 . 178 results        |   |
+  |  | --------                                                |   |
+  |  | [Rescan] last 14m ago  [Import 0 selected]             |   |
+  |  +---------------------------------------------------------+   |
+  |                                                                |
+  +----------------------------------------------------------------+
+
+NOTES:
+- "v" indicates the open chevron; "v" -> open, ">" -> closed.
+- Hairline border-bottom on the <summary> when [open] separates the
+  summary line from the filter body.
+- Chip "[3 active]" still visible in the open state -- the user
+  can verify which axes are tagged-as-active by reading the body's
+  active chips (.chip.active recipe with sienna 15% bg).
+- Esc inside an open filter input clears the input (Phase 4 behavior
+  preserved); Esc on the <summary> itself toggles via global Esc
+  handler from M1a -- but only when focus is on a selected row OR in
+  the session pane. The <summary> is in the list pane, NOT the session
+  pane, so the global Esc handler does NOT fire on it (scope rule
+  from M1a preserved).
+
+LAYOUT-SHIFT NOTE:
+- Opening the disclosure pushes the table down by the filter-body
+  height (~ 200-250 px on narrow viewports). The sticky footer at the
+  bottom does NOT shift -- it remains anchored to the page viewport
+  (the closest scrolling ancestor). The user therefore sees a vertical
+  reflow above the footer; the footer itself stays in place. This is
+  desirable -- the user does not lose their navigational anchor.

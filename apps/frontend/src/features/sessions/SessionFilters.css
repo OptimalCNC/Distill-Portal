@@ -3,7 +3,21 @@
  *
  * Imported by `SessionFilters.tsx` (sibling-import convention).
  *
- * Selectors owned here (M3 filter UI vocabulary):
+ * Selectors owned here (M3 filter UI vocabulary, extended in M1b):
+ *   - `.filters-wrap` — Phase-5 / M1b `<details>` wrapper. Above
+ *     1100 px the disclosure chrome is hidden via CSS and the filter
+ *     body is forced visible (existing Phase-4 inline strip behavior).
+ *     Below 1100 px the `<summary>` becomes visible, the disclosure
+ *     toggles, and the body collapses by default.
+ *   - `.filters-wrap > summary` — chevron + "Filters" + active-count
+ *     chip; `cursor: pointer`, sienna `:focus-visible` ring with
+ *     2 px offset (parallel to `.back-to-list`), hairline bottom
+ *     border when `[open]`. The chevron is the browser-native
+ *     `::marker` triangle (no SVG, no icon library).
+ *   - `.filter-count-chip` — small muted pill, hairline border on
+ *     transparent ground; visually distinct from the filled
+ *     `.chip.active` so the chip reads as a passive indicator
+ *     (designer §7.7).
  *   - `.session-filters` — column-with-gap layout for the chip groups,
  *     project autocomplete, search, and sort selects.
  *   - `.filter-row` — horizontal wrapping group within the bar.
@@ -22,10 +36,82 @@
  *     min-width clamp so the project autocomplete + substring search
  *     inputs keep usable typing room when the bar wraps.
  *
- * Structural literals: `border-radius: 999px` on `.chip` (same full-pill
- * literal used by `.badge`; deliberately not tokenized — see
- * `SessionsTable.css` header for the design-balloon rationale).
+ * Phase-5 / M1b structural literals (`working/phase-5.md` §Structural
+ * literals lines 926–946):
+ *   - `@media (min-width: 1100px)` — the filter strip wrap breakpoint
+ *     (spec line 930 verbatim).
+ *   - `border-radius: 999px` on `.chip` + `.filter-count-chip` (full
+ *     pill — `--radius-*` defines sm/md/lg, no "full"; same literal
+ *     reused by `.badge`).
+ *
+ * Disclosure-transition note (per spec line 1100 + design.md §3.4):
+ * NO custom CSS transition is applied to the `<details>` open/close.
+ * The `block-size`-via-`interpolate-size` exemption is reserved for
+ * M5's SkimView; M1b's filter strip is utility chrome and the
+ * editorial-instant snap is the correct gesture.
  */
+
+.filters-wrap {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.filters-wrap > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+  /* Restore the browser-native ::marker chevron (the reset zeroed
+   * `list-style: none` for typographic consistency; we want the
+   * triangle back here so the disclosure is visually obvious). */
+  list-style: revert;
+  user-select: none;
+}
+
+.filters-wrap > summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.filters-wrap[open] > summary {
+  border-bottom: 1px solid var(--color-border);
+}
+
+@media (min-width: 1100px) {
+  /* Above the breakpoint: the inline strip behavior of Phase 4. The
+   * disclosure chrome is hidden + the body is forced visible
+   * regardless of the `open` attribute. The `!important` is
+   * regrettable but contained to one rule — the alternative is a
+   * JS round-trip that re-applies `open` on every resize, which is
+   * harder to reason about (designer §7.3). */
+  .filters-wrap {
+    border-bottom: 0;
+  }
+  .filters-wrap > summary {
+    display: none;
+  }
+  .filters-wrap > .session-filters {
+    display: flex !important;
+  }
+}
+
+.filter-count-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-2);
+  min-height: 1.4em;
+  font-size: var(--text-xs);
+  font-weight: 400;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
 
 .session-filters {
   display: flex;

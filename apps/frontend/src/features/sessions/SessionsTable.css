@@ -19,18 +19,37 @@
  *     emitter and the drawer body sheet imports nothing badge-specific
  *     beyond the `.drawer-conflict-badge` extension and the per-tool
  *     `.drawer-tool-badge` override (both in `SessionDetail.css`).
- *   - `.raw-link` — the View Raw + metadata link styling used inside
- *     the Stored Copy cell
+ *   - `.title-cell`, `.title-cell-line1`, `.title-cell-line2`,
+ *     `.title-cell-title`, `.title-cell-tool`, `.title-cell-rowkey`,
+ *     `.title-cell-refresh` — the M1b 4-essentials Title cell anatomy
+ *     (bold title + tool badge inline; muted mono rowKey + optional
+ *     `(refresh)` marker). Tool badge is intentionally a hairline
+ *     chip on transparent ground — distinct from the filled
+ *     `.badge.{variant}` status pill (designer §7.5).
+ *   - `.project-cell`, `.updated-cell` — single-line ellipsis
+ *     truncation on Project; mono cell on Updated for column
+ *     alignment.
  *
- * Structural literals (intentionally NOT promoted to tokens; same
- * design-balloon mitigation that justified them in `app.css` per
- * `working/phase-4.md` §Design Tokens):
- *   - `min-width: 720px` on `table` (horizontal-overflow trigger; the
- *     unified list still has 8 columns and needs that width to read).
- *   - `width: 2.25rem` on `.select-col` (checkbox column width clamp).
+ * Phase-5 / M1b structural literals (intentionally NOT promoted to
+ * tokens; same design-balloon mitigation that justified them in
+ * `app.css` per `working/phase-4.md` §Design Tokens AND
+ * `working/phase-5.md` §Structural literals lines 926–946):
+ *   - `min-height: 36px` on `<tr>` (row anatomy clamp; spec line 543).
+ *   - `width: 2.25rem` on `.select-col` (checkbox column width clamp;
+ *     Phase-4 baseline literal).
  *   - `border-radius: 999px` on `.badge` (full pill — `--radius-*`
  *     defines sm/md/lg, no "full"; same literal reused for `.chip`).
  *   - `letter-spacing: 0.06em` on `th` and `.badge` (uppercase tracking).
+ *   - `letter-spacing: 0.02em` on `.title-cell-tool` (tool-badge
+ *     tracking; matches the `.filter-count-chip` recipe in
+ *     SessionFilters.css for visual cohesion across the M1b chip
+ *     vocabulary).
+ *
+ * NB: Phase-4's `min-width: 720px` on `<table>` was REMOVED in M1b —
+ * the 4-essentials list must comfortably fit a 300–380 px list pane
+ * (per design.md §3.2). The Project cell uses single-line ellipsis
+ * truncation so very long project paths do not force horizontal
+ * overflow; the full path stays available via the `title=` hover hint.
  *
  * Color rule: backgrounds/foregrounds for the four badge variants use
  * `color-mix(in srgb, <semantic-token> 15%/70%/35%, var(--color-surface
@@ -50,7 +69,6 @@
 table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 720px;
 }
 
 th,
@@ -68,6 +86,17 @@ th {
   letter-spacing: 0.06em;
   color: var(--color-text-muted);
   background: var(--color-surface);
+}
+
+/* M1b row anatomy (spec line 543; design.md §3.2). The `min-height`
+ * literal lives on the row + cell for defense-in-depth across browser
+ * table-layout differences. */
+tbody tr {
+  min-height: 36px;
+}
+
+tbody td {
+  min-height: 36px;
 }
 
 tr:last-child td {
@@ -117,8 +146,87 @@ td.select-col {
   border-color: color-mix(in srgb, var(--color-error) 35%, var(--color-surface));
 }
 
-.raw-link {
-  color: var(--color-accent);
+/*
+ * M1b Title cell anatomy. Two-line stack: bold title + tool badge
+ * inline (line 1); muted mono rowKey + optional `(refresh)` marker
+ * (line 2). The tool badge is hairline-bordered on transparent ground
+ * — DELIBERATELY NOT the filled `.badge.{variant}` status-pill recipe
+ * (designer §7.5: status is the row's dedicated column; tool is a
+ * quieter contextual signal).
+ */
+.title-cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.title-cell-line1 {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.title-cell-title {
+  font-weight: 600;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.title-cell-tool {
+  flex-shrink: 0;
+  display: inline-block;
+  padding: 0 var(--space-2);
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.02em;
+}
+
+.title-cell-line2 {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  min-width: 0;
+}
+
+.title-cell-rowkey {
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* M1b warms the (refresh) marker from --color-text-muted (Phase 4) to
+ * --color-warn so the marker scans as a state hint rather than
+ * incidental copy. WCAG-AA contrast verified in
+ * working/phase-5/designs/m1b-shell/colors.md. Italic so it reads as
+ * an editorial aside. */
+.title-cell-refresh {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  color: var(--color-warn);
+  font-style: italic;
+}
+
+.project-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 0;
+}
+
+.updated-cell {
+  white-space: nowrap;
 }
 
 /*

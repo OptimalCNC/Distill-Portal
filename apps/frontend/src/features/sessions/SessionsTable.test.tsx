@@ -8,17 +8,22 @@
 //      via the gross checkbox count.
 //   3. Header bulk-select: clicking the header checkbox fires
 //      `onToggleAll` exactly once.
-//   4. statusConflict affordance: a row with `statusConflict: true`
-//      renders the muted "(refresh)" affordance next to the badge; a
-//      row with `statusConflict: false` does not.
-//   5. sourcePathIsStale rendering: the source-path cell carries the
-//      `title=` hover hint when the flag is true; no `title=` when
-//      false.
-//   6. Row-click drawer wiring (E1): clicking a row (NOT the checkbox)
-//      fires `onOpenDetail(row.rowKey, triggerEl)`.
-//   7. Enter on a focused row fires `onOpenDetail`.
-//   8. Clicking the checkbox cell does NOT call `onOpenDetail` (it
-//      still fires `onToggle` — the M2 contract).
+//   4. M1b 4-essentials: header carries Title + Status + Project +
+//      Updated (in addition to the Select column).
+//   5. M1b dropped columns: Tool / Stored Copy / Source Path do NOT
+//      appear in `<thead>` or `<tbody>`.
+//   6. M1b Title cell stack: bold title (line 1) + tool badge inline
+//      on line 1; muted mono rowKey on line 2.
+//   7. M1b `(refresh)` affordance: a row with `statusConflict: true`
+//      renders the `(refresh)` marker INSIDE the Title cell; a row
+//      with `statusConflict: false` does not.
+//   8. M1b row click: clicking a row (NOT the checkbox cell) fires
+//      `onSelectRow(row.rowKey)`. The Phase-4 `onOpenDetail` prop is
+//      gone — the drawer entry point shifts to the vestigial button.
+//   9. M1b Enter keydown on a focused row fires `onSelectRow`.
+//   10. Clicking the checkbox cell does NOT call `onSelectRow` (the
+//       importability rule's stopPropagation guard preserved verbatim
+//       from Phase 4).
 import { afterEach, expect, mock, test } from "bun:test";
 import { act, cleanup, render } from "@testing-library/react";
 import { SessionsTable } from "./SessionsTable";
@@ -244,7 +249,76 @@ test("SessionsTable: header checkbox is disabled when zero rows are importable",
   expect(headerCheckbox?.disabled).toBe(true);
 });
 
-test("SessionsTable: statusConflict=true renders the (refresh) affordance; false does not", () => {
+test("SessionsTable: M1b header renders 5 columns (Select + Title + Status + Project + Updated); dropped columns absent", () => {
+  // The M1b column compression: 5 essentials only. The dropped Phase-4
+  // columns (Tool / Stored Copy / Source Path) must not appear in
+  // `<thead>` or `<tbody>` — staleness + stored-uid + tool surface
+  // through the still-mounted Phase-4 `<Drawer>` until M2's Metadata
+  // tab takes over.
+  const rows: SessionRow[] = [
+    buildRow({
+      rowKey: "claude_code:m1b-1",
+      sourceSessionKey: "claude_code:m1b-1",
+      sourceSessionId: "m1b-1",
+      status: "not_stored",
+      presence: "source_only",
+    }),
+  ];
+  const { container } = render(
+    <SessionsTable
+      rows={rows}
+      selected={new Set()}
+      onToggle={mock(() => {})}
+      onToggleAll={mock(() => {})}
+      now={NOW}
+    />,
+  );
+  const headers = Array.from(container.querySelectorAll("thead th")).map((th) =>
+    th.textContent?.trim(),
+  );
+  expect(headers).toEqual(["", "Title", "Status", "Project", "Updated"]);
+  // Sanity: the `<thead>` does not name any of the dropped columns.
+  const headerText = container.querySelector("thead")?.textContent ?? "";
+  expect(headerText.includes("Tool")).toBe(false);
+  expect(headerText.includes("Stored Copy")).toBe(false);
+  expect(headerText.includes("Source Path")).toBe(false);
+});
+
+test("SessionsTable: M1b Title cell stack — bold title + tool badge + mono rowKey", () => {
+  const rows: SessionRow[] = [
+    buildRow({
+      rowKey: "claude_code:m1b-stack",
+      sourceSessionKey: "claude_code:m1b-stack",
+      sourceSessionId: "m1b-stack",
+      title: "M1b stack title",
+      tool: "claude_code",
+      status: "not_stored",
+      presence: "source_only",
+    }),
+  ];
+  const { container } = render(
+    <SessionsTable
+      rows={rows}
+      selected={new Set()}
+      onToggle={mock(() => {})}
+      onToggleAll={mock(() => {})}
+      now={NOW}
+    />,
+  );
+  // Title cell wrapper exists.
+  const titleCell = container.querySelector(".title-cell");
+  expect(titleCell).not.toBeNull();
+  // Line 1: title + tool.
+  const title = titleCell?.querySelector(".title-cell-title");
+  expect(title?.textContent).toBe("M1b stack title");
+  const tool = titleCell?.querySelector(".title-cell-tool");
+  expect(tool?.textContent).toBe("claude_code");
+  // Line 2: rowKey.
+  const rowKey = titleCell?.querySelector(".title-cell-rowkey");
+  expect(rowKey?.textContent).toBe("claude_code:m1b-stack");
+});
+
+test("SessionsTable: M1b (refresh) marker lives INSIDE the Title cell when statusConflict=true; absent otherwise", () => {
   const conflictRow = buildRow({
     rowKey: "claude_code:conflict-1",
     sourceSessionKey: "claude_code:conflict-1",
@@ -267,72 +341,27 @@ test("SessionsTable: statusConflict=true renders the (refresh) affordance; false
     storedRawRef: "raw/uid-noconflict.ndjson",
     ingestedAt: "2026-04-22T00:05:00Z",
   });
-  const onToggle = mock(() => {});
-  const onToggleAll = mock(() => {});
   const { container } = render(
     <SessionsTable
       rows={[conflictRow, noConflictRow]}
       selected={new Set()}
-      onToggle={onToggle}
-      onToggleAll={onToggleAll}
+      onToggle={mock(() => {})}
+      onToggleAll={mock(() => {})}
       now={NOW}
     />,
   );
-  // Exactly one (refresh) affordance in the DOM.
+  // Exactly one (refresh) affordance in the DOM (on the conflict row).
   const refreshSpans = Array.from(
-    container.querySelectorAll("span.muted"),
-  ).filter((el) => el.textContent === "(refresh)");
+    container.querySelectorAll(".title-cell-refresh"),
+  );
   expect(refreshSpans.length).toBe(1);
-  // The conflict span carries the explanatory hover hint.
+  expect(refreshSpans[0]?.textContent).toBe("(refresh)");
   expect(refreshSpans[0]?.getAttribute("title")).toBe(
     "Source and stored status disagreed during load — refresh to re-fetch.",
   );
-});
-
-test("SessionsTable: sourcePathIsStale=true puts a title= hover hint on the source-path cell", () => {
-  const staleRow = buildRow({
-    rowKey: "stored:uid-stale",
-    sourceSessionKey: null,
-    sourceSessionId: "stale-1",
-    sourcePath: "/last/known/stale.jsonl",
-    sourcePathIsStale: true,
-    status: "source_missing",
-    presence: "stored_only",
-    storedSessionUid: "uid-stale",
-    storedRawRef: "raw/uid-stale.ndjson",
-    ingestedAt: "2026-04-22T00:00:00Z",
-  });
-  const freshRow = buildRow({
-    rowKey: "claude_code:fresh-1",
-    sourceSessionKey: "claude_code:fresh-1",
-    sourceSessionId: "fresh-1",
-    sourcePath: "/srv/sessions/fresh-1.jsonl",
-    sourcePathIsStale: false,
-    status: "not_stored",
-    presence: "source_only",
-  });
-  const onToggle = mock(() => {});
-  const onToggleAll = mock(() => {});
-  const { container } = render(
-    <SessionsTable
-      rows={[staleRow, freshRow]}
-      selected={new Set()}
-      onToggle={onToggle}
-      onToggleAll={onToggleAll}
-      now={NOW}
-    />,
-  );
-  // Locate each row's last cell (source-path column is the rightmost).
-  const rowEls = container.querySelectorAll("tbody tr");
-  expect(rowEls.length).toBe(2);
-  const staleCell = rowEls[0]!.querySelector("td:last-child");
-  const freshCell = rowEls[1]!.querySelector("td:last-child");
-  expect(staleCell?.textContent).toBe("/last/known/stale.jsonl");
-  expect(staleCell?.getAttribute("title")).toBe(
-    "last seen source path — source file no longer discoverable",
-  );
-  expect(freshCell?.textContent).toBe("/srv/sessions/fresh-1.jsonl");
-  expect(freshCell?.getAttribute("title")).toBeNull();
+  // The marker lives inside the Title cell, NOT in a separate column.
+  const containingTitleCell = refreshSpans[0]?.closest(".title-cell");
+  expect(containingTitleCell).not.toBeNull();
 });
 
 test("SessionsTable: clicking a per-row checkbox calls onToggle with the sourceSessionKey", () => {
@@ -389,22 +418,18 @@ test("SessionsTable: Updated cell renders relative time against the pinned `now`
       ingestedAt: "2026-04-22T00:00:00Z",
     }),
   ];
-  const onToggle = mock(() => {});
-  const onToggleAll = mock(() => {});
   const { container } = render(
     <SessionsTable
       rows={rows}
       selected={new Set()}
-      onToggle={onToggle}
-      onToggleAll={onToggleAll}
+      onToggle={mock(() => {})}
+      onToggleAll={mock(() => {})}
       now={NOW}
     />,
   );
   const rowEls = container.querySelectorAll("tbody tr");
   expect(rowEls.length).toBe(2);
-  // The "Updated" column is the 6th <td> (after select / status /
-  // tool / title / project). Look for it by its `title` attribute
-  // for robustness against future column reorders.
+  // The Updated column has the title= attribute equal to ISO timestamp.
   const updatedCells = container.querySelectorAll(
     'td[title="2026-04-25T11:55:00Z"]',
   );
@@ -412,55 +437,46 @@ test("SessionsTable: Updated cell renders relative time against the pinned `now`
   expect(updatedCells[0]?.textContent).toBe("5m ago");
   // Null updated -> em-dash; no title attribute.
   const dashCells = Array.from(
-    container.querySelectorAll("tbody td.mono"),
+    container.querySelectorAll("tbody td.updated-cell"),
   ).filter((el) => el.textContent === "—");
-  // At least one em-dash cell exists for the null row's Updated column.
-  expect(dashCells.length).toBeGreaterThanOrEqual(1);
+  expect(dashCells.length).toBe(1);
 });
 
-test("SessionsTable: clicking a row (not the checkbox cell) calls onOpenDetail with row.rowKey", () => {
+test("SessionsTable: M1b row click invokes onSelectRow(row.rowKey) exactly once", () => {
   const rows: SessionRow[] = [
     buildRow({
-      rowKey: "claude_code:open-detail-1",
-      sourceSessionKey: "claude_code:open-detail-1",
-      sourceSessionId: "open-detail-1",
+      rowKey: "claude_code:select-1",
+      sourceSessionKey: "claude_code:select-1",
+      sourceSessionId: "select-1",
       status: "not_stored",
       presence: "source_only",
     }),
   ];
-  const onToggle = mock(() => {});
-  const onToggleAll = mock(() => {});
-  const onOpenDetail = mock(
-    (_rowKey: string, _trigger: HTMLElement | null) => {},
-  );
+  const onSelectRow = mock((_rowKey: string) => {});
   const { container } = render(
     <SessionsTable
       rows={rows}
       selected={new Set()}
-      onToggle={onToggle}
-      onToggleAll={onToggleAll}
-      onOpenDetail={onOpenDetail}
+      onToggle={mock(() => {})}
+      onToggleAll={mock(() => {})}
+      onSelectRow={onSelectRow}
       now={NOW}
     />,
   );
   const tr = container.querySelector("tbody tr") as HTMLTableRowElement;
   expect(tr).not.toBeNull();
-  // Click a non-checkbox cell (the title cell) inside the row.
-  const titleCell = tr.querySelector("td.stack") as HTMLTableCellElement;
+  // Click a non-checkbox cell — the Title cell with the `.title-cell`
+  // wrapper.
+  const titleCell = tr.querySelector(".title-cell") as HTMLElement;
   expect(titleCell).not.toBeNull();
   act(() => {
     titleCell.click();
   });
-  expect(onOpenDetail).toHaveBeenCalledTimes(1);
-  expect(onOpenDetail.mock.calls[0]?.[0]).toBe("claude_code:open-detail-1");
-  // The trigger element should be the <tr> (event.currentTarget on
-  // the row's onClick handler).
-  expect(onOpenDetail.mock.calls[0]?.[1]).toBe(tr);
-  // Selection toggling stayed silent.
-  expect(onToggle).toHaveBeenCalledTimes(0);
+  expect(onSelectRow).toHaveBeenCalledTimes(1);
+  expect(onSelectRow.mock.calls[0]?.[0]).toBe("claude_code:select-1");
 });
 
-test("SessionsTable: Enter keydown on a focused row calls onOpenDetail with row.rowKey", () => {
+test("SessionsTable: M1b Enter keydown on a focused row invokes onSelectRow", () => {
   const rows: SessionRow[] = [
     buildRow({
       rowKey: "claude_code:enter-1",
@@ -470,26 +486,20 @@ test("SessionsTable: Enter keydown on a focused row calls onOpenDetail with row.
       presence: "source_only",
     }),
   ];
-  const onToggle = mock(() => {});
-  const onToggleAll = mock(() => {});
-  const onOpenDetail = mock(
-    (_rowKey: string, _trigger: HTMLElement | null) => {},
-  );
+  const onSelectRow = mock((_rowKey: string) => {});
   const { container } = render(
     <SessionsTable
       rows={rows}
       selected={new Set()}
-      onToggle={onToggle}
-      onToggleAll={onToggleAll}
-      onOpenDetail={onOpenDetail}
+      onToggle={mock(() => {})}
+      onToggleAll={mock(() => {})}
+      onSelectRow={onSelectRow}
       now={NOW}
     />,
   );
   const tr = container.querySelector("tbody tr") as HTMLTableRowElement;
   expect(tr).not.toBeNull();
   expect(tr.getAttribute("tabindex")).toBe("0");
-  // Reach for the window-bound KeyboardEvent constructor; happy-dom
-  // does not expose it on globalThis.
   const KeyboardEventCtor =
     (globalThis as unknown as { window: { KeyboardEvent: typeof KeyboardEvent } })
       .window.KeyboardEvent;
@@ -501,11 +511,11 @@ test("SessionsTable: Enter keydown on a focused row calls onOpenDetail with row.
   act(() => {
     tr.dispatchEvent(enter);
   });
-  expect(onOpenDetail).toHaveBeenCalledTimes(1);
-  expect(onOpenDetail.mock.calls[0]?.[0]).toBe("claude_code:enter-1");
+  expect(onSelectRow).toHaveBeenCalledTimes(1);
+  expect(onSelectRow.mock.calls[0]?.[0]).toBe("claude_code:enter-1");
 });
 
-test("SessionsTable: clicking the checkbox cell calls onToggle but NOT onOpenDetail", () => {
+test("SessionsTable: clicking the checkbox cell calls onToggle but NOT onSelectRow", () => {
   const rows: SessionRow[] = [
     buildRow({
       rowKey: "claude_code:checkbox-1",
@@ -516,17 +526,14 @@ test("SessionsTable: clicking the checkbox cell calls onToggle but NOT onOpenDet
     }),
   ];
   const onToggle = mock(() => {});
-  const onToggleAll = mock(() => {});
-  const onOpenDetail = mock(
-    (_rowKey: string, _trigger: HTMLElement | null) => {},
-  );
+  const onSelectRow = mock((_rowKey: string) => {});
   const { container } = render(
     <SessionsTable
       rows={rows}
       selected={new Set()}
       onToggle={onToggle}
-      onToggleAll={onToggleAll}
-      onOpenDetail={onOpenDetail}
+      onToggleAll={mock(() => {})}
+      onSelectRow={onSelectRow}
       now={NOW}
     />,
   );
@@ -542,13 +549,13 @@ test("SessionsTable: clicking the checkbox cell calls onToggle but NOT onOpenDet
   expect(
     (onToggle.mock.calls as readonly unknown[][])[0]?.[0],
   ).toBe("claude_code:checkbox-1");
-  // Drawer-open did NOT fire — the checkbox cell guard short-circuited.
-  expect(onOpenDetail).toHaveBeenCalledTimes(0);
+  // Row-open path did NOT fire — the checkbox cell guard short-circuited.
+  expect(onSelectRow).toHaveBeenCalledTimes(0);
 });
 
 test("SessionsTable: inlined status badge renders all 4 variants with the correct class + label transform (M6 StatusBadge retirement)", () => {
   // Phase 4 Milestone 6 retired StatusBadge.tsx; the JSX is now inlined
-  // at SessionsTable.tsx (line 220 area). This test pins the byte-for-byte
+  // at SessionsTable.tsx (Status cell). This test pins the byte-for-byte
   // contract that StatusBadge.test.tsx used to enforce: every legal
   // SessionSyncStatus value renders as
   // `<span class="badge {status.replace(/_/g, "-")}">{status.replace(/_/g, " ")}</span>`.
