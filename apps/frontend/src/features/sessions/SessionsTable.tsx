@@ -22,11 +22,16 @@
 //
 // Per spec, a row whose `statusConflict` is true gets a small
 // "(refresh)" affordance inside the Title cell — telegraphing the
-// "fetched state changed during load — refresh" hint. M1b warms the
-// marker color from `--color-text-muted` (Phase 4) to `--color-warn`
-// per design.md §3.2 so the marker scans as a state hint rather than
-// incidental copy (WCAG-AA contrast verified in
-// working/phase-5/designs/m1b-shell/colors.md).
+// "fetched state changed during load — refresh" hint. M1b warmed
+// the marker color from `--color-text-muted` (Phase 4) to
+// `--color-warn`; the M2a fix-up round 2 reverted it back to
+// `--color-text-muted` (italic) because the oklch retint regressed
+// the warn-as-text pair vs `--color-surface` to 4.21:1 (fails AA
+// 4.5:1 normal text). See `working/phase-5/designs/m2a-tokens/wcag.md`
+// "Codex fix-up round 2 closure" and the M1b designer's documented
+// mitigation in `working/phase-5/designs/m1b-shell/colors.md` lines
+// 56-58. The hint copy is unchanged; only the visual treatment
+// stepped back from "warning sienna" to "muted gray italic".
 //
 // As of M3 the "Updated" cell renders a relative-time string against
 // a single `now` captured at refetch time in `App.tsx` (passed in as a

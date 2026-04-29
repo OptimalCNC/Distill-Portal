@@ -206,15 +206,21 @@ td.select-col {
   min-width: 0;
 }
 
-/* M1b warms the (refresh) marker from --color-text-muted (Phase 4) to
- * --color-warn so the marker scans as a state hint rather than
- * incidental copy. WCAG-AA contrast verified in
- * working/phase-5/designs/m1b-shell/colors.md. Italic so it reads as
- * an editorial aside. */
+/* M1b initially warmed the (refresh) marker from --color-text-muted
+ * (Phase 4) to --color-warn so it would scan as a state hint. The
+ * M2a oklch retint of --color-warn dropped the warn-as-text pair
+ * vs --color-surface from ~5.3:1 (Phase 4 hex) to 4.21:1 (oklch),
+ * which fails the 4.5:1 AA normal-text floor. The M2a fix-up round 2
+ * reverts the marker to --color-text-muted per the M1b designer's
+ * documented mitigation (working/phase-5/designs/m1b-shell/colors.md
+ * lines 56-58) — clean 7.04:1 light / 7.36:1 dark, and still passes
+ * across the row-state stack-up (selected, selected+hover, deep-link
+ * pulse peak). The italic preserves the editorial-aside reading; the
+ * loss of warm sienna is acceptable per the M1b designer's note. */
 .title-cell-refresh {
   flex-shrink: 0;
   font-size: var(--text-xs);
-  color: var(--color-warn);
+  color: var(--color-text-muted);
   font-style: italic;
 }
 
@@ -263,15 +269,17 @@ table tbody tr[aria-current="true"]:hover {
 }
 
 table tbody tr[data-deep-link="true"] {
-  /* 600 ms ease-out one-shot. Per the spec's allow-list (§Acceptance
-   * Criteria line 1100) `background-color` is the only animatable
-   * property that may carry a one-shot reveal here. The 600 ms
-   * literal is the spec's `--motion-pulse` token from M2's motion
-   * scale; M1a hard-codes it because the token does not exist yet.
-   * The keyframe peak (22%) settles to the resting selected tint
-   * (8%) — designer §7.8 — so there is no flash from the pulse
-   * fading INTO a different shade. */
-  animation: deep-link-pulse 600ms ease-out 1;
+  /* One-shot pulse on URL-driven selection. Per the spec's allow-list
+   * (§Acceptance Criteria line 1100) `background-color` is the only
+   * animatable property that may carry a one-shot reveal here. M1a
+   * hard-coded `600ms ease-out` as literals because the motion tokens
+   * did not exist yet; M2a migrates the duration + easing to the
+   * spec's `--motion-pulse` (600 ms) and `--ease-out` tokens defined
+   * in `tokens.css`. The trailing `1` is the algorithmic iteration
+   * count (not a token; literal). The keyframe peak (22%) settles to
+   * the resting selected tint (8%) — designer §7.8 — so there is no
+   * flash from the pulse fading INTO a different shade. */
+  animation: deep-link-pulse var(--motion-pulse) var(--ease-out) 1;
 }
 
 @keyframes deep-link-pulse {

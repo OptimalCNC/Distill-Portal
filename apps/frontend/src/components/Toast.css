@@ -74,12 +74,27 @@
 /* Toast variant identity is conveyed by border color alone (no per-variant
  * background fill), so the border MUST clear WCAG SC 1.4.11 non-text
  * contrast (3:1 against `--color-surface-raised`). The original 50% mix
- * against `--color-border` failed in light (2.5-2.8 range). 65% mix
- * lifts every variant to 3.07-3.83 in both modes (verified via the M6
- * contrast script — see WCAG table in `progress/phase-4.progress.md`).
- * Badges use a different recipe (35%) because their identity is the
- * filled tinted background + AA-passing pill text, so the badge border
- * is decorative reinforcement under SC 1.4.11. */
+ * against `--color-border` failed in light (2.5-2.8 range). Phase 4 M6
+ * lifted to 65% (verified 3.07-3.83 in both modes via the M6 contrast
+ * script — see WCAG table in `progress/phase-4.progress.md`).
+ *
+ * Phase 5 / M2a bumps `.toast.info` to 70% as a pre-emptive mitigation
+ * per UI/UX reviewer Q3 + design.md §7. Reasoning: M2a swaps the
+ * `--color-accent` from the Phase 4 cool-blue literal to oklch sienna
+ * (`oklch(60% 0.15 50)`); the Phase 4 measurement of 3.07:1 was
+ * borderline against the cool-blue accent, and oklch `color-mix`
+ * interpolation can drift slightly from sRGB-anchored expectations.
+ * Bumping the info variant to 70% restores the safety margin (designer
+ * estimate ~3.3:1 light, ~3.8:1 dark) without touching the success /
+ * error variants, which sit on different-hue color tokens unaffected
+ * by the accent palette swap. Codex precedent at Phase 4 M6 caught a
+ * sub-3:1 toast border the designer had reported as passing — this
+ * preemptive bump is the same risk surface mitigated proactively.
+ * The 70% literal here will be re-verified with the M6 contrast script
+ * once the WCAG sweep runs against the implementation tokens. Badges
+ * use a different recipe (35%) because their identity is the filled
+ * tinted background + AA-passing pill text, so the badge border is
+ * decorative reinforcement under SC 1.4.11. */
 .toast.success {
   border-color: color-mix(in srgb, var(--color-success) 65%, var(--color-border));
 }
@@ -89,7 +104,7 @@
 }
 
 .toast.info {
-  border-color: color-mix(in srgb, var(--color-accent) 65%, var(--color-border));
+  border-color: color-mix(in srgb, var(--color-accent) 70%, var(--color-border));
 }
 
 .toast-title {

@@ -1158,9 +1158,11 @@ test("statusConflict: a both-row with disagreeing source/stored statuses renders
   const { container } = render(<App />);
   await screen.findByText("claude_code:conflict-key");
   // M1b moved the (refresh) marker INSIDE the Title cell stack — it
-  // is rendered with the dedicated `.title-cell-refresh` class on a
-  // `--color-warn`-tinted italic span (design.md §3.2). The hover
-  // hint copy is preserved verbatim from Phase 4.
+  // is rendered with the dedicated `.title-cell-refresh` class on an
+  // italic span. M1b initially warmed it to `--color-warn`; the M2a
+  // fix-up round 2 reverted the color to `--color-text-muted` (the
+  // oklch retint regressed warn-as-text below the AA 4.5:1 floor).
+  // The hover hint copy is preserved verbatim from Phase 4.
   const refreshSpan = container.querySelector(".title-cell-refresh");
   expect(refreshSpan).not.toBeNull();
   expect(refreshSpan?.textContent).toBe("(refresh)");

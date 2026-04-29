@@ -1,0 +1,3475 @@
+Reading prompt from stdin...
+OpenAI Codex v0.125.0 (research preview)
+--------
+workdir: /home/huwei/ai_codings/distill-portal
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /home/huwei/.codex/memories]
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019dd7ac-fa18-7b72-a79d-d43476e0614b
+--------
+user
+You are an external non-Claude reviewer for **round 3** of M2a (`phase-5`, frozen at `05467ad`).
+
+In round 1 you returned `needs changes` with 3 BLOCKING WCAG findings (toast.info border / accent-as-text / border-strong). All resolved in fix-up round 1.
+
+In round 2 you returned `needs changes` with 1 NEW BLOCKING finding: `.title-cell-refresh` uses `--color-warn` as text at 4.21:1 vs surface (FAILS 4.5:1 AA normal text), regression introduced by M2a's `--color-warn` retint. The developer applied fix-up round 2 reverting `.title-cell-refresh` to `var(--color-text-muted)`.
+
+## What changed in fix-up round 2
+
+`apps/frontend/src/features/sessions/SessionsTable.css:223` — `.title-cell-refresh { color: var(--color-text-muted); }` (was `var(--color-warn)`).
+
+The `--color-warn` token itself unchanged at `oklch(58% 0.15 60)`. The token is now consumed only by the outdated pill recipe and the warn toast border — both via color-mix recipes that already passed AA (rows 13 in `wcag.md`).
+
+`wcag.md` + `design.md` updated to:
+- Move `.title-cell-refresh` from "Outstanding" to "Resolved" risk callouts
+- Demote rows 08/09 (warn-as-text) to informational
+- Add rows 08b/09b/09c/09d for the new `.title-cell-refresh` muted-italic measurements
+- Document round 2 closure section
+
+Stale comments in `SessionsTable.tsx:23-34` and `App.test.tsx:1160-1165` updated to cite the round-2 revert.
+
+## Coordinator-verified gates
+
+- All cargo gates green
+- bun test 278/0/1086 (byte-equivalent)
+- bun build 19.71 kB CSS / 267.03 kB JS / 559ms
+- bun test:e2e 1 passed in 3.4s
+- Hex isolation 24, token count 83 (unchanged)
+
+## Developer's claimed post-round-2 ratios
+
+- `.title-cell-refresh` muted-italic vs `--color-surface` light: **7.04:1** (PASSES; was 4.21:1 FAILED)
+- vs dark surface: **7.36:1** (PASSES)
+- vs selected-row tint: **6.32:1** (PASSES; was 3.79:1 FAILED)
+- vs selected+hover (12%): **6.05:1** (PASSES)
+- vs deep-link pulse peak (22%): **5.40:1** (PASSES)
+
+## Outstanding accepted risk (NOT fixed in round 2; documented as accepted)
+
+- Dark `--color-border-strong` at 3.00:1 cusp value. wcag.md retains the L=50 mitigation as a future-round option. Decision: accepted-as-risk.
+
+## Your evidence pack
+
+- Full v3 diff: `/tmp/m2a-diff-v3.patch`
+- Working tree at `/home/huwei/ai_codings/distill-portal/`
+- Fix is at `apps/frontend/src/features/sessions/SessionsTable.css:223`
+
+## Review goals (round 3)
+
+1. **Verify the fix-up round 2 resolution**:
+   - Confirm `.title-cell-refresh` uses `var(--color-text-muted)` at line 223.
+   - Re-compute the contrast ratios against the current oklch values. Do they meet AA targets?
+
+2. **Verify no other `.title-cell-refresh` consumer references `--color-warn`** — the token is unchanged, but there should be no other text-context consumer of `--color-warn` that would have a similar AA regression.
+
+3. **Verify no new failures introduced by the wcag.md / design.md edits** — the artifact edits are documentation; the implementation should be unchanged except for line 223.
+
+4. **Round-3 final-pass scan**: any pair you didn't measure in round 1 or round 2 that should be measured? Particularly:
+   - The dark `--color-border-strong` 3.00:1 cusp — is the accepted-risk rationale defensible OR should it block?
+   - Any pair affected by the `--color-warn` token's continued use elsewhere (outdated pill, warn toast border)?
+
+## Rules
+
+- Review only from evidence; you can read the working tree directly.
+- If approval-relevant evidence is missing, the verdict must be `needs more evidence`.
+- `approved` and `approved with nits` are not allowed while `Missing Evidence` is not `none`.
+- If the round-2 blocker is correctly fixed AND no new blockers, return `approved` or `approved with nits`.
+
+## Output exactly this structure
+
+- **Verdict**: one of `approved`, `approved with nits`, `needs changes`, `needs more evidence`
+- **Round 2 Blocker Resolution**: confirm `.title-cell-refresh` fix applied with file:line and new contrast ratios
+- **New Findings (in this round)**: severity / file:line / issue / why it matters; or `none`
+- **Dark `--color-border-strong` cusp**: your call — accept as documented risk OR block
+- **Missing Evidence**: or `none`
+- **Required Changes**: or `none`
+- **Notes**: optional improvements; or `none`
+
+codex
+I’ll verify the exact CSS change, inspect warn-token consumers, and recompute the relevant OKLCH contrast pairs from the working tree rather than relying on the claimed ratios.
+exec
+/bin/bash -lc "sed -n '1,220p' docs/README.md" in /home/huwei/ai_codings/distill-portal
+exec
+/bin/bash -lc "sed -n '1,260p' docs/dependency-rules.md" in /home/huwei/ai_codings/distill-portal
+exec
+/bin/bash -lc "sed -n '1,220p' README.md" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+# Distill Portal
+
+Distill Portal is a local-first portal for collecting, storing, and analyzing coding sessions produced by AI coding tools.
+
+Read [PRD.md](PRD.md) for the product summary and functional requirements.
+
+For developers, please read [docs/README.md](docs/README.md) for documentation on the repository structure, component ownership, features, and development commands.
+
+## Contributing
+
+- Read [PRD.md](PRD.md) for the product summary and functional requirements.
+- Read [ARCHITECTURE.md](ARCHITECTURE.md) for the architecture.
+- Read [docs/README.md](docs/README.md) for the repository structure, component ownership, features, and development commands.
+
+### Hard Rules
+
+- Backend owns machine-consumable HTTP routes; do not reintroduce backend-owned end-user HTML.
+- Frontend talks to the backend only over HTTP and only consumes generated contract types from `components/ui-api-contracts/bindings/*.ts`.
+- `apps/frontend` must not import from `components/collector-runtime`, `components/ingest-service`, or `components/raw-session-store`.
+- HTTP payload changes must update `components/ui-api-contracts`, the Rust and TS sides of both apps, and relevant tests together.
+- Keep docs aligned with any layout, command, dependency, or payload-shape change.
+
+### Quick Checks
+
+Fast checks to run before committing:
+
+```bash
+cargo check --workspace
+cargo test --workspace
+```
+
+From `apps/frontend/`:
+
+```bash
+bun run test
+```
+
+See [docs/dev-commands.md](docs/dev-commands.md) for the full reference, including targeted Rust suites, the TypeScript contract-drift check, and the browser e2e suite.
+
+## Quick Start
+
+Run the backend:
+
+```bash
+cargo run -p distill-portal-backend
+```
+
+Run the frontend (from `apps/frontend/`):
+
+```bash
+bun install
+bun run dev
+```
+
+Then open the frontend address. By default:
+
+- backend: `http://127.0.0.1:4000`
+- frontend (Vite dev server): `http://127.0.0.1:4100`
+
+See `docs/dev-commands.md` for the full list of frontend and test commands.
+
+ succeeded in 0ms:
+# Dependency Rules
+
+## Allowed Directions
+
+- `apps/backend` may depend on:
+  - `components/collector-runtime`
+  - `components/configuration`
+  - `components/ingest-service`
+  - `components/observability`
+  - `components/raw-session-store`
+  - `components/ui-api-contracts`
+- `apps/frontend` (Bun + Vite + React + TypeScript) may depend on:
+  - `components/ui-api-contracts/bindings/*.ts` (generated TypeScript types; one-way import only)
+  - external npm packages managed via Bun for UI, HTTP fetch, and test tooling. Phase 4 adopted a strict 2-package escape-hatch budget for browser-only concerns native APIs cannot meet; one slot is consumed (`focus-trap-react@^11`, fixing a native `<dialog>` Tab-cycling gap), one slot remains reserved (`@tanstack/react-virtual`, gated on documented evidence that pagination plus `useMemo` cannot keep render time bounded). Adding a third escape-hatch package requires a fresh planning round.
+  - all backend communication is over HTTP to `apps/backend`
+- `components/ingest-service` may depend on:
+  - `components/collector-runtime`
+  - `components/raw-session-store`
+- `components/raw-session-store` may depend on:
+  - `components/ui-api-contracts`
+- `components/collector-runtime` may depend on:
+  - `components/ui-api-contracts`
+- `components/configuration`, `components/observability`, and `components/ui-api-contracts` should not depend on app crates
+
+## Forbidden Directions
+
+- `apps/frontend` must not depend on:
+  - `components/collector-runtime`
+  - `components/ingest-service`
+  - `components/raw-session-store`
+- No component crate may depend on `apps/backend` or `apps/frontend`
+- `apps/backend` must not render end-user HTML
+- `apps/frontend` must not reach into storage or ingest internals directly
+
+## Contract Handling
+
+- Shared page and JSON payloads live in `components/ui-api-contracts`
+- `components/ui-api-contracts/src/lib.rs` is the single source of truth for the contract. The TypeScript declarations under `components/ui-api-contracts/bindings/` are checked-in generated artifacts derived from `src/lib.rs` by the `ts-bindings` cargo feature — they are the canonical downstream output and must stay in sync with the Rust source: regenerate and commit them together with any Rust contract change, never hand-edited
+- The Bun frontend consumes contract types via one-way TypeScript imports from `components/ui-api-contracts/bindings/*.ts`, using the `@contracts/*` path alias wired in `apps/frontend/tsconfig.json` (or a direct relative path). The frontend MUST NOT re-declare contract types by hand; the thin barrel at `apps/frontend/src/lib/contracts.ts` re-exports the generated types for internal consumption
+- If a backend JSON shape changes, update:
+  - `components/ui-api-contracts/src/lib.rs`
+  - `components/ui-api-contracts/bindings/*.ts` (regenerate via `cargo test -p distill-portal-ui-api-contracts --features ts-bindings -- --ignored regenerate_ts_bindings`; see `docs/dev-commands.md`)
+  - `apps/backend/src/http_api.rs`
+  - the typed API layer in `apps/frontend/src/lib/` (`api.ts`, `contracts.ts`)
+  - any impacted frontend rendering under `apps/frontend/src/App.tsx`, the unified session feature at `apps/frontend/src/features/sessions/`, or the shared React primitives under `apps/frontend/src/components/`
+  - the relevant tests in `apps/backend/tests/http_api.rs`, `apps/frontend/src/App.test.tsx`, `apps/frontend/e2e/inspection.spec.ts`, and `tests/e2e/tests/inspection_surface.rs`
+
+## Layer Ownership
+
+- Storage writes and reads belong to `components/raw-session-store`
+- Replace-on-sync ingest rules belong to `components/ingest-service`
+- Source discovery and parsing belong to `components/collector-runtime`
+- Environment variable mapping belongs to `components/configuration`
+- HTTP routes belong to the app crates only
+
+## Frontend Dev-Time Topology
+
+- `apps/frontend/` is a Bun-managed package (`package.json`, `bun.lock`, `vite.config.ts`, `index.html`, `src/*.tsx`).
+- Frontend dev-time proxying of `/api/v1/**` and `/health` to the backend belongs in `apps/frontend/vite.config.ts`, not in any application code path.
+- The Bun app must continue to honor the frontend-boundary rules above: no direct dependency on `components/collector-runtime`, `components/ingest-service`, or `components/raw-session-store`; all backend communication goes over HTTP to the Rust backend.
+
+### Phase 5 M2a notes — Fraunces self-hosted as static asset
+
+Phase 5 introduces a single self-hosted variable serif (Fraunces) for the Archive-room display layer (empty-pane preface, future M5 chapter-break labels, future app title). The font ships as two `.woff2` files at `apps/frontend/public/fonts/Fraunces-subset.woff2` (Roman) and `apps/frontend/public/fonts/Fraunces-Italic-subset.woff2` (Italic), referenced by two `@font-face` blocks in `apps/frontend/src/styles/tokens.css`. Per Phase 5 §Resolved Decision #15, **a self-hosted font file is a static asset, not a runtime dependency** — the 2-package escape-hatch budget (currently 1/2 consumed by `focus-trap-react@^11`) is **not affected**. No bundler plugin, font-loading library, or JS dep is involved; Vite serves the woff2 files directly from `public/`. To regenerate (only when upstream Fraunces revs, ~yearly per Google Fonts cadence): download both variable fonts from `https://github.com/undercasetype/Fraunces` (`fonts/variable/Fraunces[SOFT,WONK,opsz,wght].ttf` + the Italic counterpart), run `fonttools varLib.instancer <input.ttf> SOFT=50 WONK=0 -o <pinned.ttf>` to drop the design-time-only SOFT and WONK axes (saves ~70 KB per file), then `pyftsubset <pinned.ttf> --output-file=apps/frontend/public/fonts/Fraunces-subset.woff2 --unicodes='U+0020-007E,U+00A0-00FF,U+2010-2027,U+2030-2052' --layout-features='kern,liga,smcp,onum' --flavor=woff2 --desubroutinize`. Target file size: ~80 KB per file. Reversibility: deleting both `@font-face` blocks AND both woff2 files yields a still-cohesive system-serif aesthetic (Charter / Iowan Old Style / Georgia at ~99% of Fraunces's visual size via the `size-adjust` override, no broken layout).
+
+ succeeded in 0ms:
+# Distill Portal Docs
+
+Start here when you need to orient yourself in the Distill Portal workspace. The backend is Rust under `apps/backend`; the frontend is Bun + Vite + React + TypeScript under `apps/frontend`.
+
+This file is both the docs entry point and the repo map.
+
+## Start With Your Task
+
+| I want to... | Start here |
+| --- | --- |
+| Modify the inspection UI | [`playbooks/modify-frontend-page.md`](playbooks/modify-frontend-page.md), [`../apps/frontend/README.md`](../apps/frontend/README.md) |
+| Change a backend API or JSON payload | [`playbooks/modify-backend-api.md`](playbooks/modify-backend-api.md), [`dependency-rules.md`](dependency-rules.md) |
+| Change session storage behavior | [`playbooks/modify-session-store.md`](playbooks/modify-session-store.md) |
+| Run or test locally | [`dev-commands.md`](dev-commands.md) |
+| Check dependency boundaries | [`dependency-rules.md`](dependency-rules.md) |
+| Understand a feature | [`features/inspection-surface.md`](features/inspection-surface.md), [`features/session-store.md`](features/session-store.md) |
+| Understand product + architecture intent | [`../PRD.md`](../PRD.md), [`../ARCHITECTURE.md`](../ARCHITECTURE.md) |
+| Audit historical planning or delivery | [`../working/README.md`](../working/README.md), [`../progress/README.md`](../progress/README.md) |
+
+## Apps
+
+- `apps/backend` — Rust backend binary: runtime wiring, scan/ingest/store orchestration, machine-consumable HTTP routes. See [`../apps/backend/README.md`](../apps/backend/README.md).
+- `apps/frontend` — Bun + Vite + React + TypeScript inspection UI. The unified session list (table, filters, view, drawer body, merge / filter / sort / paginate / persistence helpers) lives under `apps/frontend/src/features/sessions/`; shared React primitives (action bar, scan-errors callout, native-`<dialog>`-backed drawer shell, pagination strip, toast) live under `apps/frontend/src/components/`. CSS is co-located: each `.tsx`/`.ts` imports its sibling `.css` (no CSS Modules, no CSS-in-JS, no Tailwind); `src/styles/` carries only the three global sheets `reset.css`, `tokens.css`, `global.css`. See [`../apps/frontend/README.md`](../apps/frontend/README.md).
+
+## Components
+
+Reusable, app-independent crates. Each owns its own README:
+
+- [`collector-runtime`](../components/collector-runtime/README.md) — source discovery, safe JSONL reads, tool-specific parsers (Claude Code, Codex)
+- [`configuration`](../components/configuration/README.md) — backend runtime config loading
+- [`ingest-service`](../components/ingest-service/README.md) — content-addressed ingest decisions, replace-on-sync
+- [`observability`](../components/observability/README.md) — tracing subscriber bootstrap
+- [`raw-session-store`](../components/raw-session-store/README.md) — SQLite metadata + blob-store persistence
+- [`ui-api-contracts`](../components/ui-api-contracts/README.md) — shared HTTP payload types; source of truth for the Rust → TS bindings
+
+## Feature Guides
+
+- [`features/inspection-surface.md`](features/inspection-surface.md) — page ownership, API touchpoints, and tests for the inspection workflow
+- [`features/session-store.md`](features/session-store.md) — storage ownership, backend touchpoints, and tests for persisted session behavior
+
+## Playbooks
+
+Short recipes for common changes:
+
+- [`playbooks/modify-frontend-page.md`](playbooks/modify-frontend-page.md) — shortest safe path for UI changes
+- [`playbooks/modify-backend-api.md`](playbooks/modify-backend-api.md) — shortest safe path for backend API changes
+- [`playbooks/modify-session-store.md`](playbooks/modify-session-store.md) — shortest safe path for storage changes
+
+## Verification Map
+
+| Surface | Command |
+| --- | --- |
+| Workspace compile | `cargo check --workspace` |
+| Full Rust test suite | `cargo test --workspace` |
+| Backend HTTP API | `cargo test -p distill-portal-backend --test http_api` |
+| Collector parsers | `cargo test -p distill-portal-collector-runtime --test parsers` |
+| Typed Rust-client HTTP smoke | `cargo test -p distill-portal-e2e --test inspection_surface` |
+| TypeScript contract bindings freshness | `cargo test -p distill-portal-ui-api-contracts --features ts-bindings` |
+| Frontend unit tests | `bun run test` (from `apps/frontend/`) |
+| Browser e2e (Playwright) | `bun run test:e2e` (from `apps/frontend/`) |
+
+## Repo Map
+
+- `apps/backend` — backend binary and its tests
+- `apps/frontend` — Bun/React frontend
+- `components/*` — reusable implementation crates
+- `docs/` — this tree (dependency rules, commands, features, playbooks)
+- `tests/e2e` — real HTTP-boundary Rust integration tests
+- `tests/fixtures` — sample Claude Code and Codex sessions used by parser and backend tests
+- `working/` — historical planning specs for completed phases (see [`../working/README.md`](../working/README.md))
+- `progress/` — historical delivery logs for completed phases (see [`../progress/README.md`](../progress/README.md))
+
+## Historical Material
+
+- [`../working/`](../working/) — frozen planning specs. Not current-state instructions. See [`working/README.md`](../working/README.md).
+- [`../progress/`](../progress/) — frozen delivery logs. Not current-state instructions. See [`progress/README.md`](../progress/README.md).
+
+exec
+/bin/bash -lc "sed -n '1,240p' docs/dev-commands.md" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+# Dev Commands
+
+## Run The Backend
+
+```bash
+cargo run -p distill-portal-backend
+```
+
+Useful backend env vars:
+
+- `DISTILL_PORTAL_BACKEND_BIND` or `DISTILL_PORTAL_BIND`
+- `DISTILL_PORTAL_DATA_DIR`
+- `DISTILL_PORTAL_POLL_INTERVAL_SECS`
+- `DISTILL_PORTAL_CLAUDE_ROOTS`
+- `DISTILL_PORTAL_CODEX_ROOTS`
+
+## Run The Frontend
+
+The frontend lives under `apps/frontend/` as a Bun-managed package (`package.json`, `bun.lock`, `vite.config.ts`, `index.html`, `src/*.tsx`).
+
+Commands (run from `apps/frontend/`):
+
+```bash
+bun install
+bun run dev
+bun run build
+bun run test
+```
+
+- `bun run dev` starts the Vite dev server on `http://127.0.0.1:4100` with `strictPort: true` so a port collision fails fast.
+- `bun run build` writes static assets to `apps/frontend/dist/`.
+- `bun run test` runs `bun test src` (the unit suite; browser e2e is `bun run test:e2e`, documented below). After Phase 4 the unit suite is 231 tests / 891 expect calls across 17 files covering the unified session list, the session detail drawer, pagination, the toast queue, and the shared React primitives:
+  - **Mounted-`App` integration** — `apps/frontend/src/App.test.tsx`: the read-only unified-list render against three `Promise.allSettled` GETs, the rescan and import mutation flows (including an explicit race-window reproducer for the stale-selection bug), per-panel independent-error behavior, the four documented empty-state branches, the click-time intersection rule under filter and pagination races, the toast queue replacing the old inline `lastReport`, and the cross-page bulk-select / retry-after-intervening-rescan invariants.
+  - **Unified session feature** — `apps/frontend/src/features/sessions/`: `SessionsTable.test.tsx`, `SessionFilters.test.tsx`, `SessionDetail.test.tsx` (component-level integration), and pure helpers `mergeSessions.test.ts`, `filterSessions.test.ts`, `applyPagination.test.ts`, `relativeTime.test.ts`, `useSessionFilters.test.ts` (incl. 12+ corrupt-input fallbacks), `useToastQueue.test.ts`, `lastRescan.test.ts`, and the streaming `rawPreview.test.ts` (line-cap + byte-cap + abort + non-JSON fallback).
+  - **Shared React primitives** — `apps/frontend/src/components/`: `ActionBar.test.tsx` (idle zero/non-zero selection, pending rescan/import disabled states, sticky modifier, last-rescan caption, hidden-by-filter caption + clear affordances), `Drawer.test.tsx` (native `<dialog>` shell, focus restoration, Esc-close, backdrop close), `Pagination.test.tsx` (page-size selector + Prev/Next + caption + clamp), `Toast.test.tsx` (kind variants + Retry + Dismiss roles), `ScanErrorsCallout.test.tsx` (renders nothing when empty).
+  - The variant-matrix `StatusBadge.test.tsx` from M2 was retired in M6 (Chunk G); the four-variant DOM-shape contract is preserved by a dedicated test in `SessionsTable.test.tsx` (`SessionsTable: inlined status badge renders all 4 variants ...`) that iterates over `up_to_date / not_stored / outdated / source_missing` and asserts the inlined `<span class="badge {variant}">{label}</span>` markup byte-for-byte for each variant. `App.test.tsx` continues to assert the `up-to-date` variant at the integration level.
+
+## Dev Topology
+
+```
+browser
+   |
+   v
+http://127.0.0.1:4100  <-- Vite dev server (bun run dev)
+   |
+   |  /api/v1/**  and  /health   proxied by Vite
+   v
+http://127.0.0.1:4000  <-- Rust backend (cargo run -p distill-portal-backend)
+```
+
+- Backend: `127.0.0.1:4000` (Rust, `cargo run -p distill-portal-backend`).
+- Frontend dev server: `127.0.0.1:4100` (Bun + Vite, `bun run dev` under `apps/frontend/`).
+- Vite proxies `/api/v1/**` and `/health` to the backend so browser code can use same-origin paths without ad hoc CORS setup. Dev-time proxy config lives in `apps/frontend/vite.config.ts`, not in application code.
+
+## Run Both Together
+
+Terminal 1:
+
+```bash
+cargo run -p distill-portal-backend
+```
+
+Terminal 2 (from `apps/frontend/`):
+
+```bash
+bun run dev
+```
+
+Then open `http://127.0.0.1:4100/` in the browser. The Rust backend must be running for `/health` and `/api/v1/**` to resolve through the Vite proxy.
+
+## Browser E2E (Playwright)
+
+The inspection-surface browser e2e lives under `apps/frontend/e2e/` and
+drives Chromium against the Bun + Vite dev server, which proxies to a
+real Rust backend spawned inside the harness (`e2e/harness/backend.ts`).
+The harness uses `Bun.spawn` per the Bun-first rule, so the suite must
+be run with Bun as the runtime (`bun --bun x playwright test`, wired
+into the `test:e2e` script below).
+
+Commands (run from `apps/frontend/`):
+
+```bash
+bun run test:e2e:install   # one-time: install Chromium via Playwright
+bun run test:e2e           # spawns the backend, starts Vite, runs Chromium
+```
+
+The harness binds the backend to `127.0.0.1:4000` because
+`vite.config.ts` proxies `/api/v1/**` and `/health` to that address;
+tests run serially (`workers: 1`) so the port is never double-bound.
+See `playwright.config.ts` for the full configuration.
+
+## Targeted Tests
+
+```bash
+cargo test -p distill-portal-collector-runtime --test parsers
+cargo test -p distill-portal-backend --test http_api
+cargo test -p distill-portal-e2e --test inspection_surface
+```
+
+## TypeScript Contract Bindings
+
+The Rust contract types in `components/ui-api-contracts/src/lib.rs` are the source of truth. TypeScript declarations under `components/ui-api-contracts/bindings/` are generated from them via the `ts-bindings` cargo feature (off by default) and must be regenerated whenever the Rust contract changes.
+
+Verify the checked-in TS files match the current Rust source (fails on drift):
+
+```bash
+cargo test -p distill-portal-ui-api-contracts --features ts-bindings
+```
+
+Regenerate the checked-in TS files after a contract change:
+
+```bash
+cargo test -p distill-portal-ui-api-contracts --features ts-bindings -- --ignored regenerate_ts_bindings
+```
+
+See `components/ui-api-contracts/README.md` for the tool-choice rationale and the full list of generated files.
+
+## Workspace Verification
+
+```bash
+cargo check --workspace
+cargo test --workspace
+```
+
+codex
+The repo rules don’t add extra process for this review. I’m narrowing now to the CSS/token diff and the audit docs, then I’ll independently calculate the contrast values from the checked-in tokens.
+exec
+/bin/bash -lc 'git status --short' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+ M apps/frontend/src/App.test.tsx
+ M apps/frontend/src/components/Toast.css
+ M apps/frontend/src/features/sessions/SessionView.css
+ M apps/frontend/src/features/sessions/SessionsTable.css
+ M apps/frontend/src/features/sessions/SessionsTable.tsx
+ M apps/frontend/src/styles/tokens.css
+ M docs/dependency-rules.md
+?? apps/frontend/public/
+?? working/phase-5/designs/m2a-tokens/
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/features/sessions/SessionsTable.css | sed -n '200,240p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   200	
+   201	.title-cell-rowkey {
+   202	  font-family: var(--font-mono);
+   203	  overflow: hidden;
+   204	  text-overflow: ellipsis;
+   205	  white-space: nowrap;
+   206	  min-width: 0;
+   207	}
+   208	
+   209	/* M1b initially warmed the (refresh) marker from --color-text-muted
+   210	 * (Phase 4) to --color-warn so it would scan as a state hint. The
+   211	 * M2a oklch retint of --color-warn dropped the warn-as-text pair
+   212	 * vs --color-surface from ~5.3:1 (Phase 4 hex) to 4.21:1 (oklch),
+   213	 * which fails the 4.5:1 AA normal-text floor. The M2a fix-up round 2
+   214	 * reverts the marker to --color-text-muted per the M1b designer's
+   215	 * documented mitigation (working/phase-5/designs/m1b-shell/colors.md
+   216	 * lines 56-58) — clean 7.04:1 light / 7.36:1 dark, and still passes
+   217	 * across the row-state stack-up (selected, selected+hover, deep-link
+   218	 * pulse peak). The italic preserves the editorial-aside reading; the
+   219	 * loss of warm sienna is acceptable per the M1b designer's note. */
+   220	.title-cell-refresh {
+   221	  flex-shrink: 0;
+   222	  font-size: var(--text-xs);
+   223	  color: var(--color-text-muted);
+   224	  font-style: italic;
+   225	}
+   226	
+   227	.project-cell {
+   228	  overflow: hidden;
+   229	  text-overflow: ellipsis;
+   230	  white-space: nowrap;
+   231	  max-width: 0;
+   232	}
+   233	
+   234	.updated-cell {
+   235	  white-space: nowrap;
+   236	}
+   237	
+   238	/*
+   239	 * Phase-5 / M1a row variants. Spec §Row visual treatment lines
+   240	 * 533–545; design.md §3.6, §4.3.
+
+exec
+/bin/bash -lc "sed -n '1,240p' apps/frontend/src/styles/tokens.css" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+/*
+ * Design tokens for the inspection surface.
+ *
+ * The single source of truth for color, spacing, radius, typography, and
+ * shadow values used anywhere else in the frontend. Hex literals are
+ * permitted only inside this file; every other CSS file consumes these
+ * tokens via `var(--…)` references (see working/phase-4.md §Design
+ * Tokens; carried forward in working/phase-5.md §Design Tokens).
+ *
+ * Phase 5 / M2a — Design Language tokens (Archive-room aesthetic):
+ *   - oklch() is the source-of-truth color space (warm-paper light /
+ *     deep-ink dark; sienna accent, hue 50-70°). Chromium 111+ ships
+ *     native oklch support. The existing 24 hex literals below form a
+ *     `@supports not (color: oklch(0% 0 0))` fallback layer for older
+ *     browsers (Phase 4 cool-blue palette — cohesive but not warm-paper;
+ *     documented aesthetic regression per design.md §9.3).
+ *   - The Phase 4 token names that survive (`--color-text`,
+ *     `--color-bg`, `--color-text-muted`, `--font-sans`) become aliases
+ *     mapping to the new canonical names (`--color-ink`,
+ *     `--color-surface`, `--color-ink-muted`, `--font-chrome`). This
+ *     "Option B" strategy lets all 11 feature-local CSS files keep their
+ *     existing `var(...)` references unchanged — zero feature-local
+ *     rewrites, one risk surface.
+ *   - Three font stacks (display Fraunces / chrome system-sans / mono
+ *     JetBrains-Mono-prepended). Two `@font-face` rules self-host
+ *     Fraunces from `apps/frontend/public/fonts/`. The Italic axis ships
+ *     as a separate variable file because Fraunces is distributed as two
+ *     variable fonts upstream (Roman + Italic) rather than one
+ *     ital-axis variable font.
+ *   - Type-scale literals revised to spec values
+ *     (working/phase-5.md §Typography tokens, lines 887–905).
+ *     `--text-2xl: 2rem` is **NEW** — first consumer is the empty-mark
+ *     glyph in `SessionView.css`; future consumers are M5 chapter-break
+ *     labels and the eventual app title.
+ *   - Motion tokens: 4 durations (`--motion-fast` 80 ms / `--motion-base`
+ *     120 ms / `--motion-disclosure` 200 ms / `--motion-pulse` 600 ms);
+ *     3 easings (`--ease-standard` / `--ease-out` / `--ease-in-out`).
+ *     Reduced-motion zero-out lives in `global.css` (unchanged from M1a).
+ *   - Surface treatment: `--noise-overlay-light` is the inline-SVG data
+ *     URL (~1 KB) for the reading-wash texture. Applied to `.session-pane`
+ *     in light mode only via `SessionView.css` (see file header there).
+ *
+ * Cascade ordering (unchanged from Phase 4 + M1a):
+ *   `reset.css → tokens.css → global.css → feature-local sibling sheets`.
+ *   This file declares both the canonical oklch tokens AND the aliases AND
+ *   the @supports hex fallback in one block per Resolved Decision #16.
+ *
+ * Hex isolation invariant: `rg -n '#[0-9a-fA-F]{3,8}' apps/frontend/src/ | wc -l`
+ *   = 24 (unchanged from Phase 4 baseline; the 24 literals migrated into
+ *   the @supports fallback block).
+ *
+ * Token count (manual): `grep -cE '^\s*--' apps/frontend/src/styles/tokens.css`
+ *   = 83 (44 Phase 4 baseline tokens declared once at light + 39 redeclared
+ *   inside the `@media (prefers-color-scheme: dark)` block + the
+ *   `@supports` hex fallback block; counted with `grep -cE '^\s*--'` after
+ *   M2a landed). The design.md §3 estimate of ~74 only counted the
+ *   semantically-distinct token names; the actual file count is higher
+ *   because each color token is redeclared (light + dark + light hex
+ *   fallback + dark hex fallback). Phase 4 baseline file count was 44.
+ */
+
+:root {
+  /* ===== Color tokens (oklch source-of-truth) ===== */
+
+  /* Canonical names per Phase 5 spec §Design Tokens. */
+  --color-surface: oklch(98% 0.01 70);
+  --color-surface-raised: oklch(96% 0.01 70);
+  --color-ink: oklch(20% 0.02 70);
+  --color-ink-muted: oklch(45% 0.02 70);
+  --color-border: oklch(85% 0.01 70);
+  --color-border-strong: oklch(65% 0.02 70);
+  --color-accent: oklch(55% 0.15 50);
+  --color-accent-hover: oklch(50% 0.16 50);
+  --color-success: oklch(48% 0.13 155);
+  --color-warn: oklch(58% 0.15 60);
+  --color-error: oklch(52% 0.18 25);
+
+  /* Modal scrim alpha overlay for native `<dialog>::backdrop`. The
+   * Phase 4 baseline uses an `rgba()` literal because the backdrop
+   * needs explicit alpha; this declaration is preserved verbatim and
+   * does NOT need an oklch counterpart (alpha-on-black is colorspace-
+   * agnostic at this opacity). */
+  --color-backdrop: rgba(0, 0, 0, 0.45);
+
+  /* ===== Color aliases (Option B back-compat for Phase 4 consumers) =====
+   * These four declarations let the 11 feature-local CSS files keep
+   * their existing `var(--color-text)` / `var(--color-bg)` /
+   * `var(--color-text-muted)` / `var(--font-sans)` references without
+   * any rewrite. Aliases survive indefinitely; future planners may
+   * incrementally migrate consumers to the canonical names but do not
+   * have to. See design.md §9.1 for rationale. */
+  --color-text: var(--color-ink);
+  --color-text-muted: var(--color-ink-muted);
+  --color-bg: var(--color-surface);
+
+  /* ===== Spacing scale (unchanged from Phase 4) ===== */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  /* ===== Radius scale (unchanged from Phase 4) ===== */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+
+  /* ===== Typography stacks (Phase 5 / M2a) =====
+   * Three families:
+   *   - `--font-display`: Fraunces self-hosted variable serif at
+   *     `/fonts/Fraunces-subset.woff2` + Italic counterpart. Used for
+   *     editorial display surfaces (empty-pane preface, future M5
+   *     chapter-break labels, future app title). Fallback chain renders
+   *     in Charter / Iowan Old Style / Georgia at ~99% size if the
+   *     woff2 fails to load (size-adjust + ascent-override on @font-face
+   *     below).
+   *   - `--font-chrome`: native system sans stack. All chrome surfaces
+   *     (table cells, filters, badges, tabs, metadata `<dt>`/`<dd>`).
+   *     No download cost.
+   *   - `--font-mono`: JetBrains Mono prepended to the existing Phase 4
+   *     mono fallback chain. NOT self-hosted; system fallback covers
+   *     every developer machine. */
+  --font-display: "Fraunces", Charter, "Iowan Old Style", Georgia, serif;
+  --font-chrome: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI",
+    Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", SFMono-Regular,
+    Menlo, Consolas, monospace;
+  --font-sans: var(--font-chrome);
+
+  /* ===== Type scale (Phase 5 / M2a — revised to spec values) =====
+   * Phase 4 had `--text-xs` through `--text-xl` at slightly tighter
+   * literals (`0.72rem`, `0.85rem`, `0.95rem`, `1.15rem`, `1.35rem`).
+   * The Phase 5 spec literals (line 894–899) are 16 px-anchored and
+   * shift body text +5% (`0.95rem` → `1rem`). Documented intentional
+   * shift per design.md §12 question 4: ship the spec value. */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2rem;
+
+  /* ===== Leading + measure (Phase 5 / M2a NEW) ===== */
+  --leading-tight: 1.25;
+  --leading-comfortable: 1.55;
+  --measure: 70ch;
+
+  /* ===== Motion tokens (Phase 5 / M2a NEW) =====
+   * 4 durations + 3 easings. Reduced-motion zero-out lives in
+   * `global.css` (a single `@media (prefers-reduced-motion: reduce)`
+   * rule that targets `*, *::before, *::after`); the durations here
+   * become 0.01 ms via the !important zero-out automatically. */
+  --motion-fast: 80ms;
+  --motion-base: 120ms;
+  --motion-disclosure: 200ms;
+  --motion-pulse: 600ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.6, 1);
+
+  /* ===== Shadows (unchanged from Phase 4) =====
+   * Per design language §"Hairline over shadow", chrome carries no
+   * drop shadows except the existing Phase 4 sticky action bar / toast
+   * surfaces. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.08);
+
+  /* ===== Surface treatment (Phase 5 / M2a NEW) =====
+   * The reading-wash overlay (signature detail #6 per spec line 76).
+   * 80×80 inline SVG with a fractalNoise filter at 3% alpha. ~1 KB
+   * data URL. Applied to `.session-pane` in `SessionView.css` light
+   * mode only; suppressed in dark mode AND under
+   * `prefers-reduced-motion: reduce`.
+   *
+   * URL-encoding deviation from spec line 922: `#` and `%` are reserved
+   * in URLs and MUST be escaped inside a `url(...)` data-URL string so
+   * the CSS parser doesn't treat them as fragment / percent tokens.
+   * This implementation escapes both:
+   *   - `%23n` for `#n` (the SVG filter id reference) — per spec.
+   *   - `100%25` for `100%` (the rect width/height) — additional escape
+   *     the spec snippet omitted; required because Chromium's CSS data-
+   *     URL parser would otherwise interpret the bare `%` and produce
+   *     an invalid SVG. The visual result is byte-equivalent to the
+   *     spec snippet's intent (the `%25` decodes back to `%` inside the
+   *     SVG once the data URL is parsed). */
+  --noise-overlay-light: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.03 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+/* ===== Dark mode (oklch source-of-truth) =====
+ * Per Phase 5 §Color philosophy, dark mode is "deep-ink, slightly
+ * warm" rather than the Phase 4 cold near-black. Surface luminance
+ * 15%, chroma 0.01 at hue 70° (warm-paper anchor). Accent stays at
+ * hue 50° but lifts in lightness + chroma so it remains visible
+ * against the deep ink. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-surface: oklch(15% 0.01 70);
+    --color-surface-raised: oklch(18% 0.01 70);
+    --color-ink: oklch(92% 0.01 70);
+    --color-ink-muted: oklch(70% 0.01 70);
+    --color-border: oklch(28% 0.01 70);
+    --color-border-strong: oklch(48% 0.02 70);
+    --color-accent: oklch(65% 0.15 50);
+    --color-accent-hover: oklch(72% 0.13 50);
+    --color-success: oklch(64% 0.13 155);
+    --color-warn: oklch(72% 0.13 60);
+    --color-error: oklch(68% 0.16 25);
+    --color-backdrop: rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* ===== @supports hex fallback layer (Phase 5 / M2a NEW) =====
+ * For browsers without native `oklch()` support (Chromium <111,
+ * Firefox <113, Safari <15.4) the canonical color tokens fall back to
+ * the Phase 4 hex literals. The aesthetic regression (Phase 4
+ * cool-blue palette renders instead of Archive-room warm-paper) is
+ * documented + accepted per design.md §9.3 — the fallback is a
+ * cohesive Phase 4 design, only the hue differs.
+ *
+ * Hex isolation invariant: every `#`-prefixed literal in
+ * `apps/frontend/src/` lives inside this block. Total = 24
+ * (12 light + 12 dark). The aliases (`--color-text` etc.) and the
+ * canonical declarations above continue to work — `var(...)`
+ * references resolve through the aliases to the canonical name, and
+ * the canonical name picks up either the oklch value (modern browsers)
+ * or the hex (legacy browsers). */
+@supports not (color: oklch(0% 0 0)) {
+  :root {
+    --color-bg: #ffffff;
+    --color-surface: #f8f9fb;
+    --color-surface-raised: #ffffff;
+    --color-border: #e3e5ea;
+    --color-border-strong: #8a909c;
+    --color-ink: #14161a;
+    --color-ink-muted: #5a606b;
+    --color-accent: #2864d4;
+    --color-accent-hover: #1d4fa8;
+    --color-success: #1f7a4a;
+    --color-warn: #b86b07;
+
+exec
+/bin/bash -lc 'rg -n "title-cell-refresh|color-warn|warn" apps/frontend/src docs wcag.md design.md /tmp/m2a-diff-v3.patch' in /home/huwei/ai_codings/distill-portal
+ exited 2 in 0ms:
+rg: wcag.md: No such file or directory (os error 2)
+rg: design.md: No such file or directory (os error 2)
+/tmp/m2a-diff-v3.patch:9:-  // is rendered with the dedicated `.title-cell-refresh` class on a
+/tmp/m2a-diff-v3.patch:10:-  // `--color-warn`-tinted italic span (design.md §3.2). The hover
+/tmp/m2a-diff-v3.patch:12:+  // is rendered with the dedicated `.title-cell-refresh` class on an
+/tmp/m2a-diff-v3.patch:13:+  // italic span. M1b initially warmed it to `--color-warn`; the M2a
+/tmp/m2a-diff-v3.patch:15:+  // oklch retint regressed warn-as-text below the AA 4.5:1 floor).
+/tmp/m2a-diff-v3.patch:17:   const refreshSpan = container.querySelector(".title-cell-refresh");
+/tmp/m2a-diff-v3.patch:164:- * --color-warn so the marker scans as a state hint rather than
+/tmp/m2a-diff-v3.patch:169:+ * (Phase 4) to --color-warn so it would scan as a state hint. The
+/tmp/m2a-diff-v3.patch:170:+ * M2a oklch retint of --color-warn dropped the warn-as-text pair
+/tmp/m2a-diff-v3.patch:179: .title-cell-refresh {
+/tmp/m2a-diff-v3.patch:182:-  color: var(--color-warn);
+/tmp/m2a-diff-v3.patch:223:-// marker color from `--color-text-muted` (Phase 4) to `--color-warn`
+/tmp/m2a-diff-v3.patch:229:+// `--color-warn`; the M2a fix-up round 2 reverted it back to
+/tmp/m2a-diff-v3.patch:231:+// the warn-as-text pair vs `--color-surface` to 4.21:1 (fails AA
+/tmp/m2a-diff-v3.patch:236:+// stepped back from "warning sienna" to "muted gray italic".
+/tmp/m2a-diff-v3.patch:317:-  --color-warn: #b86b07;
+/tmp/m2a-diff-v3.patch:331:+  --color-warn: oklch(58% 0.15 60);
+/tmp/m2a-diff-v3.patch:477:-    --color-warn: #e0a75a;
+/tmp/m2a-diff-v3.patch:488:+    --color-warn: oklch(72% 0.13 60);
+/tmp/m2a-diff-v3.patch:521:+    --color-warn: #b86b07;
+/tmp/m2a-diff-v3.patch:537:+      --color-warn: #e0a75a;
+apps/frontend/src/features/sessions/SessionDetail.test.tsx:128:// each raw-preview test silences the "not wrapped in act" warnings
+apps/frontend/src/features/sessions/SessionDetail.test.tsx:664:    // not throw a "set state after unmount" warning here. The
+apps/frontend/src/features/sessions/SessionsTable.tsx:27:// `--color-warn`; the M2a fix-up round 2 reverted it back to
+apps/frontend/src/features/sessions/SessionsTable.tsx:29:// the warn-as-text pair vs `--color-surface` to 4.21:1 (fails AA
+apps/frontend/src/features/sessions/SessionsTable.tsx:34:// stepped back from "warning sienna" to "muted gray italic".
+apps/frontend/src/features/sessions/SessionsTable.tsx:252:                          className="title-cell-refresh"
+apps/frontend/src/features/sessions/SessionsTable.test.tsx:355:    container.querySelectorAll(".title-cell-refresh"),
+apps/frontend/src/App.test.tsx:627:  // wrapped in act" warning — it's intentional for this test only.
+apps/frontend/src/App.test.tsx:1161:  // is rendered with the dedicated `.title-cell-refresh` class on an
+apps/frontend/src/App.test.tsx:1162:  // italic span. M1b initially warmed it to `--color-warn`; the M2a
+apps/frontend/src/App.test.tsx:1164:  // oklch retint regressed warn-as-text below the AA 4.5:1 floor).
+apps/frontend/src/App.test.tsx:1166:  const refreshSpan = container.querySelector(".title-cell-refresh");
+apps/frontend/src/features/sessions/useSelectedSession.test.ts:151:  // unmounted component. We verify this via the "no warnings about
+apps/frontend/src/features/sessions/useSelectedSession.test.ts:153:  // dispatch and make sure no error throws (happy-dom does not warn,
+apps/frontend/src/features/sessions/SessionDetail.tsx:434: * downloaded" warning.
+apps/frontend/src/features/sessions/SessionsTable.css:24: *     `.title-cell-refresh` — the M1b 4-essentials Title cell anatomy
+apps/frontend/src/features/sessions/SessionsTable.css:138:  background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionsTable.css:139:  color: color-mix(in srgb, var(--color-warn) 70%, var(--color-text));
+apps/frontend/src/features/sessions/SessionsTable.css:140:  border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionsTable.css:210: * (Phase 4) to --color-warn so it would scan as a state hint. The
+apps/frontend/src/features/sessions/SessionsTable.css:211: * M2a oklch retint of --color-warn dropped the warn-as-text pair
+apps/frontend/src/features/sessions/SessionsTable.css:220:.title-cell-refresh {
+apps/frontend/src/styles/tokens.css:75:  --color-warn: oklch(58% 0.15 60);
+apps/frontend/src/styles/tokens.css:207:    --color-warn: oklch(72% 0.13 60);
+apps/frontend/src/styles/tokens.css:240:    --color-warn: #b86b07;
+apps/frontend/src/styles/tokens.css:256:      --color-warn: #e0a75a;
+apps/frontend/src/features/sessions/SessionDetail.css:52:   * recipe (red, the strongest semantic warn) so it visually stands
+
+exec
+/bin/bash -lc "sed -n '240,320p' apps/frontend/src/styles/tokens.css" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+    --color-warn: #b86b07;
+    --color-error: #b13838;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-bg: #0f1115;
+      --color-surface: #151821;
+      --color-surface-raised: #1b1f2a;
+      --color-border: #262b36;
+      --color-border-strong: #5e6571;
+      --color-ink: #e8eaef;
+      --color-ink-muted: #9098a6;
+      --color-accent: #6da5ff;
+      --color-accent-hover: #8bbbff;
+      --color-success: #5fb68a;
+      --color-warn: #e0a75a;
+      --color-error: #e57d7d;
+    }
+  }
+}
+
+/* ===== @font-face — Fraunces self-hosted (Phase 5 / M2a) =====
+ * Two declarations: Roman + Italic. The upstream Fraunces is shipped
+ * as two separate variable fonts (Roman, Italic) rather than one
+ * variable font with an italic axis, so each `font-style` value points
+ * at a different `.woff2` file. Both are subset to Latin Basic +
+ * Latin-1 Supplement + General Punctuation (`U+0020-007E,
+ * U+00A0-00FF, U+2010-2027, U+2030-2052`) with kerning, ligatures,
+ * small-caps, and old-style numerals. Subsetting + axis-pinning recipe
+ * documented at `docs/dependency-rules.md` §"Phase 5 M2a notes".
+ *
+ * `font-display: swap` — Fraunces NEVER blocks first paint. The
+ * fallback (Charter / Iowan Old Style / Georgia) renders immediately
+ * and Fraunces swaps in when the woff2 finishes loading. The
+ * `size-adjust` + `ascent-override` + `descent-override` values are
+ * tuned to Charter's metrics (the most common system serif on
+ * macOS / iOS) so the swap is invisible — line heights stay within
+ * 1 px on every step in the type scale. Designer-recommended starting
+ * values per design.md §"Fraunces fallback math"; revisit after the
+ * M6 manual font-swap measurement.
+ *
+ * Reversibility (Resolved Decision #15): deleting both @font-face
+ * blocks AND the two woff2 files yields a still-cohesive
+ * system-serif aesthetic. No font is required for the page to
+ * render. */
+/* unicode-range narrowing rationale (M2a developer): design.md item 12
+ * lists `U+0000-007F, U+00A0-00FF, U+2000-206F` as the subset coverage.
+ * The implemented ranges below tighten that:
+ *   - `U+0020-007E` instead of `U+0000-007F` — strips ASCII control
+ *     characters (NUL through US, plus DEL) which are non-printing and
+ *     never appear on the inspection surface. Trims the @font-face
+ *     glyph-table hint without affecting any visible glyph.
+ *   - `U+2010-2027, U+2030-2052` instead of `U+2000-206F` — keeps the
+ *     General Punctuation glyphs Fraunces actually renders (en/em-dash,
+ *     hyphenation point, primes, ellipsis, per-thousand sign,
+ *     letterlike-numerals slash) and drops the `U+2028-202F` line/word
+ *     separator + bidi-control range plus `U+2053-206F` deprecated
+ *     swung-dash + invisible-format range. Subset script's actual glyph
+ *     emission already excludes those — the unicode-range here matches
+ *     the subset content rather than overstating coverage.
+ * The browser uses unicode-range to skip downloading the woff2 if no
+ * code-point in the page falls inside the declared range; tightening
+ * keeps the swap behaviour deterministic. */
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  /* Dual format() hint: `woff2-variations` is the technically-correct
+   * MIME hint for variable-axis woff2 (per CSS Fonts L4 §"font-format"),
+   * BUT every Chromium/Safari/Firefox build that ships oklch() also
+   * accepts a plain `format("woff2")` for variable fonts. The dual
+   * declaration is progressive enhancement: a future browser that
+   * strict-parses `woff2-variations` (skipping the second hint) loads
+   * exactly once; today's browsers fall through to the second `format`
+   * and load exactly once. Either way the fetch count stays at one. */
+  src: url("/fonts/Fraunces-subset.woff2") format("woff2-variations"),
+    url("/fonts/Fraunces-subset.woff2") format("woff2");
+  size-adjust: 99.5%;
+  ascent-override: 92%;
+
+exec
+/bin/bash -lc "rg --files | rg '("'^|/)(wcag|design)'"\\.md"'$|m2a'"'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+working/phase-5/designs/m1a-shell/design.md
+working/phase-5/designs/m1b-shell/design.md
+working/phase-5/designs/m2a-tokens/colors.md
+working/phase-5/designs/m2a-tokens/design.md
+working/phase-5/designs/m2a-tokens/prototype.html
+working/phase-5/designs/m2a-tokens/wcag.md
+working/phase-5/designs/m2a-tokens/motion.md
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/features/sessions/SessionsTable.css | sed -n '110,155p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   110	  text-align: center;
+   111	}
+   112	
+   113	.badge {
+   114	  display: inline-block;
+   115	  padding: var(--space-1) var(--space-2);
+   116	  border-radius: 999px;
+   117	  font-size: var(--text-xs);
+   118	  text-transform: uppercase;
+   119	  letter-spacing: 0.06em;
+   120	  font-family: var(--font-mono);
+   121	  border: 1px solid transparent;
+   122	  white-space: nowrap;
+   123	}
+   124	
+   125	.badge.up-to-date {
+   126	  background: color-mix(in srgb, var(--color-success) 15%, var(--color-surface));
+   127	  color: color-mix(in srgb, var(--color-success) 70%, var(--color-text));
+   128	  border-color: color-mix(in srgb, var(--color-success) 35%, var(--color-surface));
+   129	}
+   130	
+   131	.badge.not-stored {
+   132	  background: color-mix(in srgb, var(--color-accent) 15%, var(--color-surface));
+   133	  color: color-mix(in srgb, var(--color-accent) 70%, var(--color-text));
+   134	  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-surface));
+   135	}
+   136	
+   137	.badge.outdated {
+   138	  background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+   139	  color: color-mix(in srgb, var(--color-warn) 70%, var(--color-text));
+   140	  border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+   141	}
+   142	
+   143	.badge.source-missing {
+   144	  background: color-mix(in srgb, var(--color-error) 15%, var(--color-surface));
+   145	  color: color-mix(in srgb, var(--color-error) 70%, var(--color-text));
+   146	  border-color: color-mix(in srgb, var(--color-error) 35%, var(--color-surface));
+   147	}
+   148	
+   149	/*
+   150	 * M1b Title cell anatomy. Two-line stack: bold title + tool badge
+   151	 * inline (line 1); muted mono rowKey + optional `(refresh)` marker
+   152	 * (line 2). The tool badge is hairline-bordered on transparent ground
+   153	 * — DELIBERATELY NOT the filled `.badge.{variant}` status-pill recipe
+   154	 * (designer §7.5: status is the row's dedicated column; tool is a
+   155	 * quieter contextual signal).
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/components/Toast.css | sed -n '1,220p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+     1	/*
+     2	 * Feature-local CSS for the Toast queue.
+     3	 *
+     4	 * Imported by `Toast.tsx` (sibling-import convention). Note that the
+     5	 * `.toast-queue` selector lives here even though only `App.tsx` mounts
+     6	 * the queue container; the queue + the per-toast styling are one
+     7	 * cohesive surface, and colocating them keeps the M6 retirement of
+     8	 * `app.css` clean (no third sheet just for the queue wrapper).
+     9	 *
+    10	 * Selectors owned here:
+    11	 *   - `.toast-queue` — fixed-position stack at the bottom-right of
+    12	 *     the viewport. Sibling-of-`<main>` placement is for fixed-position
+    13	 *     LAYOUT only (NOT React render isolation): toast push/dismiss
+    14	 *     re-renders the App subtree, but the merged/filtered/sorted/
+    15	 *     paginated rows are `useMemo`d so the heavy computation does not
+    16	 *     re-run on a toast event.
+    17	 *   - `.toast` — the toast itself; sets surface + border + radius +
+    18	 *     shadow + min-width.
+    19	 *   - `.toast.success`, `.toast.error`, `.toast.info` — variant
+    20	 *     border tints (color-mix to keep them readable against the
+    21	 *     surface-raised background in both modes).
+    22	 *   - `.toast-title` — bold leading line.
+    23	 *   - `.toast-message` — muted secondary line.
+    24	 *   - `.toast-details`, `.toast-details summary` — collapsible
+    25	 *     `<details>` disclosure for the structured RescanReport /
+    26	 *     ImportReport counts (collapsed by default).
+    27	 *   - `.toast-actions`, `.toast-actions button`,
+    28	 *     `.toast-actions button:hover` — the Retry + Dismiss buttons.
+    29	 *
+    30	 * Structural literals (per design-balloon mitigation):
+    31	 *   - `max-width: 26rem` on `.toast-queue` — keeps the fixed-position
+    32	 *     stack from blowing across the viewport.
+    33	 *   - `min-width: 18rem` on `.toast` — so a single short toast still
+    34	 *     reads as a deliberate notification rather than a tiny chip.
+    35	 *   - `z-index: 2` on `.toast-queue` — layering literal (the design
+    36	 *     system has no token for stacking layers; promoting this would
+    37	 *     be speculative for two consumers — `.action-bar.sticky` at
+    38	 *     `z-index: 1`, `.toast-queue` at `z-index: 2`). The drawer's
+    39	 *     `top-layer` (native `<dialog>`) sits above both regardless.
+    40	 */
+    41	
+    42	/* Toast queue — fixed-position stack at the bottom-right corner of
+    43	 * the viewport. Sibling-of-`<main>` placement is for fixed-position
+    44	 * layout only (NOT React render isolation): toast push/dismiss
+    45	 * re-renders the App subtree, but the merged/filtered/sorted/
+    46	 * paginated rows are `useMemo`d so the heavy computation does not
+    47	 * re-run on a toast event. */
+    48	.toast-queue {
+    49	  position: fixed;
+    50	  bottom: var(--space-4);
+    51	  right: var(--space-4);
+    52	  display: flex;
+    53	  flex-direction: column;
+    54	  gap: var(--space-2);
+    55	  z-index: 2;
+    56	  max-width: 26rem;
+    57	  pointer-events: none;
+    58	}
+    59	
+    60	/* Each toast inside the queue. `pointer-events: auto` re-enables
+    61	 * interactions (the queue itself is `pointer-events: none` so the gap
+    62	 * between toasts doesn't intercept clicks on the page below). */
+    63	.toast {
+    64	  pointer-events: auto;
+    65	  background: var(--color-surface-raised);
+    66	  color: var(--color-text);
+    67	  border: 1px solid var(--color-border);
+    68	  border-radius: var(--radius-md);
+    69	  padding: var(--space-3);
+    70	  box-shadow: var(--shadow-md);
+    71	  min-width: 18rem;
+    72	}
+    73	
+    74	/* Toast variant identity is conveyed by border color alone (no per-variant
+    75	 * background fill), so the border MUST clear WCAG SC 1.4.11 non-text
+    76	 * contrast (3:1 against `--color-surface-raised`). The original 50% mix
+    77	 * against `--color-border` failed in light (2.5-2.8 range). Phase 4 M6
+    78	 * lifted to 65% (verified 3.07-3.83 in both modes via the M6 contrast
+    79	 * script — see WCAG table in `progress/phase-4.progress.md`).
+    80	 *
+    81	 * Phase 5 / M2a bumps `.toast.info` to 70% as a pre-emptive mitigation
+    82	 * per UI/UX reviewer Q3 + design.md §7. Reasoning: M2a swaps the
+    83	 * `--color-accent` from the Phase 4 cool-blue literal to oklch sienna
+    84	 * (`oklch(60% 0.15 50)`); the Phase 4 measurement of 3.07:1 was
+    85	 * borderline against the cool-blue accent, and oklch `color-mix`
+    86	 * interpolation can drift slightly from sRGB-anchored expectations.
+    87	 * Bumping the info variant to 70% restores the safety margin (designer
+    88	 * estimate ~3.3:1 light, ~3.8:1 dark) without touching the success /
+    89	 * error variants, which sit on different-hue color tokens unaffected
+    90	 * by the accent palette swap. Codex precedent at Phase 4 M6 caught a
+    91	 * sub-3:1 toast border the designer had reported as passing — this
+    92	 * preemptive bump is the same risk surface mitigated proactively.
+    93	 * The 70% literal here will be re-verified with the M6 contrast script
+    94	 * once the WCAG sweep runs against the implementation tokens. Badges
+    95	 * use a different recipe (35%) because their identity is the filled
+    96	 * tinted background + AA-passing pill text, so the badge border is
+    97	 * decorative reinforcement under SC 1.4.11. */
+    98	.toast.success {
+    99	  border-color: color-mix(in srgb, var(--color-success) 65%, var(--color-border));
+   100	}
+   101	
+   102	.toast.error {
+   103	  border-color: color-mix(in srgb, var(--color-error) 65%, var(--color-border));
+   104	}
+   105	
+   106	.toast.info {
+   107	  border-color: color-mix(in srgb, var(--color-accent) 70%, var(--color-border));
+   108	}
+   109	
+   110	.toast-title {
+   111	  font-weight: 600;
+   112	  margin: 0 0 var(--space-1) 0;
+   113	  color: var(--color-text);
+   114	  font-size: var(--text-sm);
+   115	}
+   116	
+   117	.toast-message {
+   118	  margin: 0;
+   119	  color: var(--color-text-muted);
+   120	  font-size: var(--text-sm);
+   121	}
+   122	
+   123	.toast-details {
+   124	  margin-top: var(--space-2);
+   125	  color: var(--color-text-muted);
+   126	  font-size: var(--text-xs);
+   127	}
+   128	
+   129	.toast-details summary {
+   130	  cursor: pointer;
+   131	  color: var(--color-accent);
+   132	}
+   133	
+   134	.toast-actions {
+   135	  display: flex;
+   136	  gap: var(--space-2);
+   137	  margin-top: var(--space-2);
+   138	}
+   139	
+   140	.toast-actions button {
+   141	  font: inherit;
+   142	  font-size: var(--text-xs);
+   143	  padding: var(--space-1) var(--space-2);
+   144	  border: 1px solid var(--color-border-strong);
+   145	  border-radius: var(--radius-sm);
+   146	  background: var(--color-surface);
+   147	  color: var(--color-text);
+   148	  cursor: pointer;
+   149	}
+   150	
+   151	.toast-actions button:hover {
+   152	  border-color: var(--color-text-muted);
+   153	}
+
+exec
+/bin/bash -lc 'git diff --stat -- /tmp/m2a-diff-v3.patch apps/frontend/src/features/sessions/SessionsTable.css apps/frontend/src/styles/tokens.css apps/frontend/src/components/Toast.css apps/frontend/src/features/sessions/SessionView.css working/phase-5/designs/m2a-tokens/wcag.md working/phase-5/designs/m2a-tokens/design.md apps/frontend/src/features/sessions/SessionsTable.tsx apps/frontend/src/App.test.tsx' in /home/huwei/ai_codings/distill-portal
+ exited 128 in 0ms:
+fatal: /tmp/m2a-diff-v3.patch: '/tmp/m2a-diff-v3.patch' is outside repository at '/home/huwei/ai_codings/distill-portal'
+
+exec
+/bin/bash -lc 'rg -n "title-cell-refresh|color-warn|border-strong|Outstanding|Resolved|round 2|08b|09b|09c|09d|cusp" working/phase-5/designs/m2a-tokens/wcag.md working/phase-5/designs/m2a-tokens/design.md' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+working/phase-5/designs/m2a-tokens/wcag.md:24:- `--color-border-strong` light = `oklch(65% 0.02 70)` (was `70%`;
+working/phase-5/designs/m2a-tokens/wcag.md:26:- `--color-border-strong` dark = `oklch(48% 0.02 70)` (was `40%`;
+working/phase-5/designs/m2a-tokens/wcag.md:43:| 08 | `--color-warn` (no longer used as text — was `.title-cell-refresh`; reverted to `--color-text-muted` in fix-up round 2) | `--color-surface`                                | 4.21:1 (informational) | not consumed as text post round 2 |
+working/phase-5/designs/m2a-tokens/wcag.md:44:| 09 | `--color-warn` (informational; not consumed as text post round 2)              | row selected tint                                | 3.79:1 (informational) | not consumed as text post round 2 |
+working/phase-5/designs/m2a-tokens/wcag.md:45:| 08b | `.title-cell-refresh` italic (`--color-text-muted`)                  | `--color-surface`                                | 7.04:1  | AAA · normal        |
+working/phase-5/designs/m2a-tokens/wcag.md:46:| 09b | `.title-cell-refresh` italic (`--color-text-muted`)                  | row selected tint (8% accent mix)                | ~6.32:1 | AAA · normal        |
+working/phase-5/designs/m2a-tokens/wcag.md:47:| 09c | `.title-cell-refresh` italic (`--color-text-muted`)                  | selected+hover tint (12% accent mix)             | ~6.05:1 | AAA · normal        |
+working/phase-5/designs/m2a-tokens/wcag.md:48:| 09d | `.title-cell-refresh` italic (`--color-text-muted`)                  | deep-link pulse peak (22% accent mix)            | ~5.40:1 | AAA · normal        |
+working/phase-5/designs/m2a-tokens/wcag.md:58:| 18 | `--color-border-strong` (post fix-up L=65)          | `--color-surface`                                | 3.06:1  | SC 1.4.11           |
+working/phase-5/designs/m2a-tokens/wcag.md:74:| 08 | `--color-warn`                                      | `--color-surface`                                | 7.68:1  | AAA · normal        |
+working/phase-5/designs/m2a-tokens/wcag.md:75:| 09 | `--color-warn`                                      | row selected tint                                | 7.13:1  | AAA · normal        |
+working/phase-5/designs/m2a-tokens/wcag.md:85:| 18 | `--color-border-strong` (post fix-up L=48)          | `--color-surface`                                | 3.00:1  | SC 1.4.11 (cusp)    |
+working/phase-5/designs/m2a-tokens/wcag.md:88:## Codex fix-up round 2 closure (April 2026)
+working/phase-5/designs/m2a-tokens/wcag.md:93:- **`.title-cell-refresh` consumed `--color-warn` directly as
+working/phase-5/designs/m2a-tokens/wcag.md:100:  - **Fix**: revert `.title-cell-refresh` color from
+working/phase-5/designs/m2a-tokens/wcag.md:101:    `var(--color-warn)` to `var(--color-text-muted)` in
+working/phase-5/designs/m2a-tokens/wcag.md:108:    "the swap is a single token". The `--color-warn` token itself
+working/phase-5/designs/m2a-tokens/wcag.md:126:- **Finding 3**: `--color-border-strong` vs `--color-surface`.
+working/phase-5/designs/m2a-tokens/wcag.md:130:  - Post-fix-up dark (L=48): **3.00:1** — passes (on the cusp;
+working/phase-5/designs/m2a-tokens/wcag.md:135:### Resolved
+working/phase-5/designs/m2a-tokens/wcag.md:137:- **`.title-cell-refresh` warn-as-text contrast** (was 4.21:1 light
+working/phase-5/designs/m2a-tokens/wcag.md:139:  finding. **Resolved in M2a fix-up round 2**: reverted
+working/phase-5/designs/m2a-tokens/wcag.md:140:  `.title-cell-refresh` from `var(--color-warn)` to
+working/phase-5/designs/m2a-tokens/wcag.md:147:  `--color-warn` token itself is unchanged (`oklch(58% 0.15 60)`
+working/phase-5/designs/m2a-tokens/wcag.md:155:### Outstanding (accepted risk)
+working/phase-5/designs/m2a-tokens/wcag.md:157:- **Dark `--color-border-strong` at 3.00:1** sits on the cusp. The
+working/phase-5/designs/m2a-tokens/wcag.md:161:  mitigation is to bump dark `--color-border-strong` to
+working/phase-5/designs/m2a-tokens/wcag.md:187:The sticky-bar top edge uses `--color-border-strong` (3.06:1 light /
+working/phase-5/designs/m2a-tokens/wcag.md:196:the repo per Resolved Decision #16's "no third runtime dep" rule).
+working/phase-5/designs/m2a-tokens/wcag.md:211:The fallback layer's `--color-border-strong` was lifted in tandem
+working/phase-5/designs/m2a-tokens/wcag.md:213:- Light hex `#8a909c` vs `#f8f9fb` surface: **3.04:1** (passes 3:1).
+working/phase-5/designs/m2a-tokens/design.md:91:  at `--text-sm` against `--color-border-strong` hairline — both
+working/phase-5/designs/m2a-tokens/design.md:102:  `--color-border` or `--color-border-strong`. The Toast keeps its
+working/phase-5/designs/m2a-tokens/design.md:116:border-strong is reused; accent is revised; surface-raised/border are
+working/phase-5/designs/m2a-tokens/design.md:131:| `--color-border-strong`   | `oklch(65% 0.02 70)`       | `oklch(48% 0.02 70)`         | `#8a909c` / `#5e6571`        | revised value (post fix-up; lifted from L70/L40 for SC 1.4.11) |
+working/phase-5/designs/m2a-tokens/design.md:135:| `--color-warn`            | `oklch(58% 0.15 60)`       | `oklch(72% 0.13 60)`         | `#b86b07` / `#e0a75a`        | inherited; oklch transposed                                  |
+working/phase-5/designs/m2a-tokens/design.md:197: * still editorial, no broken layout. Reversibility per Resolved
+working/phase-5/designs/m2a-tokens/design.md:262:Per Resolved Decision #15 + planner Q4, the woff2 is generated locally
+working/phase-5/designs/m2a-tokens/design.md:384:| `--color-warn` (informational; no longer text-consumed post round 2) on `--color-surface` | 4.21:1 | 7.68:1 | not consumed as text post round 2 |
+working/phase-5/designs/m2a-tokens/design.md:385:| `--color-warn` (informational; no longer text-consumed post round 2) on row selected tint | 3.79:1 | 7.13:1 | not consumed as text post round 2 |
+working/phase-5/designs/m2a-tokens/design.md:386:| `.title-cell-refresh` italic (`--color-text-muted`) on `--color-surface` | 7.04:1 | 7.36:1 | AAA · normal |
+working/phase-5/designs/m2a-tokens/design.md:387:| `.title-cell-refresh` italic (`--color-text-muted`) on row selected tint | ~6.32:1 | ~6.62:1 | AAA · normal |
+working/phase-5/designs/m2a-tokens/design.md:397:| `--color-border-strong` (post fix-up) on `--color-surface` | 3.06:1 | 3.00:1 | SC 1.4.11 (cusp dark) |
+working/phase-5/designs/m2a-tokens/design.md:409:3. **`--color-border-strong`** vs `--color-surface`: pre-fix-up light
+working/phase-5/designs/m2a-tokens/design.md:412:   light, 3.00:1 dark — passes (dark on the cusp).
+working/phase-5/designs/m2a-tokens/design.md:414:**Codex fix-up round 2 (April 2026) — 1 BLOCKING resolution**:
+working/phase-5/designs/m2a-tokens/design.md:416:- **`.title-cell-refresh` warn-as-text contrast**: round 1 deferred
+working/phase-5/designs/m2a-tokens/design.md:417:  this as out-of-scope; round 2 codex review reclassified it as a
+working/phase-5/designs/m2a-tokens/design.md:421:  `.title-cell-refresh` color from `var(--color-warn)` to
+working/phase-5/designs/m2a-tokens/design.md:428:  comfortable margin. The `--color-warn` token itself is unchanged
+working/phase-5/designs/m2a-tokens/design.md:434:sticky-bar top edge uses `--color-border-strong` instead specifically
+working/phase-5/designs/m2a-tokens/design.md:669:- §Resolved Decisions #15 — Fraunces self-hosted, reversible.
+working/phase-5/designs/m2a-tokens/design.md:670:- §Resolved Decisions #16 — oklch source-of-truth + hex fallback.
+working/phase-5/designs/m2a-tokens/design.md:685:  (`.title-cell-refresh` was warmed to `--color-warn` in M1b; M2a
+working/phase-5/designs/m2a-tokens/design.md:686:  fix-up round 2 reverted it to `--color-text-muted` because the
+working/phase-5/designs/m2a-tokens/design.md:690:  documenting `.title-cell-refresh` against new tokens (the M1b
+working/phase-5/designs/m2a-tokens/design.md:701:   `--color-border-strong`, `--color-accent`, `--color-accent-hover`
+working/phase-5/designs/m2a-tokens/design.md:708:4. Status colors (`--color-success`, `--color-warn`, `--color-error`)
+working/phase-5/designs/m2a-tokens/design.md:813:  gated pair in the table and sits on the cusp. If the developer's
+working/phase-5/designs/m2a-tokens/design.md:832:Resolved Decisions. The chunk's diff is concentrated in `tokens.css`
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/features/sessions/SessionsTable.css | sed -n '238,330p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   238	/*
+   239	 * Phase-5 / M1a row variants. Spec §Row visual treatment lines
+   240	 * 533–545; design.md §3.6, §4.3.
+   241	 *
+   242	 * The hover + selected + selected-hover + deep-link-pulse recipes
+   243	 * are all `color-mix(...)` against `var(--color-accent)` so M2's
+   244	 * oklch redefinition of `--color-accent` will retint them
+   245	 * automatically — no keyframe / no rule rewrite at M2.
+   246	 *
+   247	 * The 2 px sienna left edge on the selected row uses
+   248	 * `box-shadow: inset 2px 0 0 var(--color-accent)` (NOT a
+   249	 * `border-left`) so adding the inset does not change row width or
+   250	 * shift the first cell — selecting/deselecting is byte-equivalent
+   251	 * in cell positions (designer §7.5).
+   252	 *
+   253	 * Click-driven selection NEVER fires the pulse (spec line 585) —
+   254	 * the parent only sets `data-deep-link="true"` on URL-driven mount.
+   255	 *
+   256	 * Reduced-motion zero-out lives in `styles/global.css`.
+   257	 */
+   258	table tbody tr:hover {
+   259	  background-color: color-mix(in srgb, var(--color-text) 4%, transparent);
+   260	}
+   261	
+   262	table tbody tr[aria-current="true"] {
+   263	  background-color: color-mix(in srgb, var(--color-accent) 8%, transparent);
+   264	  box-shadow: inset 2px 0 0 var(--color-accent);
+   265	}
+   266	
+   267	table tbody tr[aria-current="true"]:hover {
+   268	  background-color: color-mix(in srgb, var(--color-accent) 12%, transparent);
+   269	}
+   270	
+   271	table tbody tr[data-deep-link="true"] {
+   272	  /* One-shot pulse on URL-driven selection. Per the spec's allow-list
+   273	   * (§Acceptance Criteria line 1100) `background-color` is the only
+   274	   * animatable property that may carry a one-shot reveal here. M1a
+   275	   * hard-coded `600ms ease-out` as literals because the motion tokens
+   276	   * did not exist yet; M2a migrates the duration + easing to the
+   277	   * spec's `--motion-pulse` (600 ms) and `--ease-out` tokens defined
+   278	   * in `tokens.css`. The trailing `1` is the algorithmic iteration
+   279	   * count (not a token; literal). The keyframe peak (22%) settles to
+   280	   * the resting selected tint (8%) — designer §7.8 — so there is no
+   281	   * flash from the pulse fading INTO a different shade. */
+   282	  animation: deep-link-pulse var(--motion-pulse) var(--ease-out) 1;
+   283	}
+   284	
+   285	@keyframes deep-link-pulse {
+   286	  0% {
+   287	    background-color: color-mix(
+   288	      in srgb,
+   289	      var(--color-accent) 22%,
+   290	      transparent
+   291	    );
+   292	  }
+   293	  100% {
+   294	    background-color: color-mix(
+   295	      in srgb,
+   296	      var(--color-accent) 8%,
+   297	      transparent
+   298	    );
+   299	  }
+   300	}
+
+exec
+/bin/bash -lc "sed -n '1,230p' working/phase-5/designs/m2a-tokens/wcag.md" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+# M2a WCAG AA contrast verification
+
+This is the comprehensive contrast table for every visible
+foreground/background pair the M1a + M1b consumers depend on, under
+the new oklch ramp. Ratios are now **codex-measured** (not designer-
+estimated): the M2a fix-up round 1 ran a Python WCAG 2.1 contrast
+script that converts each oklch value via the canonical
+oklch → oklab → linear sRGB → sRGB → relative luminance pipeline
+and computes `((L1 + 0.05) / (L2 + 0.05))` for every pair. The
+designer's original CIE2000-anchored estimates were optimistic —
+codex's numerical computation is authoritative and what now lands
+in this artifact.
+
+## Pass / fail table
+
+WCAG AA gates: **4.5:1** for normal text (< 18 pt or < 14 pt bold),
+**3:1** for large text and non-text UI components (SC 1.4.11). Every
+text pair below is treated as normal text unless explicitly noted as
+"large".
+
+The values reflect the post-fix-up oklch ramp:
+- `--color-accent` light = `oklch(55% 0.15 50)` (was `60%` pre-fix-up;
+  codex measured the original at 3.93:1 vs surface — failed AA text).
+- `--color-border-strong` light = `oklch(65% 0.02 70)` (was `70%`;
+  codex measured original at 2.53:1 — failed SC 1.4.11).
+- `--color-border-strong` dark = `oklch(48% 0.02 70)` (was `40%`;
+  codex measured original at 2.13:1 — failed SC 1.4.11).
+- `--color-accent` dark stays at `oklch(65% 0.15 50)` (codex did not
+  flag dark accent; verified 5.78:1 vs surface, 5.52:1 vs surface-
+  raised — both clear AA).
+
+### Light mode
+
+| #  | Foreground                                          | Background                                       | Ratio   | Verdict             |
+|----|-----------------------------------------------------|--------------------------------------------------|---------|---------------------|
+| 01 | `--color-ink`                                       | `--color-surface`                                | 17.10:1 | AAA · normal        |
+| 02 | `--color-ink-muted`                                 | `--color-surface`                                | 7.04:1  | AAA · normal        |
+| 03 | `--color-ink`                                       | `--color-surface-raised`                         | 16.13:1 | AAA · normal        |
+| 04 | `--color-ink-muted`                                 | `--color-surface-raised`                         | 6.64:1  | AAA · normal        |
+| 05 | `--color-ink`                                       | row hover (4% ink mix)                           | 15.79:1 | AAA · normal        |
+| 06 | `--color-ink`                                       | row selected (8% accent mix)                     | 15.36:1 | AAA · normal        |
+| 07 | `--color-ink`                                       | row deep-link pulse peak (22% accent mix)        | 12.62:1 | AAA · normal        |
+| 08 | `--color-warn` (no longer used as text — was `.title-cell-refresh`; reverted to `--color-text-muted` in fix-up round 2) | `--color-surface`                                | 4.21:1 (informational) | not consumed as text post round 2 |
+| 09 | `--color-warn` (informational; not consumed as text post round 2)              | row selected tint                                | 3.79:1 (informational) | not consumed as text post round 2 |
+| 08b | `.title-cell-refresh` italic (`--color-text-muted`)                  | `--color-surface`                                | 7.04:1  | AAA · normal        |
+| 09b | `.title-cell-refresh` italic (`--color-text-muted`)                  | row selected tint (8% accent mix)                | ~6.32:1 | AAA · normal        |
+| 09c | `.title-cell-refresh` italic (`--color-text-muted`)                  | selected+hover tint (12% accent mix)             | ~6.05:1 | AAA · normal        |
+| 09d | `.title-cell-refresh` italic (`--color-text-muted`)                  | deep-link pulse peak (22% accent mix)            | ~5.40:1 | AAA · normal        |
+| 10 | `--color-accent` (text use, post fix-up L=55)       | `--color-surface`                                | 4.84:1  | AA · normal         |
+| 10b | `--color-accent` (text use, post fix-up L=55)      | `--color-surface-raised`                         | 4.57:1  | AA · normal         |
+| 11 | up-to-date pill fg (success 70% mix on ink)         | up-to-date pill bg (success 15% mix on surface)  | 6.69:1  | AAA · normal        |
+| 12 | not-stored pill fg (accent 70% mix on ink)          | not-stored pill bg (accent 15% mix on surface)   | 5.95:1  | AAA · normal        |
+| 13 | outdated pill fg (warn 70% mix on ink)              | outdated pill bg (warn 15% mix on surface)       | 5.43:1  | AAA · normal        |
+| 14 | source-missing pill fg (error 70% mix on ink)       | source-missing pill bg (error 15% mix on surface)| 6.60:1  | AAA · normal        |
+| 15 | `.toast.success` border (65% mix)                   | `--color-surface-raised`                         | 3.34:1  | SC 1.4.11           |
+| 16 | `.toast.error` border (65% mix)                     | `--color-surface-raised`                         | 3.53:1  | SC 1.4.11           |
+| 17 | `.toast.info` border (70% mix, post fix-up)         | `--color-surface-raised`                         | 3.22:1  | SC 1.4.11           |
+| 18 | `--color-border-strong` (post fix-up L=65)          | `--color-surface`                                | 3.06:1  | SC 1.4.11           |
+| 19 | `--color-border` (decorative)                       | `--color-surface`                                | 1.49:1  | not-gated           |
+| 20 | empty-pane preface (display italic on `--color-ink`)| session-pane (surface + 3% noise)                | ~17.0:1 | AAA · normal        |
+| 21 | `--color-ink-muted` (Open detail resting)           | `--color-surface`                                | 7.04:1  | AAA · normal        |
+
+### Dark mode
+
+| #  | Foreground                                          | Background                                       | Ratio   | Verdict             |
+|----|-----------------------------------------------------|--------------------------------------------------|---------|---------------------|
+| 01 | `--color-ink`                                       | `--color-surface`                                | 15.52:1 | AAA · normal        |
+| 02 | `--color-ink-muted`                                 | `--color-surface`                                | 7.36:1  | AAA · normal        |
+| 03 | `--color-ink`                                       | `--color-surface-raised`                         | 14.84:1 | AAA · normal        |
+| 04 | `--color-ink-muted`                                 | `--color-surface-raised`                         | 7.03:1  | AAA · normal        |
+| 05 | `--color-ink`                                       | row hover (4% ink mix)                           | 14.56:1 | AAA · normal        |
+| 06 | `--color-ink`                                       | row selected (8% accent mix)                     | 14.41:1 | AAA · normal        |
+| 07 | `--color-ink`                                       | row deep-link pulse peak (22% accent mix)        | 11.83:1 | AAA · normal        |
+| 08 | `--color-warn`                                      | `--color-surface`                                | 7.68:1  | AAA · normal        |
+| 09 | `--color-warn`                                      | row selected tint                                | 7.13:1  | AAA · normal        |
+| 10 | `--color-accent`                                    | `--color-surface`                                | 5.78:1  | AAA · normal        |
+| 10b | `--color-accent`                                   | `--color-surface-raised`                         | 5.52:1  | AAA · normal        |
+| 11 | up-to-date pill                                     | up-to-date pill bg                               | 6.94:1  | AAA · normal        |
+| 12 | not-stored pill                                     | not-stored pill bg                               | 6.62:1  | AAA · normal        |
+| 13 | outdated pill                                       | outdated pill bg                                 | 7.74:1  | AAA · normal        |
+| 14 | source-missing pill                                 | source-missing pill bg                           | 6.91:1  | AAA · normal        |
+| 15 | `.toast.success` border (65% mix)                   | `--color-surface-raised`                         | 3.55:1  | SC 1.4.11           |
+| 16 | `.toast.error` border (65% mix)                     | `--color-surface-raised`                         | 3.60:1  | SC 1.4.11           |
+| 17 | `.toast.info` border (70% mix)                      | `--color-surface-raised`                         | 3.62:1  | SC 1.4.11           |
+| 18 | `--color-border-strong` (post fix-up L=48)          | `--color-surface`                                | 3.00:1  | SC 1.4.11 (cusp)    |
+| 19 | `--color-border`                                    | `--color-surface`                                | 1.35:1  | not-gated           |
+
+## Codex fix-up round 2 closure (April 2026)
+
+Round 2 codex review caught **1 BLOCKING finding** that round 1 had
+deferred as "out-of-scope":
+
+- **`.title-cell-refresh` consumed `--color-warn` directly as
+  normal-size text**. The M2a oklch retint regressed the warn-as-text
+  pair vs `--color-surface` from ~5.3:1 (Phase 4 hex `#b86b07` on
+  `#ffffff`) to **4.21:1** (`oklch(58% 0.15 60)` on
+  `oklch(98% 0.005 250)`) — fails AA 4.5:1. Worse against the row-
+  state tints: 3.79:1 selected, lower under selected+hover and the
+  deep-link pulse peak.
+  - **Fix**: revert `.title-cell-refresh` color from
+    `var(--color-warn)` to `var(--color-text-muted)` in
+    `apps/frontend/src/features/sessions/SessionsTable.css:217`.
+    No token values changed.
+  - **Post-fix-up**: 7.04:1 vs surface (light), 7.36:1 (dark);
+    ~6.32:1 vs selected tint; all PASSES AA normal text. The
+    M1b designer documented this exact mitigation in
+    `working/phase-5/designs/m1b-shell/colors.md` lines 56-58 —
+    "the swap is a single token". The `--color-warn` token itself
+    stays at `oklch(58% 0.15 60)` (light) / `oklch(72% 0.13 60)`
+    (dark); pill + toast-border consumers (rows 13, 17) are
+    unaffected.
+
+## Codex fix-up round 1 closure (April 2026)
+
+Three codex BLOCKING findings were resolved by adjusting two oklch
+tokens. Verbatim post-fix-up measurements:
+
+- **Finding 1**: `.toast.info` border (70% mix(`--color-accent`,
+  `--color-border`)) vs `--color-surface-raised`.
+  - Pre-fix-up (accent L=60): **2.79:1** — failed SC 1.4.11.
+  - Post-fix-up (accent L=55): **3.22:1** — passes.
+- **Finding 2**: `--color-accent` as normal-size text (`.action-bar-clear`,
+  `.toast-details summary`).
+  - Pre-fix-up vs surface: 3.93:1 — failed AA. Vs surface-raised: 3.71:1.
+  - Post-fix-up vs surface: **4.84:1** — passes. Vs surface-raised: **4.57:1**.
+- **Finding 3**: `--color-border-strong` vs `--color-surface`.
+  - Pre-fix-up light (L=70): 2.53:1 — failed SC 1.4.11.
+  - Post-fix-up light (L=65): **3.06:1** — passes.
+  - Pre-fix-up dark (L=40): 2.13:1 — failed SC 1.4.11.
+  - Post-fix-up dark (L=48): **3.00:1** — passes (on the cusp;
+    documented for the next codex round).
+
+## Risk callouts
+
+### Resolved
+
+- **`.title-cell-refresh` warn-as-text contrast** (was 4.21:1 light
+  vs surface; failed AA 4.5:1 normal text). Codex round-2 BLOCKING
+  finding. **Resolved in M2a fix-up round 2**: reverted
+  `.title-cell-refresh` from `var(--color-warn)` to
+  `var(--color-text-muted)` per the M1b designer's optional
+  recommendation in `working/phase-5/designs/m1b-shell/colors.md`
+  lines 56-58. Post-fix: 7.04:1 light / 7.36:1 dark vs surface;
+  ~6.32:1 vs selected-row tint (8%); ~6.05:1 vs selected+hover
+  tint (12%); ~5.40:1 vs deep-link pulse peak (22%) — all pass
+  AA normal text by a comfortable margin in both modes. The
+  `--color-warn` token itself is unchanged (`oklch(58% 0.15 60)`
+  light / `oklch(72% 0.13 60)` dark); the warn pill + warn toast
+  border recipes still consume warn through mixes that already
+  passed (rows 13, 17 in light; rows 13, 17 in dark). The semantic
+  loss is small: the `(refresh)` marker no longer reads as
+  "warning sienna" but as "muted gray italic" — the M1b designer
+  approved this back-out path.
+
+### Outstanding (accepted risk)
+
+- **Dark `--color-border-strong` at 3.00:1** sits on the cusp. The
+  oklch L=48 was codex's recommended target; my measurement reads
+  3.0036 which rounds to 3.00. If a future codex round tightens the
+  rounding it may flag this as "below 3:1 by 0.004" — pre-emptive
+  mitigation is to bump dark `--color-border-strong` to
+  `oklch(50% 0.02 70)` (lifts to ~3.18:1). **Round 2 disposition**:
+  accepted-risk — bumping the token would ripple into the sticky-bar
+  top edge + filter `<details>` chevron border recipes and demand a
+  re-measure across both modes; left for a future round if codex
+  tightens the rounding rule.
+
+## Table-row hover/select stack-up
+
+The M1a row state recipe stacks hover, selection, and pulse tints in
+predictable layers. The §6 + §7 deep-link-pulse-peak measurement
+(12.62:1 light / 11.83:1 dark for `--color-ink` against the pulse
+peak) is the WORST-CASE moment in the row's animation — the brief
+0% keyframe instant when the accent tint is at 22% mix. Even at this
+peak the body text clears AAA in both modes. **No change needed
+to the M1a + M1b row state recipe under M2a.**
+
+## Hairline visibility (decorative, not WCAG-gated)
+
+`--color-border` against `--color-surface` lands at 1.49:1 (light) /
+1.35:1 (dark). Below WCAG floors, but this is intentional — the
+hairline is a decorative separator, not a UI border per SC 1.4.11.
+The Archive-room aesthetic specifically wants "hairline over shadow"
+(spec line 25), and a hairline that clears 3:1 reads as a heavy
+divider rather than a quiet line.
+
+The sticky-bar top edge uses `--color-border-strong` (3.06:1 light /
+3.00:1 dark, post fix-up) — that pair MUST clear 3:1 because the
+sticky bar is a chrome surface separator that demarcates the action
+bar from the scrolling list above it.
+
+## Automated re-measurement
+
+The Phase 5 / M2a contrast script lives at `/tmp/wcag_check.py`
+during the fix-up round (one-off measurement tool, not committed to
+the repo per Resolved Decision #16's "no third runtime dep" rule).
+The script:
+1. Hardcodes the post-fix-up oklch values for every M2a token.
+2. Converts each oklch value to sRGB via the canonical CSS Color L4
+   formula (~30 lines of inline math; no `culori` dep).
+3. For each pair in the table above, computes the WCAG 2.1 contrast
+   ratio: `((L1 + 0.05) / (L2 + 0.05))`.
+4. Emits a Markdown-style summary.
+
+The script was run once during M2a fix-up round 1 to produce the
+authoritative ratios above. Re-run only if a future round changes
+oklch tokens.
+
+## Hex fallback contrast (`@supports not (color: oklch(0% 0 0))`)
+
+The fallback layer's `--color-border-strong` was lifted in tandem
+with the oklch fix to keep parity:
+- Light hex `#8a909c` vs `#f8f9fb` surface: **3.04:1** (passes 3:1).
+- Dark hex `#5e6571` vs `#151821` surface: **3.02:1** (passes 3:1).
+
+Pre-fix-up the hex fallbacks (`#c8ccd4` light / `#3a404d` dark) were
+1.53:1 / 1.71:1 — failing 3:1. The fallback layer therefore now
+clears WCAG SC 1.4.11 in addition to the oklch primary layer. The
+remaining 22 hex literals are unchanged (Phase 4 cool-blue
+aesthetic; documented regression per design.md §9.3).
+
+exec
+/bin/bash -lc "sed -n '360,440p' working/phase-5/designs/m2a-tokens/design.md" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+    already consume `var(--color-accent)`, so the new oklch sienna
+    retints the keyframe automatically.
+
+The 11 feature-local CSS consumers continue to read alias names
+unchanged; they are not in M2a's diff.
+
+## 7. WCAG AA contrast table
+
+The full table lives at `wcag.md`. The summary here calls out the
+load-bearing pairs that drive the M2a acceptance gate. **All ratios
+below are codex-measured** post-fix-up round 1 (April 2026), not
+designer-estimated. The original CIE2000-anchored designer estimates
+were optimistic — codex's numerical computation (canonical
+oklch → linear sRGB → relative luminance pipeline) is authoritative
+and revealed three BLOCKING failures that this design.md now reflects.
+
+| Pair                                                    | Light  | Dark   | Verdict       |
+|---------------------------------------------------------|--------|--------|---------------|
+| `--color-ink` on `--color-surface`                      | 17.10:1| 15.52:1| AAA · normal  |
+| `--color-ink-muted` on `--color-surface`                | 7.04:1 | 7.36:1 | AAA · normal  |
+| `--color-ink` on `--color-surface-raised`               | 16.13:1| 14.84:1| AAA · normal  |
+| `--color-ink` on row hover (4% ink)                     | 15.79:1| 14.56:1| AAA · normal  |
+| `--color-ink` on row selected (8% accent)               | 15.36:1| 14.41:1| AAA · normal  |
+| `--color-ink` on deep-link pulse peak (22% accent)      | 12.62:1| 11.83:1| AAA · normal  |
+| `--color-warn` (informational; no longer text-consumed post round 2) on `--color-surface` | 4.21:1 | 7.68:1 | not consumed as text post round 2 |
+| `--color-warn` (informational; no longer text-consumed post round 2) on row selected tint | 3.79:1 | 7.13:1 | not consumed as text post round 2 |
+| `.title-cell-refresh` italic (`--color-text-muted`) on `--color-surface` | 7.04:1 | 7.36:1 | AAA · normal |
+| `.title-cell-refresh` italic (`--color-text-muted`) on row selected tint | ~6.32:1 | ~6.62:1 | AAA · normal |
+| `--color-accent` (post fix-up L=55) on `--color-surface`| 4.84:1 | 5.78:1 | AA · normal   |
+| `--color-accent` on `--color-surface-raised`            | 4.57:1 | 5.52:1 | AA · normal   |
+| up-to-date pill (success 70/15)                         | 6.69:1 | 6.94:1 | AAA · normal  |
+| not-stored pill (accent 70/15)                          | 5.95:1 | 6.62:1 | AAA · normal  |
+| outdated pill (warn 70/15)                              | 5.43:1 | 7.74:1 | AAA · normal  |
+| source-missing pill (error 70/15)                       | 6.60:1 | 6.91:1 | AAA · normal  |
+| Toast.success border (65% mix) on raised                | 3.34:1 | 3.55:1 | SC 1.4.11     |
+| Toast.error border (65% mix) on raised                  | 3.53:1 | 3.60:1 | SC 1.4.11     |
+| Toast.info border (70% mix, post fix-up) on raised      | 3.22:1 | 3.62:1 | SC 1.4.11     |
+| `--color-border-strong` (post fix-up) on `--color-surface` | 3.06:1 | 3.00:1 | SC 1.4.11 (cusp dark) |
+| `--color-border` on `--color-surface` (decorative)      | 1.49:1 | 1.35:1 | not WCAG-gated |
+
+**Codex fix-up round 1 (April 2026) — three BLOCKING resolutions**:
+
+1. **`.toast.info` border**: pre-fix-up 70% mix at accent L=60 measured
+   2.79:1 vs surface-raised — failed SC 1.4.11. Fix: lower light
+   `--color-accent` to L=55. Post-fix-up: 3.22:1 — passes.
+2. **`--color-accent` as normal text** (`.action-bar-clear`,
+   `.toast-details summary`): pre-fix-up L=60 measured 3.93:1 vs
+   surface, 3.71:1 vs surface-raised — failed AA normal text. Same
+   fix (L=60 → L=55) lifts both to 4.84:1 / 4.57:1 — passes.
+3. **`--color-border-strong`** vs `--color-surface`: pre-fix-up light
+   L=70 measured 2.53:1, dark L=40 measured 2.13:1 — failed SC 1.4.11.
+   Fix: light L=70 → L=65, dark L=40 → L=48. Post-fix-up: 3.06:1
+   light, 3.00:1 dark — passes (dark on the cusp).
+
+**Codex fix-up round 2 (April 2026) — 1 BLOCKING resolution**:
+
+- **`.title-cell-refresh` warn-as-text contrast**: round 1 deferred
+  this as out-of-scope; round 2 codex review reclassified it as a
+  real M2a regression (the oklch retint dropped the pair from
+  ~5.3:1 hex baseline to 4.21:1 light vs surface, with worse ratios
+  against selected/hover/pulse-peak tints). **Fix**: revert
+  `.title-cell-refresh` color from `var(--color-warn)` to
+  `var(--color-text-muted)` in
+  `apps/frontend/src/features/sessions/SessionsTable.css` (line 217),
+  per the M1b designer's documented mitigation in
+  `working/phase-5/designs/m1b-shell/colors.md` lines 56-58.
+  Post-fix-up: 7.04:1 light / 7.36:1 dark vs `--color-surface`;
+  ~6.32:1 vs selected-row tint — passes AA normal text by a
+  comfortable margin. The `--color-warn` token itself is unchanged
+  (still `oklch(58% 0.15 60)` / `oklch(72% 0.13 60)`); pill + toast-
+  border recipes are unaffected.
+
+The hairline `--color-border` is intentionally below 3:1 — it is a
+decorative separator, not a UI border per SC 1.4.11. The
+sticky-bar top edge uses `--color-border-strong` instead specifically
+because it must clear 3:1 (the sticky bar carries the M1b's selection
+count + Pagination, and the top edge demarcates the chrome from the
+scrollable list above).
+
+## 8. Reading wash (noise overlay) — signature detail #6
+
+
+exec
+/bin/bash -lc "sed -n '670,705p' working/phase-5/designs/m2a-tokens/design.md" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+- §Resolved Decisions #16 — oklch source-of-truth + hex fallback.
+- §Open Considerations, "Fraunces subset preparation" bullet —
+  Option A subsetting recipe.
+
+Architecture refs:
+- `ARCHITECTURE.md` — Bun-first; cascade order.
+- `PRD.md` — line 223 (disabled-summary placeholder, unrelated to
+  M2a but the editorial mood justification).
+- `docs/dependency-rules.md` — 2-slot escape-hatch budget;
+  M2a documents Fraunces as static asset.
+
+M1a + M1b artifact references:
+- `working/phase-5/designs/m1a-shell/design.md` — M1a token
+  consumers + state recipe baseline.
+- `working/phase-5/designs/m1b-shell/design.md` — M1b consumers
+  (`.title-cell-refresh` was warmed to `--color-warn` in M1b; M2a
+  fix-up round 2 reverted it to `--color-text-muted` because the
+  warn-as-text pair regressed under the oklch retint; sticky footer
+  two-hairline structure; filter `<details>` chevron).
+- `working/phase-5/designs/m1b-shell/colors.md` — M1b WCAG notes
+  documenting `.title-cell-refresh` against new tokens (the M1b
+  designer flagged the contrast against the selected-row tint
+  for M2 re-measurement; the §7 table above confirms it holds).
+
+## 11. Implementation acceptance checklist
+
+Numbered for the developer to verify line-by-line before requesting
+review:
+
+1. `tokens.css` declares `--color-ink`, `--color-ink-muted`,
+   `--color-surface`, `--color-surface-raised`, `--color-border`,
+   `--color-border-strong`, `--color-accent`, `--color-accent-hover`
+   with light-mode oklch values matching §3.
+2. `@media (prefers-color-scheme: dark)` block in `tokens.css`
+   re-declares the same tokens with dark-mode oklch values matching §3.
+3. The four alias declarations (`--color-text: var(--color-ink);`
+
+exec
+/bin/bash -lc "sed -n '1,220p' /tmp/m2a-diff-v3.patch" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+diff --git a/apps/frontend/src/App.test.tsx b/apps/frontend/src/App.test.tsx
+index 2e10935..2c022da 100644
+--- a/apps/frontend/src/App.test.tsx
++++ b/apps/frontend/src/App.test.tsx
+@@ -1158,9 +1158,11 @@ test("statusConflict: a both-row with disagreeing source/stored statuses renders
+   const { container } = render(<App />);
+   await screen.findByText("claude_code:conflict-key");
+   // M1b moved the (refresh) marker INSIDE the Title cell stack — it
+-  // is rendered with the dedicated `.title-cell-refresh` class on a
+-  // `--color-warn`-tinted italic span (design.md §3.2). The hover
+-  // hint copy is preserved verbatim from Phase 4.
++  // is rendered with the dedicated `.title-cell-refresh` class on an
++  // italic span. M1b initially warmed it to `--color-warn`; the M2a
++  // fix-up round 2 reverted the color to `--color-text-muted` (the
++  // oklch retint regressed warn-as-text below the AA 4.5:1 floor).
++  // The hover hint copy is preserved verbatim from Phase 4.
+   const refreshSpan = container.querySelector(".title-cell-refresh");
+   expect(refreshSpan).not.toBeNull();
+   expect(refreshSpan?.textContent).toBe("(refresh)");
+diff --git a/apps/frontend/src/components/Toast.css b/apps/frontend/src/components/Toast.css
+index 2f75146..2f092b4 100644
+--- a/apps/frontend/src/components/Toast.css
++++ b/apps/frontend/src/components/Toast.css
+@@ -74,12 +74,27 @@
+ /* Toast variant identity is conveyed by border color alone (no per-variant
+  * background fill), so the border MUST clear WCAG SC 1.4.11 non-text
+  * contrast (3:1 against `--color-surface-raised`). The original 50% mix
+- * against `--color-border` failed in light (2.5-2.8 range). 65% mix
+- * lifts every variant to 3.07-3.83 in both modes (verified via the M6
+- * contrast script — see WCAG table in `progress/phase-4.progress.md`).
+- * Badges use a different recipe (35%) because their identity is the
+- * filled tinted background + AA-passing pill text, so the badge border
+- * is decorative reinforcement under SC 1.4.11. */
++ * against `--color-border` failed in light (2.5-2.8 range). Phase 4 M6
++ * lifted to 65% (verified 3.07-3.83 in both modes via the M6 contrast
++ * script — see WCAG table in `progress/phase-4.progress.md`).
++ *
++ * Phase 5 / M2a bumps `.toast.info` to 70% as a pre-emptive mitigation
++ * per UI/UX reviewer Q3 + design.md §7. Reasoning: M2a swaps the
++ * `--color-accent` from the Phase 4 cool-blue literal to oklch sienna
++ * (`oklch(60% 0.15 50)`); the Phase 4 measurement of 3.07:1 was
++ * borderline against the cool-blue accent, and oklch `color-mix`
++ * interpolation can drift slightly from sRGB-anchored expectations.
++ * Bumping the info variant to 70% restores the safety margin (designer
++ * estimate ~3.3:1 light, ~3.8:1 dark) without touching the success /
++ * error variants, which sit on different-hue color tokens unaffected
++ * by the accent palette swap. Codex precedent at Phase 4 M6 caught a
++ * sub-3:1 toast border the designer had reported as passing — this
++ * preemptive bump is the same risk surface mitigated proactively.
++ * The 70% literal here will be re-verified with the M6 contrast script
++ * once the WCAG sweep runs against the implementation tokens. Badges
++ * use a different recipe (35%) because their identity is the filled
++ * tinted background + AA-passing pill text, so the badge border is
++ * decorative reinforcement under SC 1.4.11. */
+ .toast.success {
+   border-color: color-mix(in srgb, var(--color-success) 65%, var(--color-border));
+ }
+@@ -89,7 +104,7 @@
+ }
+ 
+ .toast.info {
+-  border-color: color-mix(in srgb, var(--color-accent) 65%, var(--color-border));
++  border-color: color-mix(in srgb, var(--color-accent) 70%, var(--color-border));
+ }
+ 
+ .toast-title {
+diff --git a/apps/frontend/src/features/sessions/SessionView.css b/apps/frontend/src/features/sessions/SessionView.css
+index 56f2d1f..4f63a37 100644
+--- a/apps/frontend/src/features/sessions/SessionView.css
++++ b/apps/frontend/src/features/sessions/SessionView.css
+@@ -42,6 +42,36 @@
+   /* Wide-viewport gutter is `border-right` on `.list-pane` (set in
+    * global.css). The session pane carries no border — the hairline
+    * gutter is the single visual separator. */
++
++  /* M2a / signature detail #6: reading-wash texture. A 1-px
++   * `feTurbulence` SVG at 3% alpha tiled across the right pane —
++   * invisible at a glance, but reads as paper grain rather than
++   * default browser white. Suppressed in dark mode (the deep warm
++   * surface already carries the editorial mood without texture) and
++   * under `prefers-reduced-motion: reduce` (the wash is decorative;
++   * users who opt out of motion typically also dislike incidental
++   * surface treatment per WCAG WAI guidance). The token is
++   * `--noise-overlay-light` declared in `tokens.css`.
++   *
++   * Note: the M1a global reduced-motion zero-out in `global.css`
++   * targets `animation-duration` / `transition-duration` /
++   * `scroll-behavior` only — `background-image` is NOT in that
++   * property list, so the dedicated suppression rules below are
++   * additive, not redundant. */
++  background-image: var(--noise-overlay-light);
++  background-repeat: repeat;
++}
++
++@media (prefers-color-scheme: dark) {
++  .session-pane {
++    background-image: none;
++  }
++}
++
++@media (prefers-reduced-motion: reduce) {
++  .session-pane {
++    background-image: none;
++  }
+ }
+ 
+ .session-state {
+@@ -52,13 +82,22 @@
+   margin-top: var(--space-3);
+ }
+ 
+-/* Empty preface. The mark glyph is a typographic ornament: a single
+- * centered middle-dot in `var(--color-text-muted)` at `--text-xl`.
+- * `aria-hidden="true"` on the glyph in JSX (decorative). */
++/* Empty preface. M2a promotes the empty-pane preface to the
++ * Archive-room display layer: the mark glyph + first paragraph render
++ * in Fraunces italic per spec line 36 (Display stack: empty-pane
++ * preface). The glyph also bumps from `--text-xl` to `--text-2xl` so
++ * the editorial moment carries the spec's "centered small
++ * illustration" intent (spec line 595; designer §9.2). The second
++ * paragraph stays in the chrome stack so the visual rhythm is
++ * "italic display heading + grounding chrome body" rather than two
++ * stacked italic blocks. `aria-hidden="true"` on the glyph in JSX
++ * (decorative). */
+ .empty-mark {
+   display: block;
+   text-align: center;
+-  font-size: var(--text-xl);
++  font-family: var(--font-display);
++  font-style: italic;
++  font-size: var(--text-2xl);
+   font-weight: 200;
+   letter-spacing: 0.2em;
+   color: var(--color-text-muted);
+@@ -66,15 +105,17 @@
+   user-select: none;
+ }
+ .empty-prose-1 {
++  font-family: var(--font-display);
++  font-style: italic;
+   font-size: var(--text-lg);
+   color: var(--color-text);
+-  line-height: 1.55;
++  line-height: var(--leading-comfortable);
+   margin: 0;
+ }
+ .empty-prose-2 {
+   font-size: var(--text-base);
+   color: var(--color-text-muted);
+-  line-height: 1.55;
++  line-height: var(--leading-comfortable);
+   margin: 0;
+ }
+ 
+diff --git a/apps/frontend/src/features/sessions/SessionsTable.css b/apps/frontend/src/features/sessions/SessionsTable.css
+index 811595f..bb7bf9f 100644
+--- a/apps/frontend/src/features/sessions/SessionsTable.css
++++ b/apps/frontend/src/features/sessions/SessionsTable.css
+@@ -206,15 +206,21 @@ td.select-col {
+   min-width: 0;
+ }
+ 
+-/* M1b warms the (refresh) marker from --color-text-muted (Phase 4) to
+- * --color-warn so the marker scans as a state hint rather than
+- * incidental copy. WCAG-AA contrast verified in
+- * working/phase-5/designs/m1b-shell/colors.md. Italic so it reads as
+- * an editorial aside. */
++/* M1b initially warmed the (refresh) marker from --color-text-muted
++ * (Phase 4) to --color-warn so it would scan as a state hint. The
++ * M2a oklch retint of --color-warn dropped the warn-as-text pair
++ * vs --color-surface from ~5.3:1 (Phase 4 hex) to 4.21:1 (oklch),
++ * which fails the 4.5:1 AA normal-text floor. The M2a fix-up round 2
++ * reverts the marker to --color-text-muted per the M1b designer's
++ * documented mitigation (working/phase-5/designs/m1b-shell/colors.md
++ * lines 56-58) — clean 7.04:1 light / 7.36:1 dark, and still passes
++ * across the row-state stack-up (selected, selected+hover, deep-link
++ * pulse peak). The italic preserves the editorial-aside reading; the
++ * loss of warm sienna is acceptable per the M1b designer's note. */
+ .title-cell-refresh {
+   flex-shrink: 0;
+   font-size: var(--text-xs);
+-  color: var(--color-warn);
++  color: var(--color-text-muted);
+   font-style: italic;
+ }
+ 
+@@ -263,15 +269,17 @@ table tbody tr[aria-current="true"]:hover {
+ }
+ 
+ table tbody tr[data-deep-link="true"] {
+-  /* 600 ms ease-out one-shot. Per the spec's allow-list (§Acceptance
+-   * Criteria line 1100) `background-color` is the only animatable
+-   * property that may carry a one-shot reveal here. The 600 ms
+-   * literal is the spec's `--motion-pulse` token from M2's motion
+-   * scale; M1a hard-codes it because the token does not exist yet.
+-   * The keyframe peak (22%) settles to the resting selected tint
+-   * (8%) — designer §7.8 — so there is no flash from the pulse
+-   * fading INTO a different shade. */
+-  animation: deep-link-pulse 600ms ease-out 1;
++  /* One-shot pulse on URL-driven selection. Per the spec's allow-list
++   * (§Acceptance Criteria line 1100) `background-color` is the only
++   * animatable property that may carry a one-shot reveal here. M1a
++   * hard-coded `600ms ease-out` as literals because the motion tokens
++   * did not exist yet; M2a migrates the duration + easing to the
++   * spec's `--motion-pulse` (600 ms) and `--ease-out` tokens defined
++   * in `tokens.css`. The trailing `1` is the algorithmic iteration
++   * count (not a token; literal). The keyframe peak (22%) settles to
++   * the resting selected tint (8%) — designer §7.8 — so there is no
++   * flash from the pulse fading INTO a different shade. */
++  animation: deep-link-pulse var(--motion-pulse) var(--ease-out) 1;
+ }
+ 
+ @keyframes deep-link-pulse {
+diff --git a/apps/frontend/src/features/sessions/SessionsTable.tsx b/apps/frontend/src/features/sessions/SessionsTable.tsx
+index 5151759..20464ff 100644
+--- a/apps/frontend/src/features/sessions/SessionsTable.tsx
++++ b/apps/frontend/src/features/sessions/SessionsTable.tsx
+@@ -22,11 +22,16 @@
+ //
+ // Per spec, a row whose `statusConflict` is true gets a small
+
+exec
+/bin/bash -lc "sed -n '220,520p' /tmp/m2a-diff-v3.patch" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+ // Per spec, a row whose `statusConflict` is true gets a small
+ // "(refresh)" affordance inside the Title cell — telegraphing the
+-// "fetched state changed during load — refresh" hint. M1b warms the
+-// marker color from `--color-text-muted` (Phase 4) to `--color-warn`
+-// per design.md §3.2 so the marker scans as a state hint rather than
+-// incidental copy (WCAG-AA contrast verified in
+-// working/phase-5/designs/m1b-shell/colors.md).
++// "fetched state changed during load — refresh" hint. M1b warmed
++// the marker color from `--color-text-muted` (Phase 4) to
++// `--color-warn`; the M2a fix-up round 2 reverted it back to
++// `--color-text-muted` (italic) because the oklch retint regressed
++// the warn-as-text pair vs `--color-surface` to 4.21:1 (fails AA
++// 4.5:1 normal text). See `working/phase-5/designs/m2a-tokens/wcag.md`
++// "Codex fix-up round 2 closure" and the M1b designer's documented
++// mitigation in `working/phase-5/designs/m1b-shell/colors.md` lines
++// 56-58. The hint copy is unchanged; only the visual treatment
++// stepped back from "warning sienna" to "muted gray italic".
+ //
+ // As of M3 the "Updated" cell renders a relative-time string against
+ // a single `now` captured at refetch time in `App.tsx` (passed in as a
+diff --git a/apps/frontend/src/styles/tokens.css b/apps/frontend/src/styles/tokens.css
+index c5cf834..49e18cc 100644
+--- a/apps/frontend/src/styles/tokens.css
++++ b/apps/frontend/src/styles/tokens.css
+@@ -5,27 +5,95 @@
+  * shadow values used anywhere else in the frontend. Hex literals are
+  * permitted only inside this file; every other CSS file consumes these
+  * tokens via `var(--…)` references (see working/phase-4.md §Design
+- * Tokens).
++ * Tokens; carried forward in working/phase-5.md §Design Tokens).
+  *
+- * Dark mode is handled by redefining the same color variables under
+- * `prefers-color-scheme: dark`. Spacing, radius, typography, and shadow
+- * values are not redefined per scheme.
++ * Phase 5 / M2a — Design Language tokens (Archive-room aesthetic):
++ *   - oklch() is the source-of-truth color space (warm-paper light /
++ *     deep-ink dark; sienna accent, hue 50-70°). Chromium 111+ ships
++ *     native oklch support. The existing 24 hex literals below form a
++ *     `@supports not (color: oklch(0% 0 0))` fallback layer for older
++ *     browsers (Phase 4 cool-blue palette — cohesive but not warm-paper;
++ *     documented aesthetic regression per design.md §9.3).
++ *   - The Phase 4 token names that survive (`--color-text`,
++ *     `--color-bg`, `--color-text-muted`, `--font-sans`) become aliases
++ *     mapping to the new canonical names (`--color-ink`,
++ *     `--color-surface`, `--color-ink-muted`, `--font-chrome`). This
++ *     "Option B" strategy lets all 11 feature-local CSS files keep their
++ *     existing `var(...)` references unchanged — zero feature-local
++ *     rewrites, one risk surface.
++ *   - Three font stacks (display Fraunces / chrome system-sans / mono
++ *     JetBrains-Mono-prepended). Two `@font-face` rules self-host
++ *     Fraunces from `apps/frontend/public/fonts/`. The Italic axis ships
++ *     as a separate variable file because Fraunces is distributed as two
++ *     variable fonts upstream (Roman + Italic) rather than one
++ *     ital-axis variable font.
++ *   - Type-scale literals revised to spec values
++ *     (working/phase-5.md §Typography tokens, lines 887–905).
++ *     `--text-2xl: 2rem` is **NEW** — first consumer is the empty-mark
++ *     glyph in `SessionView.css`; future consumers are M5 chapter-break
++ *     labels and the eventual app title.
++ *   - Motion tokens: 4 durations (`--motion-fast` 80 ms / `--motion-base`
++ *     120 ms / `--motion-disclosure` 200 ms / `--motion-pulse` 600 ms);
++ *     3 easings (`--ease-standard` / `--ease-out` / `--ease-in-out`).
++ *     Reduced-motion zero-out lives in `global.css` (unchanged from M1a).
++ *   - Surface treatment: `--noise-overlay-light` is the inline-SVG data
++ *     URL (~1 KB) for the reading-wash texture. Applied to `.session-pane`
++ *     in light mode only via `SessionView.css` (see file header there).
++ *
++ * Cascade ordering (unchanged from Phase 4 + M1a):
++ *   `reset.css → tokens.css → global.css → feature-local sibling sheets`.
++ *   This file declares both the canonical oklch tokens AND the aliases AND
++ *   the @supports hex fallback in one block per Resolved Decision #16.
++ *
++ * Hex isolation invariant: `rg -n '#[0-9a-fA-F]{3,8}' apps/frontend/src/ | wc -l`
++ *   = 24 (unchanged from Phase 4 baseline; the 24 literals migrated into
++ *   the @supports fallback block).
++ *
++ * Token count (manual): `grep -cE '^\s*--' apps/frontend/src/styles/tokens.css`
++ *   = 83 (44 Phase 4 baseline tokens declared once at light + 39 redeclared
++ *   inside the `@media (prefers-color-scheme: dark)` block + the
++ *   `@supports` hex fallback block; counted with `grep -cE '^\s*--'` after
++ *   M2a landed). The design.md §3 estimate of ~74 only counted the
++ *   semantically-distinct token names; the actual file count is higher
++ *   because each color token is redeclared (light + dark + light hex
++ *   fallback + dark hex fallback). Phase 4 baseline file count was 44.
+  */
+ 
+ :root {
+-  --color-bg: #ffffff;
+-  --color-surface: #f8f9fb;
+-  --color-surface-raised: #ffffff;
+-  --color-border: #e3e5ea;
+-  --color-border-strong: #c8ccd4;
+-  --color-text: #14161a;
+-  --color-text-muted: #5a606b;
+-  --color-accent: #2864d4;
+-  --color-accent-hover: #1d4fa8;
+-  --color-success: #1f7a4a;
+-  --color-warn: #b86b07;
+-  --color-error: #b13838;
++  /* ===== Color tokens (oklch source-of-truth) ===== */
++
++  /* Canonical names per Phase 5 spec §Design Tokens. */
++  --color-surface: oklch(98% 0.01 70);
++  --color-surface-raised: oklch(96% 0.01 70);
++  --color-ink: oklch(20% 0.02 70);
++  --color-ink-muted: oklch(45% 0.02 70);
++  --color-border: oklch(85% 0.01 70);
++  --color-border-strong: oklch(65% 0.02 70);
++  --color-accent: oklch(55% 0.15 50);
++  --color-accent-hover: oklch(50% 0.16 50);
++  --color-success: oklch(48% 0.13 155);
++  --color-warn: oklch(58% 0.15 60);
++  --color-error: oklch(52% 0.18 25);
++
++  /* Modal scrim alpha overlay for native `<dialog>::backdrop`. The
++   * Phase 4 baseline uses an `rgba()` literal because the backdrop
++   * needs explicit alpha; this declaration is preserved verbatim and
++   * does NOT need an oklch counterpart (alpha-on-black is colorspace-
++   * agnostic at this opacity). */
++  --color-backdrop: rgba(0, 0, 0, 0.45);
+ 
++  /* ===== Color aliases (Option B back-compat for Phase 4 consumers) =====
++   * These four declarations let the 11 feature-local CSS files keep
++   * their existing `var(--color-text)` / `var(--color-bg)` /
++   * `var(--color-text-muted)` / `var(--font-sans)` references without
++   * any rewrite. Aliases survive indefinitely; future planners may
++   * incrementally migrate consumers to the canonical names but do not
++   * have to. See design.md §9.1 for rationale. */
++  --color-text: var(--color-ink);
++  --color-text-muted: var(--color-ink-muted);
++  --color-bg: var(--color-surface);
++
++  /* ===== Spacing scale (unchanged from Phase 4) ===== */
+   --space-1: 0.25rem;
+   --space-2: 0.5rem;
+   --space-3: 0.75rem;
+@@ -33,43 +101,238 @@
+   --space-6: 1.5rem;
+   --space-8: 2rem;
+ 
++  /* ===== Radius scale (unchanged from Phase 4) ===== */
+   --radius-sm: 4px;
+   --radius-md: 6px;
+   --radius-lg: 12px;
+ 
+-  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+-  --text-xs: 0.72rem;
+-  --text-sm: 0.85rem;
+-  --text-base: 0.95rem;
+-  --text-lg: 1.15rem;
+-  --text-xl: 1.35rem;
++  /* ===== Typography stacks (Phase 5 / M2a) =====
++   * Three families:
++   *   - `--font-display`: Fraunces self-hosted variable serif at
++   *     `/fonts/Fraunces-subset.woff2` + Italic counterpart. Used for
++   *     editorial display surfaces (empty-pane preface, future M5
++   *     chapter-break labels, future app title). Fallback chain renders
++   *     in Charter / Iowan Old Style / Georgia at ~99% size if the
++   *     woff2 fails to load (size-adjust + ascent-override on @font-face
++   *     below).
++   *   - `--font-chrome`: native system sans stack. All chrome surfaces
++   *     (table cells, filters, badges, tabs, metadata `<dt>`/`<dd>`).
++   *     No download cost.
++   *   - `--font-mono`: JetBrains Mono prepended to the existing Phase 4
++   *     mono fallback chain. NOT self-hosted; system fallback covers
++   *     every developer machine. */
++  --font-display: "Fraunces", Charter, "Iowan Old Style", Georgia, serif;
++  --font-chrome: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI",
++    Roboto, sans-serif;
++  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", SFMono-Regular,
++    Menlo, Consolas, monospace;
++  --font-sans: var(--font-chrome);
++
++  /* ===== Type scale (Phase 5 / M2a — revised to spec values) =====
++   * Phase 4 had `--text-xs` through `--text-xl` at slightly tighter
++   * literals (`0.72rem`, `0.85rem`, `0.95rem`, `1.15rem`, `1.35rem`).
++   * The Phase 5 spec literals (line 894–899) are 16 px-anchored and
++   * shift body text +5% (`0.95rem` → `1rem`). Documented intentional
++   * shift per design.md §12 question 4: ship the spec value. */
++  --text-xs: 0.75rem;
++  --text-sm: 0.875rem;
++  --text-base: 1rem;
++  --text-lg: 1.125rem;
++  --text-xl: 1.5rem;
++  --text-2xl: 2rem;
++
++  /* ===== Leading + measure (Phase 5 / M2a NEW) ===== */
++  --leading-tight: 1.25;
++  --leading-comfortable: 1.55;
++  --measure: 70ch;
+ 
++  /* ===== Motion tokens (Phase 5 / M2a NEW) =====
++   * 4 durations + 3 easings. Reduced-motion zero-out lives in
++   * `global.css` (a single `@media (prefers-reduced-motion: reduce)`
++   * rule that targets `*, *::before, *::after`); the durations here
++   * become 0.01 ms via the !important zero-out automatically. */
++  --motion-fast: 80ms;
++  --motion-base: 120ms;
++  --motion-disclosure: 200ms;
++  --motion-pulse: 600ms;
++  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
++  --ease-out: cubic-bezier(0, 0, 0.2, 1);
++  --ease-in-out: cubic-bezier(0.4, 0, 0.6, 1);
++
++  /* ===== Shadows (unchanged from Phase 4) =====
++   * Per design language §"Hairline over shadow", chrome carries no
++   * drop shadows except the existing Phase 4 sticky action bar / toast
++   * surfaces. */
+   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+   --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.08);
+ 
+-  /* Modal scrim alpha overlay for native `<dialog>::backdrop`. Lives in
+-   * the token layer so the dist CSS hex audit (`rg '#[0-9a-fA-F]{3,8}'
+-   * apps/frontend/dist/assets/*.css`) traces every literal back to a
+-   * token. Dark mode darkens the scrim slightly so the modal still
+-   * separates cleanly from the page surface. */
+-  --color-backdrop: rgba(0, 0, 0, 0.45);
++  /* ===== Surface treatment (Phase 5 / M2a NEW) =====
++   * The reading-wash overlay (signature detail #6 per spec line 76).
++   * 80×80 inline SVG with a fractalNoise filter at 3% alpha. ~1 KB
++   * data URL. Applied to `.session-pane` in `SessionView.css` light
++   * mode only; suppressed in dark mode AND under
++   * `prefers-reduced-motion: reduce`.
++   *
++   * URL-encoding deviation from spec line 922: `#` and `%` are reserved
++   * in URLs and MUST be escaped inside a `url(...)` data-URL string so
++   * the CSS parser doesn't treat them as fragment / percent tokens.
++   * This implementation escapes both:
++   *   - `%23n` for `#n` (the SVG filter id reference) — per spec.
++   *   - `100%25` for `100%` (the rect width/height) — additional escape
++   *     the spec snippet omitted; required because Chromium's CSS data-
++   *     URL parser would otherwise interpret the bare `%` and produce
++   *     an invalid SVG. The visual result is byte-equivalent to the
++   *     spec snippet's intent (the `%25` decodes back to `%` inside the
++   *     SVG once the data URL is parsed). */
++  --noise-overlay-light: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.03 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+ }
+ 
++/* ===== Dark mode (oklch source-of-truth) =====
++ * Per Phase 5 §Color philosophy, dark mode is "deep-ink, slightly
++ * warm" rather than the Phase 4 cold near-black. Surface luminance
++ * 15%, chroma 0.01 at hue 70° (warm-paper anchor). Accent stays at
++ * hue 50° but lifts in lightness + chroma so it remains visible
++ * against the deep ink. */
+ @media (prefers-color-scheme: dark) {
+   :root {
+-    --color-bg: #0f1115;
+-    --color-surface: #151821;
+-    --color-surface-raised: #1b1f2a;
+-    --color-border: #262b36;
+-    --color-border-strong: #3a404d;
+-    --color-text: #e8eaef;
+-    --color-text-muted: #9098a6;
+-    --color-accent: #6da5ff;
+-    --color-accent-hover: #8bbbff;
+-    --color-success: #5fb68a;
+-    --color-warn: #e0a75a;
+-    --color-error: #e57d7d;
++    --color-surface: oklch(15% 0.01 70);
++    --color-surface-raised: oklch(18% 0.01 70);
++    --color-ink: oklch(92% 0.01 70);
++    --color-ink-muted: oklch(70% 0.01 70);
++    --color-border: oklch(28% 0.01 70);
++    --color-border-strong: oklch(48% 0.02 70);
++    --color-accent: oklch(65% 0.15 50);
++    --color-accent-hover: oklch(72% 0.13 50);
++    --color-success: oklch(64% 0.13 155);
++    --color-warn: oklch(72% 0.13 60);
++    --color-error: oklch(68% 0.16 25);
+     --color-backdrop: rgba(0, 0, 0, 0.6);
+   }
+ }
++
++/* ===== @supports hex fallback layer (Phase 5 / M2a NEW) =====
++ * For browsers without native `oklch()` support (Chromium <111,
++ * Firefox <113, Safari <15.4) the canonical color tokens fall back to
++ * the Phase 4 hex literals. The aesthetic regression (Phase 4
++ * cool-blue palette renders instead of Archive-room warm-paper) is
++ * documented + accepted per design.md §9.3 — the fallback is a
++ * cohesive Phase 4 design, only the hue differs.
++ *
++ * Hex isolation invariant: every `#`-prefixed literal in
++ * `apps/frontend/src/` lives inside this block. Total = 24
++ * (12 light + 12 dark). The aliases (`--color-text` etc.) and the
++ * canonical declarations above continue to work — `var(...)`
++ * references resolve through the aliases to the canonical name, and
++ * the canonical name picks up either the oklch value (modern browsers)
++ * or the hex (legacy browsers). */
++@supports not (color: oklch(0% 0 0)) {
++  :root {
++    --color-bg: #ffffff;
++    --color-surface: #f8f9fb;
++    --color-surface-raised: #ffffff;
++    --color-border: #e3e5ea;
++    --color-border-strong: #8a909c;
++    --color-ink: #14161a;
++    --color-ink-muted: #5a606b;
++    --color-accent: #2864d4;
++    --color-accent-hover: #1d4fa8;
++    --color-success: #1f7a4a;
+
+codex
+The implementation shows the fix at `SessionsTable.css:223`. I also see the remaining runtime warn uses are the outdated status pill’s mixed foreground/background/border recipes and token definitions; I’m checking those ratios and the dark border cusp next.
+exec
+/bin/bash -lc "node - <<'NODE'
+const deg=Math.PI/180;
+function oklch(Lpct,C,h){return {L:Lpct/100,C,h};}
+function oklchToSrgb({L,C,h}){
+  const a=C*Math.cos(h*deg), b=C*Math.sin(h*deg);
+  const l_=L + 0.3963377774*a + 0.2158037573*b;
+  const m_=L - 0.1055613458*a - 0.0638541728*b;
+  const s_=L - 0.0894841775*a - 1.2914855480*b;
+  const l=l_**3, m=m_**3, s=s_**3;
+  const r= 4.0767416621*l - 3.3077115913*m + 0.2309699292*s;
+  const g=-1.2684380046*l + 2.6097574011*m - 0.3413193965*s;
+  const bl=-0.0041960863*l - 0.7034186147*m + 1.7076147010*s;
+  return [enc(r),enc(g),enc(bl)].map(x=>Math.min(1,Math.max(0,x)));
+}
+function enc(u){return u <= 0.0031308 ? 12.92*u : 1.055*Math.pow(u,1/2.4)-0.055;}
+function dec(u){return u <= 0.04045 ? u/12.92 : Math.pow((u+0.055)/1.055,2.4);}
+function lum(rgb){const [r,g,b]=rgb.map(dec);return 0.2126*r+0.7152*g+0.0722*b;}
+function contrast(a,b){const L1=lum(a), L2=lum(b); return (Math.max(L1,L2)+0.05)/(Math.min(L1,L2)+0.05);}
+function mix(a,b,pctA){const p=pctA/100; return a.map((v,i)=>v*p+b[i]*(1-p));}
+function fmt(x){return x.toFixed(4)+':1';}
+function fmt2(x){return x.toFixed(2)+':1';}
+const light={
+  surface: oklchToSrgb(oklch(98,0.01,70)),
+  raised: oklchToSrgb(oklch(96,0.01,70)),
+  ink: oklchToSrgb(oklch(20,0.02,70)),
+  muted: oklchToSrgb(oklch(45,0.02,70)),
+  border: oklchToSrgb(oklch(85,0.01,70)),
+  borderStrong: oklchToSrgb(oklch(65,0.02,70)),
+  accent: oklchToSrgb(oklch(55,0.15,50)),
+  warn: oklchToSrgb(oklch(58,0.15,60)),
+  success: oklchToSrgb(oklch(48,0.13,155)),
+  error: oklchToSrgb(oklch(52,0.18,25)),
+};
+const dark={
+  surface: oklchToSrgb(oklch(15,0.01,70)),
+  raised: oklchToSrgb(oklch(18,0.01,70)),
+  ink: oklchToSrgb(oklch(92,0.01,70)),
+  muted: oklchToSrgb(oklch(70,0.01,70)),
+  border: oklchToSrgb(oklch(28,0.01,70)),
+  borderStrong: oklchToSrgb(oklch(48,0.02,70)),
+  accent: oklchToSrgb(oklch(65,0.15,50)),
+  warn: oklchToSrgb(oklch(72,0.13,60)),
+  success: oklchToSrgb(oklch(64,0.13,155)),
+  error: oklchToSrgb(oklch(68,0.16,25)),
+};
+function reportTheme(name,t){
+  const selected=mix(t.accent,t.surface,8);
+  const selHover=mix(t.accent,t.surface,12);
+  const pulse=mix(t.accent,t.surface,22);
+  console.log("'`'"\\n"'${name}`);
+  for (const [label,bg] of [['"'surface',t.surface],['selected 8%',selected],['selected+hover 12%',selHover],['pulse 22%',pulse]]) {
+    console.log("'`muted on ${label}: ${fmt(contrast(t.muted,bg))} (${fmt2(contrast(t.muted,bg))})`);
+  }
+  console.log(`warn on surface: ${fmt(contrast(t.warn,t.surface))} (${fmt2(contrast(t.warn,t.surface))})`);
+  console.log(`warn on selected 8%: ${fmt(contrast(t.warn,selected))} (${fmt2(contrast(t.warn,selected))})`);
+  console.log(`outdated pill fg/bg: ${fmt(contrast(mix(t.warn,t.ink,70), mix(t.warn,t.surface,15)))} (${fmt2(contrast(mix(t.warn,t.ink,70), mix(t.warn,t.surface,15)))})`);
+  console.log(`warn toast border? n/a no warn toast variant in Toast.css`);
+  console.log(`borderStrong on surface: ${fmt(contrast(t.borderStrong,t.surface))} (${fmt2(contrast(t.borderStrong,t.surface))})`);
+}
+reportTheme('"'light',light);
+reportTheme('dark',dark);
+// toast info/success/error borders for context
+for (const [name,t] of [['light',light],['dark',dark]]) {
+ console.log("'`'"\\n"'${name} toast borders on raised`);
+ console.log('"'success65', fmt(contrast(mix(t.success,t.border,65), t.raised)), fmt2(contrast(mix(t.success,t.border,65), t.raised)));
+ console.log('error65', fmt(contrast(mix(t.error,t.border,65), t.raised)), fmt2(contrast(mix(t.error,t.border,65), t.raised)));
+ console.log('info70', fmt(contrast(mix(t.accent,t.border,70), t.raised)), fmt2(contrast(mix(t.accent,t.border,70), t.raised)));
+}
+NODE" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+
+light
+muted on surface: 7.0387:1 (7.04:1)
+muted on selected 8%: 6.3223:1 (6.32:1)
+muted on selected+hover 12%: 5.9835:1 (5.98:1)
+muted on pulse 22%: 5.1920:1 (5.19:1)
+warn on surface: 4.2145:1 (4.21:1)
+warn on selected 8%: 3.7856:1 (3.79:1)
+outdated pill fg/bg: 5.4270:1 (5.43:1)
+warn toast border? n/a no warn toast variant in Toast.css
+borderStrong on surface: 3.0587:1 (3.06:1)
+
+dark
+muted on surface: 7.3575:1 (7.36:1)
+muted on selected 8%: 6.8318:1 (6.83:1)
+muted on selected+hover 12%: 6.5100:1 (6.51:1)
+muted on pulse 22%: 5.6109:1 (5.61:1)
+warn on surface: 7.6774:1 (7.68:1)
+warn on selected 8%: 7.1288:1 (7.13:1)
+outdated pill fg/bg: 7.7385:1 (7.74:1)
+warn toast border? n/a no warn toast variant in Toast.css
+borderStrong on surface: 3.0009:1 (3.00:1)
+
+light toast borders on raised
+success65 3.3384:1 3.34:1
+error65 3.5322:1 3.53:1
+info70 3.2212:1 3.22:1
+
+dark toast borders on raised
+success65 3.5450:1 3.55:1
+error65 3.5985:1 3.60:1
+info70 3.6212:1 3.62:1
+
+exec
+/bin/bash -lc 'rg -n "table|tbody|session-list|list-pane|background|surface" apps/frontend/src/styles/global.css apps/frontend/src/features/sessions/SessionsTable.css apps/frontend/src/features/sessions/SessionView.css' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+apps/frontend/src/features/sessions/SessionView.css:22: *     `.quiet-button`        → session_not_found state surface
+apps/frontend/src/features/sessions/SessionView.css:25: * Narrow-viewport visibility rules for `.list-pane` / `.session-pane`
+apps/frontend/src/features/sessions/SessionView.css:38:   * content gets a comfortable inset; chrome stays denser. M2 may
+apps/frontend/src/features/sessions/SessionView.css:42:  /* Wide-viewport gutter is `border-right` on `.list-pane` (set in
+apps/frontend/src/features/sessions/SessionView.css:50:   * surface already carries the editorial mood without texture) and
+apps/frontend/src/features/sessions/SessionView.css:53:   * surface treatment per WCAG WAI guidance). The token is
+apps/frontend/src/features/sessions/SessionView.css:58:   * `scroll-behavior` only — `background-image` is NOT in that
+apps/frontend/src/features/sessions/SessionView.css:61:  background-image: var(--noise-overlay-light);
+apps/frontend/src/features/sessions/SessionView.css:62:  background-repeat: repeat;
+apps/frontend/src/features/sessions/SessionView.css:67:    background-image: none;
+apps/frontend/src/features/sessions/SessionView.css:73:    background-image: none;
+apps/frontend/src/features/sessions/SessionView.css:112:  line-height: var(--leading-comfortable);
+apps/frontend/src/features/sessions/SessionView.css:118:  line-height: var(--leading-comfortable);
+apps/frontend/src/features/sessions/SessionView.css:143:  background: transparent;
+apps/frontend/src/features/sessions/SessionView.css:187:  background: transparent;
+apps/frontend/src/features/sessions/SessionView.css:215:  background: transparent;
+apps/frontend/src/features/sessions/SessionsTable.css:11: *   - `.table-wrap` — overflow shell + border around the `<table>`
+apps/frontend/src/features/sessions/SessionsTable.css:12: *   - `table`, `th`, `td`, `tr:last-child td`, `th.select-col`,
+apps/frontend/src/features/sessions/SessionsTable.css:13: *     `td.select-col` — the unified-list table chrome
+apps/frontend/src/features/sessions/SessionsTable.css:18: *     selectors live with the table because the table is the primary
+apps/frontend/src/features/sessions/SessionsTable.css:48: * NB: Phase-4's `min-width: 720px` on `<table>` was REMOVED in M1b —
+apps/frontend/src/features/sessions/SessionsTable.css:54: * Color rule: backgrounds/foregrounds for the four badge variants use
+apps/frontend/src/features/sessions/SessionsTable.css:55: * `color-mix(in srgb, <semantic-token> 15%/70%/35%, var(--color-surface
+apps/frontend/src/features/sessions/SessionsTable.css:60: * table in `progress/phase-4.progress.md`.
+apps/frontend/src/features/sessions/SessionsTable.css:63:.table-wrap {
+apps/frontend/src/features/sessions/SessionsTable.css:69:table {
+apps/frontend/src/features/sessions/SessionsTable.css:88:  background: var(--color-surface);
+apps/frontend/src/features/sessions/SessionsTable.css:93: * table-layout differences. */
+apps/frontend/src/features/sessions/SessionsTable.css:94:tbody tr {
+apps/frontend/src/features/sessions/SessionsTable.css:98:tbody td {
+apps/frontend/src/features/sessions/SessionsTable.css:126:  background: color-mix(in srgb, var(--color-success) 15%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionsTable.css:128:  border-color: color-mix(in srgb, var(--color-success) 35%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionsTable.css:132:  background: color-mix(in srgb, var(--color-accent) 15%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionsTable.css:134:  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionsTable.css:138:  background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionsTable.css:140:  border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionsTable.css:144:  background: color-mix(in srgb, var(--color-error) 15%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionsTable.css:146:  border-color: color-mix(in srgb, var(--color-error) 35%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionsTable.css:212: * vs --color-surface from ~5.3:1 (Phase 4 hex) to 4.21:1 (oklch),
+apps/frontend/src/features/sessions/SessionsTable.css:219: * loss of warm sienna is acceptable per the M1b designer's note. */
+apps/frontend/src/features/sessions/SessionsTable.css:258:table tbody tr:hover {
+apps/frontend/src/features/sessions/SessionsTable.css:259:  background-color: color-mix(in srgb, var(--color-text) 4%, transparent);
+apps/frontend/src/features/sessions/SessionsTable.css:262:table tbody tr[aria-current="true"] {
+apps/frontend/src/features/sessions/SessionsTable.css:263:  background-color: color-mix(in srgb, var(--color-accent) 8%, transparent);
+apps/frontend/src/features/sessions/SessionsTable.css:267:table tbody tr[aria-current="true"]:hover {
+apps/frontend/src/features/sessions/SessionsTable.css:268:  background-color: color-mix(in srgb, var(--color-accent) 12%, transparent);
+apps/frontend/src/features/sessions/SessionsTable.css:271:table tbody tr[data-deep-link="true"] {
+apps/frontend/src/features/sessions/SessionsTable.css:273:   * (§Acceptance Criteria line 1100) `background-color` is the only
+apps/frontend/src/features/sessions/SessionsTable.css:274:   * animatable property that may carry a one-shot reveal here. M1a
+apps/frontend/src/features/sessions/SessionsTable.css:287:    background-color: color-mix(
+apps/frontend/src/features/sessions/SessionsTable.css:294:    background-color: color-mix(
+apps/frontend/src/styles/global.css:10: *   - `body` — token-driven background, foreground, font-family,
+apps/frontend/src/styles/global.css:19: *   - `.list-pane` / `.session-pane` — visibility rules under the
+apps/frontend/src/styles/global.css:21: *     is `border-right` on `.list-pane`.
+apps/frontend/src/styles/global.css:25: *     utilities reused across feature surfaces (table cells, drawer
+apps/frontend/src/styles/global.css:53:  background: var(--color-bg);
+apps/frontend/src/styles/global.css:89: * single 1 px line drawn as `border-right` on `.list-pane`. No grid-
+apps/frontend/src/styles/global.css:95:.list-pane {
+apps/frontend/src/styles/global.css:102:  .list-pane {
+apps/frontend/src/styles/global.css:115:  main.split-pane[data-narrow-mode="session"] .list-pane {
+apps/frontend/src/styles/global.css:129:   * surface in a single file.
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/features/sessions/SessionsTable.css | sed -n '60,105p'; nl -ba apps/frontend/src/styles/global.css | sed -n '45,105p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+    60	 * table in `progress/phase-4.progress.md`.
+    61	 */
+    62	
+    63	.table-wrap {
+    64	  overflow-x: auto;
+    65	  border: 1px solid var(--color-border);
+    66	  border-radius: var(--radius-md);
+    67	}
+    68	
+    69	table {
+    70	  width: 100%;
+    71	  border-collapse: collapse;
+    72	}
+    73	
+    74	th,
+    75	td {
+    76	  padding: var(--space-2) var(--space-3);
+    77	  border-bottom: 1px solid var(--color-border);
+    78	  text-align: left;
+    79	  vertical-align: top;
+    80	  font-size: var(--text-base);
+    81	}
+    82	
+    83	th {
+    84	  font-size: var(--text-xs);
+    85	  text-transform: uppercase;
+    86	  letter-spacing: 0.06em;
+    87	  color: var(--color-text-muted);
+    88	  background: var(--color-surface);
+    89	}
+    90	
+    91	/* M1b row anatomy (spec line 543; design.md §3.2). The `min-height`
+    92	 * literal lives on the row + cell for defense-in-depth across browser
+    93	 * table-layout differences. */
+    94	tbody tr {
+    95	  min-height: 36px;
+    96	}
+    97	
+    98	tbody td {
+    99	  min-height: 36px;
+   100	}
+   101	
+   102	tr:last-child td {
+   103	  border-bottom: 0;
+   104	}
+   105	
+    45	 * `.empty`) moved here. Component- and feature-specific rules moved
+    46	 * to sibling `.css` files imported by the matching `.tsx`/`.ts`. See
+    47	 * `progress/phase-4.progress.md` Chunk G for the full migration map.
+    48	 */
+    49	
+    50	body {
+    51	  padding: var(--space-6);
+    52	  font-family: var(--font-sans);
+    53	  background: var(--color-bg);
+    54	  color: var(--color-text);
+    55	}
+    56	
+    57	code,
+    58	kbd,
+    59	samp,
+    60	pre {
+    61	  font-family: var(--font-mono);
+    62	}
+    63	
+    64	/*
+    65	 * Phase-5 split-pane shell. Default (and stacked-narrow) layout is
+    66	 * single-column; the `@media (min-width: 900px)` rule below activates
+    67	 * the side-by-side master-detail layout at exactly 900 px and up
+    68	 * (matches the Acceptance Criterion at spec line 1084). The
+    69	 * `899.98px` literal in the narrow-only rules avoids the inclusive-
+    70	 * vs-exclusive ambiguity at the boundary (spec line 516).
+    71	 */
+    72	main.split-pane {
+    73	  display: grid;
+    74	  grid-template-columns: 1fr;
+    75	  gap: 0;
+    76	  max-width: 1400px;
+    77	  margin: 0 auto;
+    78	  padding: 0;
+    79	}
+    80	
+    81	@media (min-width: 900px) {
+    82	  main.split-pane {
+    83	    grid-template-columns: minmax(300px, 380px) 1fr;
+    84	  }
+    85	}
+    86	
+    87	/*
+    88	 * The hairline gutter (signature-detail #4 — spec lines 60, 72) is a
+    89	 * single 1 px line drawn as `border-right` on `.list-pane`. No grid-
+    90	 * gap, no styled rail, no shadow — the hairline IS the only visual
+    91	 * separation between panes. It only renders on wide viewports because
+    92	 * the narrow-mode CSS (below) hides one of the panes; with only one
+    93	 * pane visible there is nothing to gutter against.
+    94	 */
+    95	.list-pane {
+    96	  min-inline-size: 0;
+    97	  display: flex;
+    98	  flex-direction: column;
+    99	}
+   100	
+   101	@media (min-width: 900px) {
+   102	  .list-pane {
+   103	    border-right: 1px solid var(--color-border);
+   104	  }
+   105	}
+
+exec
+/bin/bash -lc 'test -d apps/frontend/node_modules/playwright && echo playwright-installed || echo no-playwright-node-modules' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+playwright-installed
+
+exec
+/bin/bash -lc "sed -n '1,200p' apps/frontend/package.json" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+{
+  "name": "distill-portal-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "bun test src",
+    "test:e2e": "bun --bun x playwright test",
+    "test:e2e:install": "playwright install chromium"
+  },
+  "dependencies": {
+    "focus-trap-react": "^11",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@testing-library/react": "16.3.2",
+    "@types/bun": "^1.3.13",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.7.0",
+    "happy-dom": "20.9.0",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.2"
+  }
+}
+
+exec
+/bin/bash -lc "rg -n \"color-mix\\(in srgb, var\\(--color-warn\\)|var\\(--color-warn\\)|--color-warn\" apps/frontend/src --glob '*.css' --glob '*.tsx' --glob '*.ts'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+apps/frontend/src/features/sessions/SessionsTable.css:138:  background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionsTable.css:139:  color: color-mix(in srgb, var(--color-warn) 70%, var(--color-text));
+apps/frontend/src/features/sessions/SessionsTable.css:140:  border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionsTable.css:210: * (Phase 4) to --color-warn so it would scan as a state hint. The
+apps/frontend/src/features/sessions/SessionsTable.css:211: * M2a oklch retint of --color-warn dropped the warn-as-text pair
+apps/frontend/src/styles/tokens.css:75:  --color-warn: oklch(58% 0.15 60);
+apps/frontend/src/styles/tokens.css:207:    --color-warn: oklch(72% 0.13 60);
+apps/frontend/src/styles/tokens.css:240:    --color-warn: #b86b07;
+apps/frontend/src/styles/tokens.css:256:      --color-warn: #e0a75a;
+apps/frontend/src/features/sessions/SessionsTable.tsx:27:// `--color-warn`; the M2a fix-up round 2 reverted it back to
+apps/frontend/src/App.test.tsx:1162:  // italic span. M1b initially warmed it to `--color-warn`; the M2a
+
+exec
+/bin/bash -lc "rg -n \"color:\\s*var\\(--color-warn\\)|color:\\s*["'^;]*--color-warn|--color-warn[''^;]*text|warn-as-text" apps/frontend/src --glob '"'*.css' --glob '*.tsx' --glob '*.ts'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+apps/frontend/src/App.test.tsx:1164:  // oklch retint regressed warn-as-text below the AA 4.5:1 floor).
+apps/frontend/src/features/sessions/SessionsTable.css:139:  color: color-mix(in srgb, var(--color-warn) 70%, var(--color-text));
+apps/frontend/src/features/sessions/SessionsTable.css:140:  border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionsTable.css:211: * M2a oklch retint of --color-warn dropped the warn-as-text pair
+apps/frontend/src/features/sessions/SessionsTable.tsx:29:// the warn-as-text pair vs `--color-surface` to 4.21:1 (fails AA
+
+exec
+/bin/bash -lc "node --input-type=module - <<'NODE'
+import { chromium } from '@playwright/test';
+const browser = await chromium.launch({headless:true});
+const page = await browser.newPage();
+await page.setContent("'`<!doctype html><style>
+:root {
+  --color-surface: oklch(98% 0.01 70);
+  --color-ink-muted: oklch(45% 0.02 70);
+  --color-text-muted: var(--color-ink-muted);
+  --color-accent: oklch(55% 0.15 50);
+}
+body { background: var(--color-surface); color: var(--color-text-muted); }
+#surface { color: var(--color-text-muted); background: var(--color-surface); }
+#sel8 { color: var(--color-text-muted); background-color: color-mix(in srgb, var(--color-accent) 8%, transparent); }
+#sel12 { color: var(--color-text-muted); background-color: color-mix(in srgb, var(--color-accent) 12%, transparent); }
+#pulse22 { color: var(--color-text-muted); background-color: color-mix(in srgb, var(--color-accent) 22%, transparent); }
+</style><div id=surface>x</div><div id=sel8>x</div><div id=sel12>x</div><div id=pulse22>x</div>`);
+const out = await page.evaluate(() => Object.fromEntries(['"'surface','sel8','sel12','pulse22'].map(id => {
+ const cs=getComputedStyle(document.getElementById(id));
+ return [id,{color:cs.color,backgroundColor:cs.backgroundColor}];
+})));
+console.log(JSON.stringify(out,null,2));
+await browser.close();
+NODE" in /home/huwei/ai_codings/distill-portal/apps/frontend
+ exited 1 in 319ms:
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+browserType.launch: Target page, context or browser has been closed
+Browser logs:
+
+<launching> /home/huwei/.cache/ms-playwright/chromium_headless_shell-1217/chrome-headless-shell-linux64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --enable-automation --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=/tmp/playwright_chromiumdev_profile-uaco1N --remote-debugging-pipe --no-startup-window
+<launched> pid=20
+[pid=20][err] [0429/132115.395010:FATAL:content/browser/sandbox_host_linux.cc:41] Check failed: . shutdown: Operation not permitted (1)
+Call log:
+[2m  - <launching> /home/huwei/.cache/ms-playwright/chromium_headless_shell-1217/chrome-headless-shell-linux64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --enable-automation --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=/tmp/playwright_chromiumdev_profile-uaco1N --remote-debugging-pipe --no-startup-window[22m
+[2m  - <launched> pid=20[22m
+[2m  - [pid=20][err] [0429/132115.395010:FATAL:content/browser/sandbox_host_linux.cc:41] Check failed: . shutdown: Operation not permitted (1)[22m
+[2m  - [pid=20] <gracefully close start>[22m
+[2m  - [pid=20] <kill>[22m
+[2m  - [pid=20] <will force kill>[22m
+[2m  - [pid=20] <process did exit: exitCode=null, signal=SIGTRAP>[22m
+[2m  - [pid=20] starting temporary directories cleanup[22m
+[2m  - [pid=20] finished temporary directories cleanup[22m
+[2m  - [pid=20] <gracefully close end>[22m
+
+    at /home/huwei/ai_codings/distill-portal/apps/frontend/[eval1]:2:32
+
+Node.js v24.14.0
+
+exec
+/bin/bash -lc "if [ -f /tmp/wcag_check.py ]; then sed -n '1,260p' /tmp/wcag_check.py; else echo no /tmp/wcag_check.py; fi" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+#!/usr/bin/env python3
+"""WCAG contrast ratio computation from oklch values.
+
+Uses CSS Color Module Level 4 conversion: oklch -> oklab -> linear sRGB ->
+sRGB -> WCAG 2.1 relative luminance -> contrast ratio.
+"""
+
+import math
+
+
+def oklch_to_oklab(L, C, h_deg):
+    h = math.radians(h_deg)
+    return (L, C * math.cos(h), C * math.sin(h))
+
+
+def oklab_to_linear_srgb(L, a, b):
+    # https://www.w3.org/TR/css-color-4/#color-conversion-code
+    l_ = L + 0.3963377774 * a + 0.2158037573 * b
+    m_ = L - 0.1055613458 * a - 0.0638541728 * b
+    s_ = L - 0.0894841775 * a - 1.2914855480 * b
+
+    l = l_ * l_ * l_
+    m = m_ * m_ * m_
+    s = s_ * s_ * s_
+
+    R = +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s
+    G = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s
+    B = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
+    return (R, G, B)
+
+
+def linear_to_srgb(x):
+    x = max(0.0, min(1.0, x))
+    if x <= 0.0031308:
+        return 12.92 * x
+    return 1.055 * (x ** (1 / 2.4)) - 0.055
+
+
+def srgb_to_linear(x):
+    if x <= 0.04045:
+        return x / 12.92
+    return ((x + 0.055) / 1.055) ** 2.4
+
+
+def oklch_to_srgb(L_pct, C, h):
+    """L_pct is 0..100 (percent like CSS); C is chroma (0..0.4-ish)."""
+    L = L_pct / 100.0
+    Lab = oklch_to_oklab(L, C, h)
+    rgb_lin = oklab_to_linear_srgb(*Lab)
+    rgb = tuple(max(0.0, min(1.0, linear_to_srgb(c))) for c in rgb_lin)
+    return rgb
+
+
+def relative_luminance_srgb(r, g, b):
+    rl = srgb_to_linear(r)
+    gl = srgb_to_linear(g)
+    bl = srgb_to_linear(b)
+    return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl
+
+
+def contrast_ratio(L1, L2):
+    if L1 < L2:
+        L1, L2 = L2, L1
+    return (L1 + 0.05) / (L2 + 0.05)
+
+
+def lum(oklch):
+    L, C, h = oklch
+    r, g, b = oklch_to_srgb(L, C, h)
+    return relative_luminance_srgb(r, g, b)
+
+
+def mix_srgb_pct(c1_oklch, c2_oklch, pct1):
+    """color-mix(in srgb, c1 pct1%, c2 (100-pct1)%) — sRGB-space mix."""
+    r1, g1, b1 = oklch_to_srgb(*c1_oklch)
+    r2, g2, b2 = oklch_to_srgb(*c2_oklch)
+    f = pct1 / 100.0
+    return (
+        r1 * f + r2 * (1 - f),
+        g1 * f + g2 * (1 - f),
+        b1 * f + b2 * (1 - f),
+    )
+
+
+def lum_srgb(rgb):
+    return relative_luminance_srgb(*rgb)
+
+
+def cr_pair(fg, bg, label):
+    if isinstance(fg, tuple) and len(fg) == 3 and isinstance(fg[0], float) and fg[0] <= 1.0 + 1e-9:
+        # raw sRGB
+        Lfg = lum_srgb(fg)
+    else:
+        Lfg = lum(fg)
+    if isinstance(bg, tuple) and len(bg) == 3 and isinstance(bg[0], float) and bg[0] <= 1.0 + 1e-9:
+        Lbg = lum_srgb(bg)
+    else:
+        Lbg = lum(bg)
+    cr = contrast_ratio(Lfg, Lbg)
+    print(f"{label:70s} {cr:5.2f}:1")
+    return cr
+
+
+def main():
+    # ----- Light tokens (NEW) -----
+    surface_L = (98, 0.01, 70)
+    surface_raised_L = (96, 0.01, 70)
+    ink_L = (20, 0.02, 70)
+    ink_muted_L = (45, 0.02, 70)
+    border_L = (85, 0.01, 70)
+    border_strong_L_OLD = (70, 0.02, 70)
+    border_strong_L_NEW = (65, 0.02, 70)
+    accent_L_OLD = (60, 0.15, 50)
+    accent_L_NEW = (55, 0.15, 50)
+    accent_hover_L = (50, 0.16, 50)
+    success_L = (48, 0.13, 155)
+    warn_L = (58, 0.15, 60)
+    error_L = (52, 0.18, 25)
+
+    # ----- Dark tokens -----
+    surface_D = (15, 0.01, 70)
+    surface_raised_D = (18, 0.01, 70)
+    ink_D = (92, 0.01, 70)
+    ink_muted_D = (70, 0.01, 70)
+    border_D = (28, 0.01, 70)
+    border_strong_D_OLD = (40, 0.02, 70)
+    border_strong_D_NEW = (48, 0.02, 70)
+    accent_D = (65, 0.15, 50)
+    success_D = (64, 0.13, 155)
+    warn_D = (72, 0.13, 60)
+    error_D = (68, 0.16, 25)
+
+    print("=== LIGHT MODE — checking codex blockers ===")
+    # F1: .toast.info border 70% mix(accent, border) vs surface-raised
+    info_mix_OLD = mix_srgb_pct(accent_L_OLD, border_L, 70)
+    info_mix_NEW = mix_srgb_pct(accent_L_NEW, border_L, 70)
+    cr_pair(info_mix_OLD, surface_raised_L, "OLD .toast.info border (70% accent L=60 mix) vs surface-raised")
+    cr_pair(info_mix_NEW, surface_raised_L, "NEW .toast.info border (70% accent L=55 mix) vs surface-raised  [target >=3]")
+
+    # F2: --color-accent as text vs surface, surface-raised
+    cr_pair(accent_L_OLD, surface_L, "OLD --color-accent (L=60) vs --color-surface")
+    cr_pair(accent_L_NEW, surface_L, "NEW --color-accent (L=55) vs --color-surface  [target >=4.5]")
+    cr_pair(accent_L_OLD, surface_raised_L, "OLD --color-accent (L=60) vs --color-surface-raised")
+    cr_pair(accent_L_NEW, surface_raised_L, "NEW --color-accent (L=55) vs --color-surface-raised  [target >=4.5]")
+
+    # F3: --color-border-strong vs surface
+    cr_pair(border_strong_L_OLD, surface_L, "OLD --color-border-strong (L=70) vs --color-surface")
+    cr_pair(border_strong_L_NEW, surface_L, "NEW --color-border-strong (L=65) vs --color-surface  [target >=3]")
+
+    print()
+    print("=== DARK MODE — checking codex blockers ===")
+    cr_pair(border_strong_D_OLD, surface_D, "OLD --color-border-strong (L=40) vs --color-surface")
+    cr_pair(border_strong_D_NEW, surface_D, "NEW --color-border-strong (L=48) vs --color-surface  [target >=3]")
+
+    # Also re-check dark accent (codex didn't flag, but verify)
+    cr_pair(accent_D, surface_D, "DARK --color-accent (L=65) vs --color-surface")
+    cr_pair(accent_D, surface_raised_D, "DARK --color-accent (L=65) vs --color-surface-raised")
+
+    print()
+    print("=== Sanity-check the rest of the table with NEW values (light) ===")
+    cr_pair(ink_L, surface_L, "ink vs surface")
+    cr_pair(ink_muted_L, surface_L, "ink-muted vs surface")
+    cr_pair(ink_L, surface_raised_L, "ink vs surface-raised")
+    cr_pair(ink_muted_L, surface_raised_L, "ink-muted vs surface-raised")
+    cr_pair(warn_L, surface_L, "warn vs surface")
+    cr_pair(success_L, surface_L, "success vs surface")
+    cr_pair(error_L, surface_L, "error vs surface")
+    # Toast.success border 65% mix
+    success_mix_L = mix_srgb_pct(success_L, border_L, 65)
+    cr_pair(success_mix_L, surface_raised_L, "toast.success border (65% mix) vs surface-raised")
+    error_mix_L = mix_srgb_pct(error_L, border_L, 65)
+    cr_pair(error_mix_L, surface_raised_L, "toast.error border (65% mix) vs surface-raised")
+    # row hover (4% ink mix on surface)
+    hover_L = mix_srgb_pct(ink_L, surface_L, 4)
+    cr_pair(ink_L, hover_L, "ink vs row hover (4% ink on surface)")
+    # row selected (8% accent mix on surface)
+    sel_L = mix_srgb_pct(accent_L_NEW, surface_L, 8)
+    cr_pair(ink_L, sel_L, "ink vs row selected (8% accent NEW on surface)")
+    # deep-link pulse peak (22% accent on surface)
+    pulse_L = mix_srgb_pct(accent_L_NEW, surface_L, 22)
+    cr_pair(ink_L, pulse_L, "ink vs deep-link pulse peak (22% accent NEW)")
+    # warn vs row selected
+    cr_pair(warn_L, sel_L, "warn vs row selected tint (NEW)")
+
+    print()
+    print("=== Sanity-check the rest of the table with NEW values (dark) ===")
+    cr_pair(ink_D, surface_D, "ink vs surface")
+    cr_pair(ink_muted_D, surface_D, "ink-muted vs surface")
+    cr_pair(ink_D, surface_raised_D, "ink vs surface-raised")
+    cr_pair(ink_muted_D, surface_raised_D, "ink-muted vs surface-raised")
+    cr_pair(warn_D, surface_D, "warn vs surface")
+    info_mix_D = mix_srgb_pct(accent_D, border_D, 70)
+    cr_pair(info_mix_D, surface_raised_D, "toast.info border (70% accent dark mix) vs surface-raised")
+    success_mix_D = mix_srgb_pct(success_D, border_D, 65)
+    cr_pair(success_mix_D, surface_raised_D, "toast.success border (65% mix) vs surface-raised")
+    error_mix_D = mix_srgb_pct(error_D, border_D, 65)
+    cr_pair(error_mix_D, surface_raised_D, "toast.error border (65% mix) vs surface-raised")
+    hover_D = mix_srgb_pct(ink_D, surface_D, 4)
+    cr_pair(ink_D, hover_D, "ink vs row hover (4% ink on surface)")
+    sel_D = mix_srgb_pct(accent_D, surface_D, 8)
+    cr_pair(ink_D, sel_D, "ink vs row selected (8% accent on surface)")
+    pulse_D = mix_srgb_pct(accent_D, surface_D, 22)
+    cr_pair(ink_D, pulse_D, "ink vs deep-link pulse peak (22% accent)")
+    cr_pair(warn_D, sel_D, "warn vs row selected tint (dark)")
+
+    # Pills
+    print()
+    print("=== Pills ===")
+    # not-stored pill: fg=70% accent, bg=15% accent
+    pill_fg_L = mix_srgb_pct(accent_L_NEW, ink_L, 70)
+    pill_bg_L = mix_srgb_pct(accent_L_NEW, surface_L, 15)
+    cr_pair(pill_fg_L, pill_bg_L, "not-stored pill (70/15 accent NEW) light")
+    pill_fg_D = mix_srgb_pct(accent_D, ink_D, 70)
+    pill_bg_D = mix_srgb_pct(accent_D, surface_D, 15)
+    cr_pair(pill_fg_D, pill_bg_D, "not-stored pill (70/15 accent) dark")
+    # success pill
+    spill_fg_L = mix_srgb_pct(success_L, ink_L, 70)
+    spill_bg_L = mix_srgb_pct(success_L, surface_L, 15)
+    cr_pair(spill_fg_L, spill_bg_L, "up-to-date pill (success 70/15) light")
+    spill_fg_D = mix_srgb_pct(success_D, ink_D, 70)
+    spill_bg_D = mix_srgb_pct(success_D, surface_D, 15)
+    cr_pair(spill_fg_D, spill_bg_D, "up-to-date pill (success 70/15) dark")
+    # warn pill
+    wpill_fg_L = mix_srgb_pct(warn_L, ink_L, 70)
+    wpill_bg_L = mix_srgb_pct(warn_L, surface_L, 15)
+    cr_pair(wpill_fg_L, wpill_bg_L, "outdated pill (warn 70/15) light")
+    wpill_fg_D = mix_srgb_pct(warn_D, ink_D, 70)
+    wpill_bg_D = mix_srgb_pct(warn_D, surface_D, 15)
+    cr_pair(wpill_fg_D, wpill_bg_D, "outdated pill (warn 70/15) dark")
+    # error pill
+    epill_fg_L = mix_srgb_pct(error_L, ink_L, 70)
+    epill_bg_L = mix_srgb_pct(error_L, surface_L, 15)
+    cr_pair(epill_fg_L, epill_bg_L, "source-missing pill (error 70/15) light")
+    epill_fg_D = mix_srgb_pct(error_D, ink_D, 70)
+    epill_bg_D = mix_srgb_pct(error_D, surface_D, 15)
+    cr_pair(epill_fg_D, epill_bg_D, "source-missing pill (error 70/15) dark")
+
+    print()
+    print("=== Decorative hairline (not WCAG-gated) ===")
+    cr_pair(border_L, surface_L, "border vs surface light (decorative)")
+    cr_pair(border_D, surface_D, "border vs surface dark (decorative)")
+
+
+if __name__ == "__main__":
+    main()
+
+exec
+/bin/bash -lc "python3 /tmp/wcag_check.py | sed -n '1,220p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+=== LIGHT MODE — checking codex blockers ===
+OLD .toast.info border (70% accent L=60 mix) vs surface-raised          2.79:1
+NEW .toast.info border (70% accent L=55 mix) vs surface-raised  [target >=3]  3.22:1
+OLD --color-accent (L=60) vs --color-surface                            3.93:1
+NEW --color-accent (L=55) vs --color-surface  [target >=4.5]            4.84:1
+OLD --color-accent (L=60) vs --color-surface-raised                     3.71:1
+NEW --color-accent (L=55) vs --color-surface-raised  [target >=4.5]     4.57:1
+OLD --color-border-strong (L=70) vs --color-surface                     2.53:1
+NEW --color-border-strong (L=65) vs --color-surface  [target >=3]       3.06:1
+
+=== DARK MODE — checking codex blockers ===
+OLD --color-border-strong (L=40) vs --color-surface                     2.13:1
+NEW --color-border-strong (L=48) vs --color-surface  [target >=3]       3.00:1
+DARK --color-accent (L=65) vs --color-surface                           5.78:1
+DARK --color-accent (L=65) vs --color-surface-raised                    5.52:1
+
+=== Sanity-check the rest of the table with NEW values (light) ===
+ink vs surface                                                         17.10:1
+ink-muted vs surface                                                    7.04:1
+ink vs surface-raised                                                  16.13:1
+ink-muted vs surface-raised                                             6.64:1
+warn vs surface                                                         4.21:1
+success vs surface                                                      5.72:1
+error vs surface                                                        5.70:1
+toast.success border (65% mix) vs surface-raised                        3.34:1
+toast.error border (65% mix) vs surface-raised                          3.53:1
+ink vs row hover (4% ink on surface)                                   15.79:1
+ink vs row selected (8% accent NEW on surface)                         15.36:1
+ink vs deep-link pulse peak (22% accent NEW)                           12.62:1
+warn vs row selected tint (NEW)                                         3.79:1
+
+=== Sanity-check the rest of the table with NEW values (dark) ===
+ink vs surface                                                         15.52:1
+ink-muted vs surface                                                    7.36:1
+ink vs surface-raised                                                  14.84:1
+ink-muted vs surface-raised                                             7.03:1
+warn vs surface                                                         7.68:1
+toast.info border (70% accent dark mix) vs surface-raised               3.62:1
+toast.success border (65% mix) vs surface-raised                        3.55:1
+toast.error border (65% mix) vs surface-raised                          3.60:1
+ink vs row hover (4% ink on surface)                                   14.56:1
+ink vs row selected (8% accent on surface)                             14.41:1
+ink vs deep-link pulse peak (22% accent)                               11.83:1
+warn vs row selected tint (dark)                                        7.13:1
+
+=== Pills ===
+not-stored pill (70/15 accent NEW) light                                5.95:1
+not-stored pill (70/15 accent) dark                                     6.62:1
+up-to-date pill (success 70/15) light                                   6.69:1
+up-to-date pill (success 70/15) dark                                    6.94:1
+outdated pill (warn 70/15) light                                        5.43:1
+outdated pill (warn 70/15) dark                                         7.74:1
+source-missing pill (error 70/15) light                                 6.60:1
+source-missing pill (error 70/15) dark                                  6.91:1
+
+=== Decorative hairline (not WCAG-gated) ===
+border vs surface light (decorative)                                    1.49:1
+border vs surface dark (decorative)                                     1.35:1
+
+exec
+/bin/bash -lc 'git rev-parse --short HEAD && git rev-parse --verify 05467ad''^{commit}' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+6b93dc4
+05467ad6ceb84b5c151a6ccd07c466089f488ab8
+
+exec
+/bin/bash -lc "git diff --name-status 05467ad -- apps/frontend/src working/phase-5/designs/m2a-tokens docs/dependency-rules.md | sed -n '1,220p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+M	apps/frontend/src/App.test.tsx
+M	apps/frontend/src/App.tsx
+M	apps/frontend/src/components/Toast.css
+M	apps/frontend/src/features/sessions/SessionFilters.css
+M	apps/frontend/src/features/sessions/SessionFilters.test.tsx
+M	apps/frontend/src/features/sessions/SessionFilters.tsx
+A	apps/frontend/src/features/sessions/SessionView.css
+A	apps/frontend/src/features/sessions/SessionView.test.tsx
+A	apps/frontend/src/features/sessions/SessionView.tsx
+M	apps/frontend/src/features/sessions/SessionsTable.css
+M	apps/frontend/src/features/sessions/SessionsTable.test.tsx
+M	apps/frontend/src/features/sessions/SessionsTable.tsx
+M	apps/frontend/src/features/sessions/SessionsView.css
+A	apps/frontend/src/features/sessions/SessionsView.test.tsx
+M	apps/frontend/src/features/sessions/SessionsView.tsx
+A	apps/frontend/src/features/sessions/useSelectedSession.test.ts
+A	apps/frontend/src/features/sessions/useSelectedSession.ts
+M	apps/frontend/src/styles/global.css
+M	apps/frontend/src/styles/tokens.css
+M	docs/dependency-rules.md
+
+exec
+/bin/bash -lc "git diff --unified=0 05467ad -- apps/frontend/src/features/sessions/SessionsTable.css | sed -n '1,240p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+diff --git a/apps/frontend/src/features/sessions/SessionsTable.css b/apps/frontend/src/features/sessions/SessionsTable.css
+index 42f757e..bb7bf9f 100644
+--- a/apps/frontend/src/features/sessions/SessionsTable.css
++++ b/apps/frontend/src/features/sessions/SessionsTable.css
+@@ -22,2 +22,10 @@
+- *   - `.raw-link` — the View Raw + metadata link styling used inside
+- *     the Stored Copy cell
++ *   - `.title-cell`, `.title-cell-line1`, `.title-cell-line2`,
++ *     `.title-cell-title`, `.title-cell-tool`, `.title-cell-rowkey`,
++ *     `.title-cell-refresh` — the M1b 4-essentials Title cell anatomy
++ *     (bold title + tool badge inline; muted mono rowKey + optional
++ *     `(refresh)` marker). Tool badge is intentionally a hairline
++ *     chip on transparent ground — distinct from the filled
++ *     `.badge.{variant}` status pill (designer §7.5).
++ *   - `.project-cell`, `.updated-cell` — single-line ellipsis
++ *     truncation on Project; mono cell on Updated for column
++ *     alignment.
+@@ -25,6 +33,7 @@
+- * Structural literals (intentionally NOT promoted to tokens; same
+- * design-balloon mitigation that justified them in `app.css` per
+- * `working/phase-4.md` §Design Tokens):
+- *   - `min-width: 720px` on `table` (horizontal-overflow trigger; the
+- *     unified list still has 8 columns and needs that width to read).
+- *   - `width: 2.25rem` on `.select-col` (checkbox column width clamp).
++ * Phase-5 / M1b structural literals (intentionally NOT promoted to
++ * tokens; same design-balloon mitigation that justified them in
++ * `app.css` per `working/phase-4.md` §Design Tokens AND
++ * `working/phase-5.md` §Structural literals lines 926–946):
++ *   - `min-height: 36px` on `<tr>` (row anatomy clamp; spec line 543).
++ *   - `width: 2.25rem` on `.select-col` (checkbox column width clamp;
++ *     Phase-4 baseline literal).
+@@ -33,0 +43,10 @@
++ *   - `letter-spacing: 0.02em` on `.title-cell-tool` (tool-badge
++ *     tracking; matches the `.filter-count-chip` recipe in
++ *     SessionFilters.css for visual cohesion across the M1b chip
++ *     vocabulary).
++ *
++ * NB: Phase-4's `min-width: 720px` on `<table>` was REMOVED in M1b —
++ * the 4-essentials list must comfortably fit a 300–380 px list pane
++ * (per design.md §3.2). The Project cell uses single-line ellipsis
++ * truncation so very long project paths do not force horizontal
++ * overflow; the full path stays available via the `title=` hover hint.
+@@ -53 +71,0 @@ table {
+-  min-width: 720px;
+@@ -72,0 +91,11 @@ th {
++/* M1b row anatomy (spec line 543; design.md §3.2). The `min-height`
++ * literal lives on the row + cell for defense-in-depth across browser
++ * table-layout differences. */
++tbody tr {
++  min-height: 36px;
++}
++
++tbody td {
++  min-height: 36px;
++}
++
+@@ -120,2 +149,151 @@ td.select-col {
+-.raw-link {
+-  color: var(--color-accent);
++/*
++ * M1b Title cell anatomy. Two-line stack: bold title + tool badge
++ * inline (line 1); muted mono rowKey + optional `(refresh)` marker
++ * (line 2). The tool badge is hairline-bordered on transparent ground
++ * — DELIBERATELY NOT the filled `.badge.{variant}` status-pill recipe
++ * (designer §7.5: status is the row's dedicated column; tool is a
++ * quieter contextual signal).
++ */
++.title-cell {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-1);
++  min-width: 0;
++}
++
++.title-cell-line1 {
++  display: flex;
++  align-items: baseline;
++  gap: var(--space-2);
++  min-width: 0;
++}
++
++.title-cell-title {
++  font-weight: 600;
++  color: var(--color-text);
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++  min-width: 0;
++}
++
++.title-cell-tool {
++  flex-shrink: 0;
++  display: inline-block;
++  padding: 0 var(--space-2);
++  font-size: var(--text-xs);
++  font-family: var(--font-mono);
++  color: var(--color-text-muted);
++  border: 1px solid var(--color-border);
++  border-radius: var(--radius-sm);
++  letter-spacing: 0.02em;
++}
++
++.title-cell-line2 {
++  display: flex;
++  align-items: baseline;
++  gap: var(--space-2);
++  font-size: var(--text-xs);
++  color: var(--color-text-muted);
++  min-width: 0;
++}
++
++.title-cell-rowkey {
++  font-family: var(--font-mono);
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++  min-width: 0;
++}
++
++/* M1b initially warmed the (refresh) marker from --color-text-muted
++ * (Phase 4) to --color-warn so it would scan as a state hint. The
++ * M2a oklch retint of --color-warn dropped the warn-as-text pair
++ * vs --color-surface from ~5.3:1 (Phase 4 hex) to 4.21:1 (oklch),
++ * which fails the 4.5:1 AA normal-text floor. The M2a fix-up round 2
++ * reverts the marker to --color-text-muted per the M1b designer's
++ * documented mitigation (working/phase-5/designs/m1b-shell/colors.md
++ * lines 56-58) — clean 7.04:1 light / 7.36:1 dark, and still passes
++ * across the row-state stack-up (selected, selected+hover, deep-link
++ * pulse peak). The italic preserves the editorial-aside reading; the
++ * loss of warm sienna is acceptable per the M1b designer's note. */
++.title-cell-refresh {
++  flex-shrink: 0;
++  font-size: var(--text-xs);
++  color: var(--color-text-muted);
++  font-style: italic;
++}
++
++.project-cell {
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++  max-width: 0;
++}
++
++.updated-cell {
++  white-space: nowrap;
++}
++
++/*
++ * Phase-5 / M1a row variants. Spec §Row visual treatment lines
++ * 533–545; design.md §3.6, §4.3.
++ *
++ * The hover + selected + selected-hover + deep-link-pulse recipes
++ * are all `color-mix(...)` against `var(--color-accent)` so M2's
++ * oklch redefinition of `--color-accent` will retint them
++ * automatically — no keyframe / no rule rewrite at M2.
++ *
++ * The 2 px sienna left edge on the selected row uses
++ * `box-shadow: inset 2px 0 0 var(--color-accent)` (NOT a
++ * `border-left`) so adding the inset does not change row width or
++ * shift the first cell — selecting/deselecting is byte-equivalent
++ * in cell positions (designer §7.5).
++ *
++ * Click-driven selection NEVER fires the pulse (spec line 585) —
++ * the parent only sets `data-deep-link="true"` on URL-driven mount.
++ *
++ * Reduced-motion zero-out lives in `styles/global.css`.
++ */
++table tbody tr:hover {
++  background-color: color-mix(in srgb, var(--color-text) 4%, transparent);
++}
++
++table tbody tr[aria-current="true"] {
++  background-color: color-mix(in srgb, var(--color-accent) 8%, transparent);
++  box-shadow: inset 2px 0 0 var(--color-accent);
++}
++
++table tbody tr[aria-current="true"]:hover {
++  background-color: color-mix(in srgb, var(--color-accent) 12%, transparent);
++}
++
++table tbody tr[data-deep-link="true"] {
++  /* One-shot pulse on URL-driven selection. Per the spec's allow-list
++   * (§Acceptance Criteria line 1100) `background-color` is the only
++   * animatable property that may carry a one-shot reveal here. M1a
++   * hard-coded `600ms ease-out` as literals because the motion tokens
++   * did not exist yet; M2a migrates the duration + easing to the
++   * spec's `--motion-pulse` (600 ms) and `--ease-out` tokens defined
++   * in `tokens.css`. The trailing `1` is the algorithmic iteration
++   * count (not a token; literal). The keyframe peak (22%) settles to
++   * the resting selected tint (8%) — designer §7.8 — so there is no
++   * flash from the pulse fading INTO a different shade. */
++  animation: deep-link-pulse var(--motion-pulse) var(--ease-out) 1;
++}
++
++@keyframes deep-link-pulse {
++  0% {
++    background-color: color-mix(
++      in srgb,
++      var(--color-accent) 22%,
++      transparent
++    );
++  }
++  100% {
++    background-color: color-mix(
++      in srgb,
++      var(--color-accent) 8%,
++      transparent
++    );
++  }
+
+exec
+/bin/bash -lc "git diff --unified=0 05467ad -- working/phase-5/designs/m2a-tokens/wcag.md working/phase-5/designs/m2a-tokens/design.md | sed -n '1,260p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+exec
+/bin/bash -lc 'rg -n "''^diff --git|title-cell-refresh|Codex fix-up round 2|08b|09b|09c|09d|color-warn|border-strong" /tmp/m2a-diff-v3.patch' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+1:diff --git a/apps/frontend/src/App.test.tsx b/apps/frontend/src/App.test.tsx
+9:-  // is rendered with the dedicated `.title-cell-refresh` class on a
+10:-  // `--color-warn`-tinted italic span (design.md §3.2). The hover
+12:+  // is rendered with the dedicated `.title-cell-refresh` class on an
+13:+  // italic span. M1b initially warmed it to `--color-warn`; the M2a
+17:   const refreshSpan = container.querySelector(".title-cell-refresh");
+20:diff --git a/apps/frontend/src/components/Toast.css b/apps/frontend/src/components/Toast.css
+67:diff --git a/apps/frontend/src/features/sessions/SessionView.css b/apps/frontend/src/features/sessions/SessionView.css
+155:diff --git a/apps/frontend/src/features/sessions/SessionsTable.css b/apps/frontend/src/features/sessions/SessionsTable.css
+164:- * --color-warn so the marker scans as a state hint rather than
+169:+ * (Phase 4) to --color-warn so it would scan as a state hint. The
+170:+ * M2a oklch retint of --color-warn dropped the warn-as-text pair
+179: .title-cell-refresh {
+182:-  color: var(--color-warn);
+214:diff --git a/apps/frontend/src/features/sessions/SessionsTable.tsx b/apps/frontend/src/features/sessions/SessionsTable.tsx
+223:-// marker color from `--color-text-muted` (Phase 4) to `--color-warn`
+229:+// `--color-warn`; the M2a fix-up round 2 reverted it back to
+233:+// "Codex fix-up round 2 closure" and the M1b designer's documented
+240:diff --git a/apps/frontend/src/styles/tokens.css b/apps/frontend/src/styles/tokens.css
+311:-  --color-border-strong: #c8ccd4;
+317:-  --color-warn: #b86b07;
+327:+  --color-border-strong: oklch(65% 0.02 70);
+331:+  --color-warn: oklch(58% 0.15 60);
+471:-    --color-border-strong: #3a404d;
+477:-    --color-warn: #e0a75a;
+484:+    --color-border-strong: oklch(48% 0.02 70);
+488:+    --color-warn: oklch(72% 0.13 60);
+515:+    --color-border-strong: #8a909c;
+521:+    --color-warn: #b86b07;
+531:+      --color-border-strong: #5e6571;
+537:+      --color-warn: #e0a75a;
+620:diff --git a/docs/dependency-rules.md b/docs/dependency-rules.md
+
+exec
+/bin/bash -lc 'git status --short -- working/phase-5/designs/m2a-tokens apps/frontend/src/features/sessions/SessionsTable.css apps/frontend/src/features/sessions/SessionsTable.tsx apps/frontend/src/App.test.tsx apps/frontend/src/styles/tokens.css apps/frontend/src/components/Toast.css' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+ M apps/frontend/src/App.test.tsx
+ M apps/frontend/src/components/Toast.css
+ M apps/frontend/src/features/sessions/SessionsTable.css
+ M apps/frontend/src/features/sessions/SessionsTable.tsx
+ M apps/frontend/src/styles/tokens.css
+?? working/phase-5/designs/m2a-tokens/
+
+exec
+/bin/bash -lc 'ls -l working/phase-5/designs/m2a-tokens' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+total 140
+-rw-r--r-- 1 huwei huwei  5769 Apr 28 20:32 colors.md
+-rw-r--r-- 1 huwei huwei 47420 Apr 29 12:51 design.md
+-rw-r--r-- 1 huwei huwei  4228 Apr 28 20:32 motion.md
+-rw-r--r-- 1 huwei huwei 61121 Apr 28 20:26 prototype.html
+-rw-r--r-- 1 huwei huwei 15404 Apr 29 12:50 wcag.md
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/features/sessions/SessionsTable.tsx | sed -n '1,60p;235,265p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+     1	// Presentational table for the unified inspection list.
+     2	//
+     3	// Receives the merged + filtered + sorted `SessionRow[]` plus the
+     4	// `selected` set + toggle handlers from the parent. Selection keys are
+     5	// always backend-provided `sourceSessionKey` strings — never the
+     6	// React-only `rowKey` fallback for `stored_only` rows. The table
+     7	// renders a checkbox ONLY on importable rows
+     8	// (`isImportable(row) === true`) so non-importable rows cannot enter
+     9	// the import POST.
+    10	//
+    11	// Per `working/phase-4.md` §Action Bar and Mutation UX, the bulk-select
+    12	// affordance toggles ALL importable rows in the current filter window.
+    13	// Non-importable rows are invisible to the bulk action.
+    14	//
+    15	// Per Phase-5 spec §Compact list rows (lines 520–531) the table is
+    16	// compressed to FIVE columns: Select + Title + Status + Project +
+    17	// Updated. The Title cell carries a two-line stack: bold title + tool
+    18	// badge inline (line 1); muted mono rowKey + optional `(refresh)`
+    19	// marker (line 2). The dropped Phase-4 columns (Tool / Stored Copy /
+    20	// Source Path) remain reachable via the still-mounted Phase-4
+    21	// `<Drawer>` until M2 ships the Metadata tab.
+    22	//
+    23	// Per spec, a row whose `statusConflict` is true gets a small
+    24	// "(refresh)" affordance inside the Title cell — telegraphing the
+    25	// "fetched state changed during load — refresh" hint. M1b warmed
+    26	// the marker color from `--color-text-muted` (Phase 4) to
+    27	// `--color-warn`; the M2a fix-up round 2 reverted it back to
+    28	// `--color-text-muted` (italic) because the oklch retint regressed
+    29	// the warn-as-text pair vs `--color-surface` to 4.21:1 (fails AA
+    30	// 4.5:1 normal text). See `working/phase-5/designs/m2a-tokens/wcag.md`
+    31	// "Codex fix-up round 2 closure" and the M1b designer's documented
+    32	// mitigation in `working/phase-5/designs/m1b-shell/colors.md` lines
+    33	// 56-58. The hint copy is unchanged; only the visual treatment
+    34	// stepped back from "warning sienna" to "muted gray italic".
+    35	//
+    36	// As of M3 the "Updated" cell renders a relative-time string against
+    37	// a single `now` captured at refetch time in `App.tsx` (passed in as a
+    38	// prop) so the page does not ticker-update. The full ISO timestamp
+    39	// stays available via the `title=` hover hint for users who need the
+    40	// absolute value.
+    41	//
+    42	// As of M1b (Phase 5) the row click semantic shifts: a click anywhere
+    43	// on the row OR pressing Enter while the row is focused calls
+    44	// `onSelectRow(row.rowKey)` ONLY. The Phase-4 `onOpenDetail(rowKey,
+    45	// triggerEl)` call is REMOVED from the row click path — the drawer no
+    46	// longer auto-mounts on row click. The new entry point is the
+    47	// vestigial "Open detail" button rendered by `SessionView` in its
+    48	// `ready-placeholder` state. The checkbox cell still stops
+    49	// propagation so toggling selection never triggers `onSelectRow`
+    50	// (a11y bug magnet preserved verbatim from Phase 4).
+    51	//
+    52	// As of M6 (Chunk G) the status pill is rendered inline (the dedicated
+    53	// `StatusBadge` component was retired). The transform —
+    54	// `variant = status.replace(/_/g, "-")` for the CSS class and
+    55	// `label = status.replace(/_/g, " ")` for the visible text — is
+    56	// preserved byte-for-byte at the call site so the DOM shape stays
+    57	// `<span class="badge {variant}">{label}</span>`.
+    58	//
+    59	// CSS lives in the sibling `SessionsTable.css` (selectors
+    60	// `.table-wrap`, table chrome, `.badge.*`, `.title-cell*`,
+   235	                    />
+   236	                  ) : null}
+   237	                </td>
+   238	                <td>
+   239	                  <div className="title-cell">
+   240	                    <div className="title-cell-line1">
+   241	                      <span className="title-cell-title">
+   242	                        {row.title ?? "(untitled)"}
+   243	                      </span>
+   244	                      <span className="title-cell-tool">{row.tool}</span>
+   245	                    </div>
+   246	                    <div className="title-cell-line2">
+   247	                      <span className="title-cell-rowkey">
+   248	                        {row.rowKey}
+   249	                      </span>
+   250	                      {row.statusConflict ? (
+   251	                        <span
+   252	                          className="title-cell-refresh"
+   253	                          title="Source and stored status disagreed during load — refresh to re-fetch."
+   254	                        >
+   255	                          (refresh)
+   256	                        </span>
+   257	                      ) : null}
+   258	                    </div>
+   259	                  </div>
+   260	                </td>
+   261	                <td>
+   262	                  <span
+   263	                    className={`badge ${row.status.replace(/_/g, "-")}`}
+   264	                  >
+   265	                    {row.status.replace(/_/g, " ")}
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/App.test.tsx | sed -n '1155,1170p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+  1155	  );
+  1156	  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  1157	
+  1158	  const { container } = render(<App />);
+  1159	  await screen.findByText("claude_code:conflict-key");
+  1160	  // M1b moved the (refresh) marker INSIDE the Title cell stack — it
+  1161	  // is rendered with the dedicated `.title-cell-refresh` class on an
+  1162	  // italic span. M1b initially warmed it to `--color-warn`; the M2a
+  1163	  // fix-up round 2 reverted the color to `--color-text-muted` (the
+  1164	  // oklch retint regressed warn-as-text below the AA 4.5:1 floor).
+  1165	  // The hover hint copy is preserved verbatim from Phase 4.
+  1166	  const refreshSpan = container.querySelector(".title-cell-refresh");
+  1167	  expect(refreshSpan).not.toBeNull();
+  1168	  expect(refreshSpan?.textContent).toBe("(refresh)");
+  1169	  expect(refreshSpan?.getAttribute("title")).toBe(
+  1170	    "Source and stored status disagreed during load — refresh to re-fetch.",
+
+exec
+/bin/bash -lc "rg -n \"var\\(--color-warn\\)|color-mix\\(in srgb, var\\(--color-warn\\)\" apps/frontend/src --glob '*.css' --glob '"'!styles/tokens.css'"'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+apps/frontend/src/features/sessions/SessionsTable.css:138:  background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionsTable.css:139:  color: color-mix(in srgb, var(--color-warn) 70%, var(--color-text));
+apps/frontend/src/features/sessions/SessionsTable.css:140:  border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+
+exec
+/bin/bash -lc "rg -n \"toast\\.(warn|warning)|kind.*warn|warning|warn\" apps/frontend/src/components apps/frontend/src/App.tsx apps/frontend/src/features --glob '*.tsx' --glob '*.ts' --glob '*.css'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+apps/frontend/src/features/sessions/SessionsTable.css:138:  background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionsTable.css:139:  color: color-mix(in srgb, var(--color-warn) 70%, var(--color-text));
+apps/frontend/src/features/sessions/SessionsTable.css:140:  border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionsTable.css:210: * (Phase 4) to --color-warn so it would scan as a state hint. The
+apps/frontend/src/features/sessions/SessionsTable.css:211: * M2a oklch retint of --color-warn dropped the warn-as-text pair
+apps/frontend/src/features/sessions/SessionDetail.test.tsx:128:// each raw-preview test silences the "not wrapped in act" warnings
+apps/frontend/src/features/sessions/SessionDetail.test.tsx:664:    // not throw a "set state after unmount" warning here. The
+apps/frontend/src/features/sessions/useSelectedSession.test.ts:151:  // unmounted component. We verify this via the "no warnings about
+apps/frontend/src/features/sessions/useSelectedSession.test.ts:153:  // dispatch and make sure no error throws (happy-dom does not warn,
+apps/frontend/src/features/sessions/SessionDetail.css:52:   * recipe (red, the strongest semantic warn) so it visually stands
+apps/frontend/src/features/sessions/SessionsTable.tsx:27:// `--color-warn`; the M2a fix-up round 2 reverted it back to
+apps/frontend/src/features/sessions/SessionsTable.tsx:29:// the warn-as-text pair vs `--color-surface` to 4.21:1 (fails AA
+apps/frontend/src/features/sessions/SessionsTable.tsx:34:// stepped back from "warning sienna" to "muted gray italic".
+apps/frontend/src/features/sessions/SessionDetail.tsx:434: * downloaded" warning.
+
+exec
+/bin/bash -lc "nl -ba working/phase-5/designs/m2a-tokens/wcag.md | sed -n '38,52p;88,114p;135,164p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+    38	| 03 | `--color-ink`                                       | `--color-surface-raised`                         | 16.13:1 | AAA · normal        |
+    39	| 04 | `--color-ink-muted`                                 | `--color-surface-raised`                         | 6.64:1  | AAA · normal        |
+    40	| 05 | `--color-ink`                                       | row hover (4% ink mix)                           | 15.79:1 | AAA · normal        |
+    41	| 06 | `--color-ink`                                       | row selected (8% accent mix)                     | 15.36:1 | AAA · normal        |
+    42	| 07 | `--color-ink`                                       | row deep-link pulse peak (22% accent mix)        | 12.62:1 | AAA · normal        |
+    43	| 08 | `--color-warn` (no longer used as text — was `.title-cell-refresh`; reverted to `--color-text-muted` in fix-up round 2) | `--color-surface`                                | 4.21:1 (informational) | not consumed as text post round 2 |
+    44	| 09 | `--color-warn` (informational; not consumed as text post round 2)              | row selected tint                                | 3.79:1 (informational) | not consumed as text post round 2 |
+    45	| 08b | `.title-cell-refresh` italic (`--color-text-muted`)                  | `--color-surface`                                | 7.04:1  | AAA · normal        |
+    46	| 09b | `.title-cell-refresh` italic (`--color-text-muted`)                  | row selected tint (8% accent mix)                | ~6.32:1 | AAA · normal        |
+    47	| 09c | `.title-cell-refresh` italic (`--color-text-muted`)                  | selected+hover tint (12% accent mix)             | ~6.05:1 | AAA · normal        |
+    48	| 09d | `.title-cell-refresh` italic (`--color-text-muted`)                  | deep-link pulse peak (22% accent mix)            | ~5.40:1 | AAA · normal        |
+    49	| 10 | `--color-accent` (text use, post fix-up L=55)       | `--color-surface`                                | 4.84:1  | AA · normal         |
+    50	| 10b | `--color-accent` (text use, post fix-up L=55)      | `--color-surface-raised`                         | 4.57:1  | AA · normal         |
+    51	| 11 | up-to-date pill fg (success 70% mix on ink)         | up-to-date pill bg (success 15% mix on surface)  | 6.69:1  | AAA · normal        |
+    52	| 12 | not-stored pill fg (accent 70% mix on ink)          | not-stored pill bg (accent 15% mix on surface)   | 5.95:1  | AAA · normal        |
+    88	## Codex fix-up round 2 closure (April 2026)
+    89	
+    90	Round 2 codex review caught **1 BLOCKING finding** that round 1 had
+    91	deferred as "out-of-scope":
+    92	
+    93	- **`.title-cell-refresh` consumed `--color-warn` directly as
+    94	  normal-size text**. The M2a oklch retint regressed the warn-as-text
+    95	  pair vs `--color-surface` from ~5.3:1 (Phase 4 hex `#b86b07` on
+    96	  `#ffffff`) to **4.21:1** (`oklch(58% 0.15 60)` on
+    97	  `oklch(98% 0.005 250)`) — fails AA 4.5:1. Worse against the row-
+    98	  state tints: 3.79:1 selected, lower under selected+hover and the
+    99	  deep-link pulse peak.
+   100	  - **Fix**: revert `.title-cell-refresh` color from
+   101	    `var(--color-warn)` to `var(--color-text-muted)` in
+   102	    `apps/frontend/src/features/sessions/SessionsTable.css:217`.
+   103	    No token values changed.
+   104	  - **Post-fix-up**: 7.04:1 vs surface (light), 7.36:1 (dark);
+   105	    ~6.32:1 vs selected tint; all PASSES AA normal text. The
+   106	    M1b designer documented this exact mitigation in
+   107	    `working/phase-5/designs/m1b-shell/colors.md` lines 56-58 —
+   108	    "the swap is a single token". The `--color-warn` token itself
+   109	    stays at `oklch(58% 0.15 60)` (light) / `oklch(72% 0.13 60)`
+   110	    (dark); pill + toast-border consumers (rows 13, 17) are
+   111	    unaffected.
+   112	
+   113	## Codex fix-up round 1 closure (April 2026)
+   114	
+   135	### Resolved
+   136	
+   137	- **`.title-cell-refresh` warn-as-text contrast** (was 4.21:1 light
+   138	  vs surface; failed AA 4.5:1 normal text). Codex round-2 BLOCKING
+   139	  finding. **Resolved in M2a fix-up round 2**: reverted
+   140	  `.title-cell-refresh` from `var(--color-warn)` to
+   141	  `var(--color-text-muted)` per the M1b designer's optional
+   142	  recommendation in `working/phase-5/designs/m1b-shell/colors.md`
+   143	  lines 56-58. Post-fix: 7.04:1 light / 7.36:1 dark vs surface;
+   144	  ~6.32:1 vs selected-row tint (8%); ~6.05:1 vs selected+hover
+   145	  tint (12%); ~5.40:1 vs deep-link pulse peak (22%) — all pass
+   146	  AA normal text by a comfortable margin in both modes. The
+   147	  `--color-warn` token itself is unchanged (`oklch(58% 0.15 60)`
+   148	  light / `oklch(72% 0.13 60)` dark); the warn pill + warn toast
+   149	  border recipes still consume warn through mixes that already
+   150	  passed (rows 13, 17 in light; rows 13, 17 in dark). The semantic
+   151	  loss is small: the `(refresh)` marker no longer reads as
+   152	  "warning sienna" but as "muted gray italic" — the M1b designer
+   153	  approved this back-out path.
+   154	
+   155	### Outstanding (accepted risk)
+   156	
+   157	- **Dark `--color-border-strong` at 3.00:1** sits on the cusp. The
+   158	  oklch L=48 was codex's recommended target; my measurement reads
+   159	  3.0036 which rounds to 3.00. If a future codex round tightens the
+   160	  rounding it may flag this as "below 3:1 by 0.004" — pre-emptive
+   161	  mitigation is to bump dark `--color-border-strong` to
+   162	  `oklch(50% 0.02 70)` (lifts to ~3.18:1). **Round 2 disposition**:
+   163	  accepted-risk — bumping the token would ripple into the sticky-bar
+   164	  top edge + filter `<details>` chevron border recipes and demand a
+
+exec
+/bin/bash -lc "nl -ba working/phase-5/designs/m2a-tokens/design.md | sed -n '380,430p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   380	| `--color-ink` on `--color-surface-raised`               | 16.13:1| 14.84:1| AAA · normal  |
+   381	| `--color-ink` on row hover (4% ink)                     | 15.79:1| 14.56:1| AAA · normal  |
+   382	| `--color-ink` on row selected (8% accent)               | 15.36:1| 14.41:1| AAA · normal  |
+   383	| `--color-ink` on deep-link pulse peak (22% accent)      | 12.62:1| 11.83:1| AAA · normal  |
+   384	| `--color-warn` (informational; no longer text-consumed post round 2) on `--color-surface` | 4.21:1 | 7.68:1 | not consumed as text post round 2 |
+   385	| `--color-warn` (informational; no longer text-consumed post round 2) on row selected tint | 3.79:1 | 7.13:1 | not consumed as text post round 2 |
+   386	| `.title-cell-refresh` italic (`--color-text-muted`) on `--color-surface` | 7.04:1 | 7.36:1 | AAA · normal |
+   387	| `.title-cell-refresh` italic (`--color-text-muted`) on row selected tint | ~6.32:1 | ~6.62:1 | AAA · normal |
+   388	| `--color-accent` (post fix-up L=55) on `--color-surface`| 4.84:1 | 5.78:1 | AA · normal   |
+   389	| `--color-accent` on `--color-surface-raised`            | 4.57:1 | 5.52:1 | AA · normal   |
+   390	| up-to-date pill (success 70/15)                         | 6.69:1 | 6.94:1 | AAA · normal  |
+   391	| not-stored pill (accent 70/15)                          | 5.95:1 | 6.62:1 | AAA · normal  |
+   392	| outdated pill (warn 70/15)                              | 5.43:1 | 7.74:1 | AAA · normal  |
+   393	| source-missing pill (error 70/15)                       | 6.60:1 | 6.91:1 | AAA · normal  |
+   394	| Toast.success border (65% mix) on raised                | 3.34:1 | 3.55:1 | SC 1.4.11     |
+   395	| Toast.error border (65% mix) on raised                  | 3.53:1 | 3.60:1 | SC 1.4.11     |
+   396	| Toast.info border (70% mix, post fix-up) on raised      | 3.22:1 | 3.62:1 | SC 1.4.11     |
+   397	| `--color-border-strong` (post fix-up) on `--color-surface` | 3.06:1 | 3.00:1 | SC 1.4.11 (cusp dark) |
+   398	| `--color-border` on `--color-surface` (decorative)      | 1.49:1 | 1.35:1 | not WCAG-gated |
+   399	
+   400	**Codex fix-up round 1 (April 2026) — three BLOCKING resolutions**:
+   401	
+   402	1. **`.toast.info` border**: pre-fix-up 70% mix at accent L=60 measured
+   403	   2.79:1 vs surface-raised — failed SC 1.4.11. Fix: lower light
+   404	   `--color-accent` to L=55. Post-fix-up: 3.22:1 — passes.
+   405	2. **`--color-accent` as normal text** (`.action-bar-clear`,
+   406	   `.toast-details summary`): pre-fix-up L=60 measured 3.93:1 vs
+   407	   surface, 3.71:1 vs surface-raised — failed AA normal text. Same
+   408	   fix (L=60 → L=55) lifts both to 4.84:1 / 4.57:1 — passes.
+   409	3. **`--color-border-strong`** vs `--color-surface`: pre-fix-up light
+   410	   L=70 measured 2.53:1, dark L=40 measured 2.13:1 — failed SC 1.4.11.
+   411	   Fix: light L=70 → L=65, dark L=40 → L=48. Post-fix-up: 3.06:1
+   412	   light, 3.00:1 dark — passes (dark on the cusp).
+   413	
+   414	**Codex fix-up round 2 (April 2026) — 1 BLOCKING resolution**:
+   415	
+   416	- **`.title-cell-refresh` warn-as-text contrast**: round 1 deferred
+   417	  this as out-of-scope; round 2 codex review reclassified it as a
+   418	  real M2a regression (the oklch retint dropped the pair from
+   419	  ~5.3:1 hex baseline to 4.21:1 light vs surface, with worse ratios
+   420	  against selected/hover/pulse-peak tints). **Fix**: revert
+   421	  `.title-cell-refresh` color from `var(--color-warn)` to
+   422	  `var(--color-text-muted)` in
+   423	  `apps/frontend/src/features/sessions/SessionsTable.css` (line 217),
+   424	  per the M1b designer's documented mitigation in
+   425	  `working/phase-5/designs/m1b-shell/colors.md` lines 56-58.
+   426	  Post-fix-up: 7.04:1 light / 7.36:1 dark vs `--color-surface`;
+   427	  ~6.32:1 vs selected-row tint — passes AA normal text by a
+   428	  comfortable margin. The `--color-warn` token itself is unchanged
+   429	  (still `oklch(58% 0.15 60)` / `oklch(72% 0.13 60)`); pill + toast-
+   430	  border recipes are unaffected.
+
+codex
+The independent calculation matches the main fix and warn-pill numbers. Two documentation values for the 12%/22% refresh-row states are a little high by my sRGB-mix calculation, but the actual recomputed ratios still clear AA.
+exec
+/bin/bash -lc "node - <<'NODE'
+const deg=Math.PI/180;
+function oklch(Lpct,C,h){return {L:Lpct/100,C,h};}
+function enc(u){return u<=0.0031308?12.92*u:1.055*Math.pow(u,1/2.4)-0.055;}
+function dec(u){return u<=0.04045?u/12.92:Math.pow((u+0.055)/1.055,2.4);}
+function oklchToSrgb({L,C,h}){const a=C*Math.cos(h*deg),b=C*Math.sin(h*deg);const lp=L+0.3963377774*a+0.2158037573*b,mp=L-0.1055613458*a-0.0638541728*b,sp=L-0.0894841775*a-1.2914855480*b;const l=lp**3,m=mp**3,s=sp**3;return [4.0767416621*l-3.3077115913*m+0.2309699292*s,-1.2684380046*l+2.6097574011*m-0.3413193965*s,-0.0041960863*l-0.7034186147*m+1.7076147010*s].map(enc).map(x=>Math.min(1,Math.max(0,x)));}
+function lum(rgb){const [r,g,b]=rgb.map(dec);return .2126*r+.7152*g+.0722*b;}
+function contrast(a,b){const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)}
+function mix(a,b,p){return a.map((v,i)=>v*p+b[i]*(1-p));}
+const surface=oklchToSrgb(oklch(98,.01,70)); const ink=oklchToSrgb(oklch(20,.02,70)); const muted=oklchToSrgb(oklch(45,.02,70));
+const worstNoise=mix([0,0,0], surface, .03); // 3% black over surface in encoded sRGB
+console.log('ink on worst-case 3% black noise over surface', contrast(ink,worstNoise).toFixed(2));
+console.log('muted on worst-case 3% black noise over surface', contrast(muted,worstNoise).toFixed(2));
+NODE" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+ink on worst-case 3% black noise over surface 16.02
+muted on worst-case 3% black noise over surface 6.59
+
+exec
+/bin/bash -lc "node - <<'NODE'
+function hex(h){h=h.replace('#','');return [0,2,4].map(i=>parseInt(h.slice(i,i+2),16)/255)}
+function dec(u){return u<=0.04045?u/12.92:Math.pow((u+0.055)/1.055,2.4)}
+function lum(rgb){const [r,g,b]=rgb.map(dec);return .2126*r+.7152*g+.0722*b}
+function contrast(a,b){const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)}
+function mix(a,b,p){return a.map((v,i)=>v*p+b[i]*(1-p))}
+const light={surface:hex('#f8f9fb'), muted:hex('#5a606b'), accent:hex('#2864d4'), warn:hex('#b86b07')};
+const dark={surface:hex('#151821'), muted:hex('#9098a6'), accent:hex('#6da5ff'), warn:hex('#e0a75a')};
+for (const [name,t] of Object.entries({light,dark})) {
+ console.log(name, 'muted surface', contrast(t.muted,t.surface).toFixed(2), 'selected8', contrast(t.muted,mix(t.accent,t.surface,.08)).toFixed(2), 'pulse22', contrast(t.muted,mix(t.accent,t.surface,.22)).toFixed(2));
+ console.log(name, 'warn pill', contrast(mix(t.warn, name==='light'?hex('#14161a'):hex('#e8eaef'), .70), mix(t.warn,t.surface,.15)).toFixed(2));
+}
+NODE" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+light muted surface 6.00 selected8 5.39 pulse22 4.41
+light warn pill 5.18
+dark muted surface 6.10 selected8 5.39 pulse22 4.11
+dark warn pill 7.52
+
+exec
+/bin/bash -lc "python3 - <<'PY'
+import importlib.util
+spec=importlib.util.spec_from_file_location('wc','/tmp/wcag_check.py')
+wc=importlib.util.module_from_spec(spec); spec.loader.exec_module(wc)
+for label, fg, bg in [
+('dark border strong/surface',(48,.02,70),(15,.01,70)),
+('light border strong/surface',(65,.02,70),(98,.01,70)),
+('light muted/selected12', (45,.02,70), None),
+]:
+    if bg:
+        print(label, wc.contrast_ratio(wc.lum(fg), wc.lum(bg)))
+accent=(55,.15,50); surf=(98,.01,70); muted=(45,.02,70)
+for p in [8,12,22]:
+    bg=wc.mix_srgb_pct(accent,surf,p)
+    print(p, wc.contrast_ratio(wc.lum(muted), wc.lum_srgb(bg)))
+PY" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+dark border strong/surface 3.0009319837700112
+light border strong/surface 3.0587397964956176
+8 6.322290851788655
+12 5.983496344492648
+22 5.1919613545842145
+
+codex
+- **Verdict**: approved with nits
+- **Round 2 Blocker Resolution**: confirmed fixed at `apps/frontend/src/features/sessions/SessionsTable.css:223`: `.title-cell-refresh { color: var(--color-text-muted); }`. Recomputed ratios: light surface 7.04:1, dark surface 7.36:1, light selected 8% 6.32:1, light selected+hover 12% 5.98:1, light pulse 22% 5.19:1. All pass AA normal text.
+- **New Findings (in this round)**:
+  - nit / `working/phase-5/designs/m2a-tokens/wcag.md:47` and `working/phase-5/designs/m2a-tokens/wcag.md:48` / documented 12% and 22% refresh-row ratios are slightly high / my recompute gives 5.98:1 and 5.19:1, still passing AA, so this is documentation precision only.
+  - nit / `working/phase-5/designs/m2a-tokens/wcag.md:102`, `working/phase-5/designs/m2a-tokens/design.md:423` / docs still cite line 217 for the fix / actual line is 223.
+- **Dark `--color-border-strong` cusp**: accept as documented risk. I measure 3.0009:1 against dark `--color-surface`, so it clears SC 1.4.11, but barely. The L=50 future mitigation is reasonable, not required for this round.
+- **Missing Evidence**: none
+- **Required Changes**: none
+- **Notes**: No remaining direct `--color-warn` text use for `.title-cell-refresh`. Runtime `--color-warn` use is the `.badge.outdated` mix recipe at `SessionsTable.css:138-140`; its text pair measures 5.43:1 light and 7.74:1 dark. I found no warn-toast implementation consumer in the current tree.
+2026-04-29T05:23:46.855074Z ERROR codex_core::session: failed to record rollout items: thread 019dd7ac-fa18-7b72-a79d-d43476e0614b not found
+tokens used
+88,895
+- **Verdict**: approved with nits
+- **Round 2 Blocker Resolution**: confirmed fixed at `apps/frontend/src/features/sessions/SessionsTable.css:223`: `.title-cell-refresh { color: var(--color-text-muted); }`. Recomputed ratios: light surface 7.04:1, dark surface 7.36:1, light selected 8% 6.32:1, light selected+hover 12% 5.98:1, light pulse 22% 5.19:1. All pass AA normal text.
+- **New Findings (in this round)**:
+  - nit / `working/phase-5/designs/m2a-tokens/wcag.md:47` and `working/phase-5/designs/m2a-tokens/wcag.md:48` / documented 12% and 22% refresh-row ratios are slightly high / my recompute gives 5.98:1 and 5.19:1, still passing AA, so this is documentation precision only.
+  - nit / `working/phase-5/designs/m2a-tokens/wcag.md:102`, `working/phase-5/designs/m2a-tokens/design.md:423` / docs still cite line 217 for the fix / actual line is 223.
+- **Dark `--color-border-strong` cusp**: accept as documented risk. I measure 3.0009:1 against dark `--color-surface`, so it clears SC 1.4.11, but barely. The L=50 future mitigation is reasonable, not required for this round.
+- **Missing Evidence**: none
+- **Required Changes**: none
+- **Notes**: No remaining direct `--color-warn` text use for `.title-cell-refresh`. Runtime `--color-warn` use is the `.badge.outdated` mix recipe at `SessionsTable.css:138-140`; its text pair measures 5.43:1 light and 7.74:1 dark. I found no warn-toast implementation consumer in the current tree.

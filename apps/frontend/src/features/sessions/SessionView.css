@@ -42,6 +42,36 @@
   /* Wide-viewport gutter is `border-right` on `.list-pane` (set in
    * global.css). The session pane carries no border — the hairline
    * gutter is the single visual separator. */
+
+  /* M2a / signature detail #6: reading-wash texture. A 1-px
+   * `feTurbulence` SVG at 3% alpha tiled across the right pane —
+   * invisible at a glance, but reads as paper grain rather than
+   * default browser white. Suppressed in dark mode (the deep warm
+   * surface already carries the editorial mood without texture) and
+   * under `prefers-reduced-motion: reduce` (the wash is decorative;
+   * users who opt out of motion typically also dislike incidental
+   * surface treatment per WCAG WAI guidance). The token is
+   * `--noise-overlay-light` declared in `tokens.css`.
+   *
+   * Note: the M1a global reduced-motion zero-out in `global.css`
+   * targets `animation-duration` / `transition-duration` /
+   * `scroll-behavior` only — `background-image` is NOT in that
+   * property list, so the dedicated suppression rules below are
+   * additive, not redundant. */
+  background-image: var(--noise-overlay-light);
+  background-repeat: repeat;
+}
+
+@media (prefers-color-scheme: dark) {
+  .session-pane {
+    background-image: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-pane {
+    background-image: none;
+  }
 }
 
 .session-state {
@@ -52,13 +82,22 @@
   margin-top: var(--space-3);
 }
 
-/* Empty preface. The mark glyph is a typographic ornament: a single
- * centered middle-dot in `var(--color-text-muted)` at `--text-xl`.
- * `aria-hidden="true"` on the glyph in JSX (decorative). */
+/* Empty preface. M2a promotes the empty-pane preface to the
+ * Archive-room display layer: the mark glyph + first paragraph render
+ * in Fraunces italic per spec line 36 (Display stack: empty-pane
+ * preface). The glyph also bumps from `--text-xl` to `--text-2xl` so
+ * the editorial moment carries the spec's "centered small
+ * illustration" intent (spec line 595; designer §9.2). The second
+ * paragraph stays in the chrome stack so the visual rhythm is
+ * "italic display heading + grounding chrome body" rather than two
+ * stacked italic blocks. `aria-hidden="true"` on the glyph in JSX
+ * (decorative). */
 .empty-mark {
   display: block;
   text-align: center;
-  font-size: var(--text-xl);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: var(--text-2xl);
   font-weight: 200;
   letter-spacing: 0.2em;
   color: var(--color-text-muted);
@@ -66,15 +105,17 @@
   user-select: none;
 }
 .empty-prose-1 {
+  font-family: var(--font-display);
+  font-style: italic;
   font-size: var(--text-lg);
   color: var(--color-text);
-  line-height: 1.55;
+  line-height: var(--leading-comfortable);
   margin: 0;
 }
 .empty-prose-2 {
   font-size: var(--text-base);
   color: var(--color-text-muted);
-  line-height: 1.55;
+  line-height: var(--leading-comfortable);
   margin: 0;
 }
 
