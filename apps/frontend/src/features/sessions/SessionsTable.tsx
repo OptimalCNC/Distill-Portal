@@ -17,8 +17,9 @@
 // Updated. The Title cell carries a two-line stack: bold title + tool
 // badge inline (line 1); muted mono rowKey + optional `(refresh)`
 // marker (line 2). The dropped Phase-4 columns (Tool / Stored Copy /
-// Source Path) remain reachable via the still-mounted Phase-4
-// `<Drawer>` until M2 ships the Metadata tab.
+// Source Path) are now surfaced by the M2b Metadata tab inside
+// `SessionView` on the right pane (no drawer; the Phase-4 `<Drawer>`
+// is retained as DEAD-BUT-TESTED scaffolding only).
 //
 // Per spec, a row whose `statusConflict` is true gets a small
 // "(refresh)" affordance inside the Title cell — telegraphing the
@@ -39,15 +40,18 @@
 // stays available via the `title=` hover hint for users who need the
 // absolute value.
 //
-// As of M1b (Phase 5) the row click semantic shifts: a click anywhere
+// As of M2b (Phase 5) the row click semantic is: a click anywhere
 // on the row OR pressing Enter while the row is focused calls
-// `onSelectRow(row.rowKey)` ONLY. The Phase-4 `onOpenDetail(rowKey,
-// triggerEl)` call is REMOVED from the row click path — the drawer no
-// longer auto-mounts on row click. The new entry point is the
-// vestigial "Open detail" button rendered by `SessionView` in its
-// `ready-placeholder` state. The checkbox cell still stops
-// propagation so toggling selection never triggers `onSelectRow`
-// (a11y bug magnet preserved verbatim from Phase 4).
+// `onSelectRow(row.rowKey)` ONLY. `onSelectRow` updates the URL via
+// `useSelectedSession`, which causes `SessionView` to mount on the
+// right pane with the Metadata tab selected by default. There is no
+// drawer and no "Open detail" button — both the Phase-4
+// `onOpenDetail(rowKey, triggerEl)` call and the M1b vestigial
+// "Open detail" button were collapsed in M2b alongside the
+// `forwardRef` / `SessionsViewHandle` plumbing on `SessionsView`.
+// The checkbox cell still stops propagation so toggling selection
+// never triggers `onSelectRow` (a11y bug magnet preserved verbatim
+// from Phase 4).
 //
 // As of M6 (Chunk G) the status pill is rendered inline (the dedicated
 // `StatusBadge` component was retired). The transform —
@@ -80,13 +84,14 @@ export type SessionsTableProps = {
    *  row carries `aria-current="true"` for assistive tech and the
    *  selected-row visual treatment. `null` means no selection. */
   selectedRowKey?: string | null;
-  /** M1a/M1b: setter for the URL-synced selection. Called on row
+  /** M1a/M1b/M2b: setter for the URL-synced selection. Called on row
    *  click (NOT on checkbox-cell click — the importability rule's
    *  stopPropagation guard remains load-bearing). M1b removed the
-   *  Phase-4 `onOpenDetail` call from the row click path; the
-   *  vestigial "Open detail" button in SessionView is the new drawer
-   *  entry point (see `working/phase-5/designs/m1b-shell/design.md`
-   *  §3.5). */
+   *  Phase-4 `onOpenDetail` call from the row click path; M2b
+   *  collapsed the vestigial "Open detail" button as well. The URL
+   *  update is now the SOLE row-open gesture: `useSelectedSession`
+   *  reads the new `?session=...` value and `SessionView` mounts on
+   *  the right pane with the Metadata tab selected by default. */
   onSelectRow?: (rowKey: string) => void;
   /** M1a: rowKey of the row that should fire the deep-link pulse on
    *  the current paint. Set on initial mount only when
@@ -172,10 +177,12 @@ export function SessionsTable({
               row.sourceSessionKey !== null &&
               selected.has(row.sourceSessionKey);
             const handleRowOpen = () => {
-              // M1b: row "open" gesture is now URL-synced selection
-              // ONLY. The Phase-4 `onOpenDetail` drawer auto-mount has
-              // been retired — the vestigial "Open detail" button in
-              // `SessionView` is the new drawer entry point.
+              // M2b: row "open" gesture is URL-synced selection ONLY.
+              // The Phase-4 `onOpenDetail` drawer auto-mount was
+              // retired in M1b; the M1b vestigial "Open detail" button
+              // was collapsed in M2b. The URL update flows through
+              // `useSelectedSession` and `SessionView` mounts on the
+              // right pane with the Metadata tab selected by default.
               if (onSelectRow) onSelectRow(row.rowKey);
             };
             const isSelected = selectedRowKey === row.rowKey;

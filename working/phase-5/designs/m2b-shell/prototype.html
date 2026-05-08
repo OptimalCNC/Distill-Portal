@@ -1,0 +1,1495 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>distill-portal · Phase 5 · M2b — Tabs primitive + SessionView shell</title>
+
+<style>
+/* =========================================================================
+ * M2b reference prototype — Archive-room Design Language (FROZEN at M2a).
+ *
+ * Visible surfaces demonstrated:
+ *   1. Tab strip (tablist + 4 tabs + sliding 1px ink-stroke indicator).
+ *   2. Session-pane minimal header (title + tool badge + status pill +
+ *      conflict badge).
+ *   3. Tab panels (lazy-on-first-activation, hidden-on-inactive-but-visited,
+ *      cross-fade-IN driven by re-triggering the CSS `tab-fade-in`
+ *      keyframe via an inline `style.animation` toggle on the panel's
+ *      own `<div role="tabpanel">`. The React subtree is STABLE across
+ *      tab switches — NOT keyed on activeTab — preserving the
+ *      keep-mounted contract per Resolved Decision #12 / spec
+ *      lines 650–658. See design.md §3.2 / §5.2 / §7.4.
+ *   4. Page-turn fade (selectedRowKey change → outer SessionView remounts
+ *      with opacity + translateX entrance).
+ *   5. Metadata tab body — 18-field <dl> with subagent sidecar badge,
+ *      "Last seen source path" label swap, statusConflict badge, Copy path
+ *      button, "Open raw" anchor.
+ *   6. Raw tab body — caption-driven success state plus a state toggle
+ *      that surfaces idle / loading / error / non_2xx / not_imported
+ *      branches.
+ *   7. Skim placeholder — "Coming in Milestone 5" muted + editorial.
+ *   8. Transcript placeholder — "Coming in Milestone 4" same treatment.
+ *
+ * NO new tokens introduced. Every color, motion, and font reference goes
+ * through the M2a-canonical name. Only `transform` / `opacity` /
+ * `background-color` animate. Indicator slide, tab cross-fade, and
+ * page-turn fade are the three M2b-active animations and they all zero
+ * out under [data-motion="reduce"] (which mirrors the production
+ * @media (prefers-reduced-motion: reduce) rule).
+ *
+ * The two-layer animation pattern documented in design.md §5:
+ *   <SessionView key={selectedRowKey}>      ← 200 ms page-turn fade
+ *                                             (React remount on selection
+ *                                              change is correct — selection
+ *                                              IS a different document)
+ *     <header />                              (mounts with parent)
+ *     <Tabs />                                (mounts with parent;
+ *                                              indicator snaps to default)
+ *     <div role="tabpanel" hidden={!isActive}
+ *          style={{ animation: isActive
+ *                     ? "tab-fade-in 120ms var(--ease-out) both"
+ *                     : "none" }}
+ *          tabIndex={isActive && (id === "skim" || id === "transcript" || id === "raw") ? 0 : undefined}>
+ *       {/* STABLE content — NOT keyed on activeTab.
+ *           Cross-fade fires when style.animation changes from
+ *           "none" to a real value. Keep-mounted contract per
+ *           Resolved Decision #12. */}
+ *     </div>
+ *   </SessionView>
+ * ===================================================================== */
+
+:root {
+  /* Spacing scale — byte-equivalent to apps/frontend/src/styles/tokens.css:96-102.
+   * The production scale is 1, 2, 3, 4, 6, 8 ONLY — no 5, 10, or 12. The
+   * previous artifact draft introduced --space-5/10/12 which would have
+   * resolved to 0 in production CSS (var() fallback to nothing). Codex
+   * round 3 caught this; M2b uses only the six tokens below. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  --radius-sm: 4px;
+
+  /* === COLORS — oklch source-of-truth (light, post-M2a fix-up) === */
+  --color-surface:        oklch(98% 0.01 70);
+  --color-surface-raised: oklch(96% 0.01 70);
+  --color-ink:            oklch(20% 0.02 70);
+  --color-ink-muted:      oklch(45% 0.02 70);
+  --color-border:         oklch(85% 0.01 70);
+  --color-border-strong:  oklch(65% 0.02 70);
+  --color-accent:         oklch(55% 0.15 50);
+  --color-accent-hover:   oklch(50% 0.16 50);
+
+  --color-success: oklch(48% 0.13 155);
+  --color-warn:    oklch(58% 0.15 60);
+  --color-error:   oklch(52% 0.18 25);
+
+  /* === TYPOGRAPHY === */
+  --font-display: "Fraunces", Charter, "Iowan Old Style", Georgia, serif;
+  --font-chrome:  -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Backwards-compat aliases (M2a Option B) */
+  --font-sans:        var(--font-chrome);
+  --color-bg:         var(--color-surface);
+  --color-text:       var(--color-ink);
+  --color-text-muted: var(--color-ink-muted);
+
+  --text-xs:   0.75rem;
+  --text-sm:   0.875rem;
+  --text-base: 1rem;
+  --text-lg:   1.125rem;
+  --text-xl:   1.5rem;
+  --text-2xl:  2rem;
+
+  --leading-tight:       1.25;
+  --leading-comfortable: 1.55;
+  --measure:             70ch;
+
+  /* === MOTION === */
+  --motion-fast:       80ms;
+  --motion-base:       120ms;
+  --motion-disclosure: 200ms;
+  --motion-pulse:      600ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out:      cubic-bezier(0.0, 0.0, 0.2, 1);
+  --ease-in-out:   cubic-bezier(0.4, 0, 0.6, 1);
+
+  /* === SURFACE TREATMENT — reading wash (light only) === */
+  --noise-overlay-light: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.03 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* Dark mode (system preference + manual data-theme override) */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-surface:        oklch(15% 0.01 70);
+    --color-surface-raised: oklch(18% 0.01 70);
+    --color-ink:            oklch(92% 0.01 70);
+    --color-ink-muted:      oklch(70% 0.01 70);
+    --color-border:         oklch(28% 0.01 70);
+    --color-border-strong:  oklch(48% 0.02 70);
+    --color-accent:         oklch(65% 0.15 50);
+    --color-accent-hover:   oklch(72% 0.13 50);
+
+    --color-success: oklch(64% 0.13 155);
+    --color-warn:    oklch(72% 0.13 60);
+    --color-error:   oklch(68% 0.16 25);
+  }
+}
+:root[data-theme="dark"] {
+  --color-surface:        oklch(15% 0.01 70);
+  --color-surface-raised: oklch(18% 0.01 70);
+  --color-ink:            oklch(92% 0.01 70);
+  --color-ink-muted:      oklch(70% 0.01 70);
+  --color-border:         oklch(28% 0.01 70);
+  --color-border-strong:  oklch(48% 0.02 70);
+  --color-accent:         oklch(65% 0.15 50);
+  --color-accent-hover:   oklch(72% 0.13 50);
+
+  --color-success: oklch(64% 0.13 155);
+  --color-warn:    oklch(72% 0.13 60);
+  --color-error:   oklch(68% 0.16 25);
+}
+
+/* Reduced motion — production rule lives in global.css and zeros every
+ * animation/transition. The prototype mirrors it via a manual override
+ * so reviewers can toggle without touching OS settings. */
+:root[data-motion="reduce"] *,
+:root[data-motion="reduce"] *::before,
+:root[data-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  * , *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ----- Page chrome ---------------------------------------------------- */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+
+body {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-chrome);
+  font-size: var(--text-base);
+  line-height: var(--leading-comfortable);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-raised);
+  border-bottom: 1px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  letter-spacing: 0.02em;
+}
+.toolbar h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: var(--text-lg);
+  color: var(--color-ink);
+  letter-spacing: -0.005em;
+}
+.toolbar h1 .marker {
+  color: var(--color-accent);
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.1em;
+  margin-right: var(--space-2);
+  vertical-align: 0.15em;
+}
+.toolbar .spacer { flex: 1; }
+.toolbar .ctrl {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+.toolbar .ctrl[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+}
+.toolbar .ctrl:hover {
+  background: color-mix(in srgb, var(--color-ink) 4%, var(--color-surface));
+}
+.toolbar .ctrl:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ----- Inspection shell (M1a recipe; included here for context) ------- */
+.inspection {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) 1fr;
+  min-height: calc(100vh - 49px);
+  background: var(--color-surface);
+}
+@media (max-width: 899.98px) {
+  .inspection { grid-template-columns: 1fr; }
+}
+
+/* ----- List pane (stub; M1a/M1b territory, not M2b — a single selected
+ *       row + a few siblings are enough to anchor the prototype) -------- */
+.list-pane {
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  min-inline-size: 0;
+}
+.list-pane header {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.list-pane header strong {
+  font-weight: 600;
+  color: var(--color-ink);
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+}
+.list-rows { flex: 1; }
+.row {
+  display: grid;
+  grid-template-columns: 1fr 5rem;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  min-height: 36px;
+  transition: background-color var(--motion-fast) linear;
+}
+.row:hover {
+  background: color-mix(in srgb, var(--color-ink) 4%, transparent);
+}
+.row[aria-current="true"] {
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+.row .row-title {
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row .row-tool {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  letter-spacing: 0.02em;
+  text-align: right;
+}
+.row .row-meta {
+  grid-column: 1 / -1;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================================================
+ *  SessionView — outer key drives the page-turn fade (signature detail #2).
+ * =========================================================================== */
+.session-pane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  background-image: var(--noise-overlay-light);
+  background-repeat: repeat;
+  min-inline-size: 0;
+  /* page-turn fade — fires every time the .session-pane element is
+   * remounted (in production: <SessionView key={selectedRowKey}>). */
+  animation: session-page-turn var(--motion-disclosure) var(--ease-out) both;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .session-pane { background-image: none; }
+}
+:root[data-theme="dark"] .session-pane { background-image: none; }
+:root[data-motion="reduce"] .session-pane { background-image: none; }
+@media (prefers-reduced-motion: reduce) {
+  .session-pane { background-image: none; }
+}
+@keyframes session-page-turn {
+  from { opacity: 0; transform: translateX(4px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ----- Session-pane minimal header ----------------------------------- */
+.session-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+.session-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: var(--text-xl);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.005em;
+  color: var(--color-ink);
+  /* allow the long title to truncate gracefully on narrow viewports */
+  max-inline-size: var(--measure);
+  overflow-wrap: anywhere;
+}
+.session-title.untitled {
+  color: var(--color-ink-muted);
+}
+.tool-badge {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.02em;
+  color: var(--color-ink-muted);
+  padding: 2px var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  line-height: 1.5;
+}
+
+/* Status pill — Phase 4 recipe (preserved verbatim for M2b) */
+.badge {
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  letter-spacing: 0.02em;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+.badge.up-to-date {
+  color: color-mix(in srgb, var(--color-success) 70%, var(--color-ink));
+  background: color-mix(in srgb, var(--color-success) 15%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-success) 35%, var(--color-surface));
+}
+.badge.outdated {
+  color: color-mix(in srgb, var(--color-warn) 70%, var(--color-ink));
+  background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+}
+.badge.not-stored {
+  color: color-mix(in srgb, var(--color-accent) 70%, var(--color-ink));
+  background: color-mix(in srgb, var(--color-accent) 15%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-surface));
+}
+.badge.source-missing {
+  color: color-mix(in srgb, var(--color-error) 70%, var(--color-ink));
+  background: color-mix(in srgb, var(--color-error) 15%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-error) 35%, var(--color-surface));
+}
+.badge.conflict {
+  color: color-mix(in srgb, var(--color-warn) 70%, var(--color-ink));
+  background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+}
+
+/* Narrow-mode "← Back to list" — quiet text-button row above the header */
+.back-to-list {
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  display: none;
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+}
+.back-to-list button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  padding: var(--space-1) 0;
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.back-to-list button:hover { color: var(--color-ink); }
+.back-to-list button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+@media (max-width: 899.98px) {
+  .back-to-list { display: block; }
+}
+
+/* ============================================================================
+ *  Tabs primitive — ARIA tablist + 1 px sliding ink-stroke indicator.
+ * =========================================================================== */
+.tabs {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-3);             /* 12 px gap between tabs (spec line 59) */
+  height: 2.5rem;                  /* spec line 59 — strip height */
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+.tabs [role="tab"] {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: var(--space-2) 0;       /* no horizontal padding — gap handles spacing */
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  letter-spacing: 0.01em;
+  color: var(--color-ink-muted);
+  line-height: var(--leading-tight);
+  /* Hover/active text-color changes are INSTANT — no transition.
+   * The frozen motion budget (working/phase-5.md:84-95) lists only
+   * `transform`, `opacity`, and `background-color` on enumerated
+   * surfaces. Tab text color is not on that list. */
+}
+.tabs [role="tab"]:hover {
+  color: color-mix(in srgb, var(--color-ink) 80%, var(--color-ink-muted));
+}
+.tabs [role="tab"][aria-selected="true"] {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+.tabs [role="tab"]:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.tabs [role="tab"]:active {           /* mouse-down feedback */
+  color: var(--color-ink);
+}
+.tabs [role="tab"][aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* The single ink-stroke indicator — production version uses
+ * transform: translateX driven by data-active-tab. Here the offsets are
+ * computed from the active tab's getBoundingClientRect on activation.
+ *
+ * IMPORTANT: the indicator's intrinsic CSS box is 1×1 px. The JS sets
+ * `transform: translateX(${x}px) scaleX(${width}px)` to grow the 1 px
+ * base box to the active tab's measured width. Without the explicit
+ * `width: 1px` here, an empty absolutely-positioned <span> resolves to
+ * `width: auto` → 0, and `scaleX(N) × 0 = 0` would render an invisible
+ * indicator. */
+.tabs .indicator {
+  position: absolute;
+  bottom: -1px;                       /* sits ON the bottom hairline */
+  left: 0;
+  width: 1px;                          /* base extent — required for scaleX growth */
+  height: 1px;
+  background: var(--color-accent);
+  transform: translateX(0) scaleX(0);
+  transform-origin: left;
+  /* indicator slide — spec line 86: `transform: translateX` 120 ms ease-standard */
+  transition:
+    transform var(--motion-base) var(--ease-standard);
+  pointer-events: none;
+}
+
+/* ============================================================================
+ *  Tab panels — lazy mount + hidden-on-inactive-but-visited + cross-fade-IN.
+ * =========================================================================== */
+.tabpanels {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden auto;
+}
+[role="tabpanel"] {
+  /* outer shell — provides ARIA + a11y. Inactive-but-visited panels carry
+   * the `hidden` HTML attribute (display:none + accessibility tree exclusion).
+   * The browser handles hidden semantics — no extra CSS needed beyond
+   * letting the default user-agent stylesheet apply. */
+  padding: var(--space-6) var(--space-4);  /* --space-5 not in token scale; --space-4 (16 px) is the closest fit */
+  max-inline-size: var(--measure);          /* 70ch reading measure */
+  margin-inline: 0;
+}
+
+/* Cross-fade-IN — driven by an inline `animation` style toggled on
+ * the active tabpanel from `none` → `tab-fade-in 120ms var(--ease-out) both`.
+ * The keep-mounted contract (Resolved Decision #12 / spec lines 650–658)
+ * forbids remounting the panel content, so we use animation-name
+ * re-trigger instead of React `key={activeTab}` remount. The browser
+ * starts the keyframes whenever the inline animation property string
+ * changes from `none` to a real value. */
+@keyframes tab-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ============================================================================
+ *  Metadata tab body — 18-field <dl> + subagent badge + "Open raw" anchor.
+ * =========================================================================== */
+.metadata-meta {
+  display: grid;
+  grid-template-columns: minmax(11rem, max-content) 1fr;
+  column-gap: var(--space-4);
+  row-gap: var(--space-2);
+  margin: 0;
+}
+.metadata-meta dt {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  color: var(--color-ink-muted);
+  text-transform: lowercase;          /* the field names are already snake_case */
+  align-self: baseline;
+}
+.metadata-meta dd {
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.metadata-meta dd.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+.metadata-meta dd.muted {
+  color: var(--color-ink-muted);
+  font-style: italic;
+}
+.metadata-meta dd .pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.metadata-meta dd .conflict-note {
+  color: var(--color-ink-muted);
+  font-size: var(--text-xs);
+  font-style: italic;
+}
+
+/* Source-path row + Copy path button + "Last seen" label swap */
+.source-path-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.source-path-row .path {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  word-break: break-all;
+}
+.copy-path-btn {
+  appearance: none;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  /* Hover background change is INSTANT — Copy path button's
+   * background-color is not on the spec's motion budget at
+   * working/phase-5.md:84-95. */
+}
+.copy-path-btn:hover {
+  background: color-mix(in srgb, var(--color-ink) 4%, var(--color-surface));
+}
+.copy-path-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.copy-hint {
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  font-style: italic;
+}
+
+/* Subagent sidecar badge — dashed hairline so it reads as informational,
+ * not an action chip. Lives inline next to the has_subagent_sidecars row. */
+.subagent-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-ink-muted);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+/* "Open raw" anchor — quiet text link in --color-accent (4.84:1 / 5.78:1) */
+.open-raw {
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+.open-raw a {
+  color: var(--color-accent);
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 1px;
+  /* Hover underline (border-color) change is INSTANT — `border-color`
+   * animation is not on the spec's motion budget at
+   * working/phase-5.md:84-95. */
+}
+.open-raw a:hover {
+  color: var(--color-accent-hover);
+  border-bottom-color: var(--color-accent-hover);
+}
+.open-raw a:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ============================================================================
+ *  Raw tab body — caption-driven state machine; mono pre-block for success.
+ * =========================================================================== */
+.raw-state-toggle {
+  /* prototype-only control surface for cycling raw-tab state branches */
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px dashed var(--color-border);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+}
+.raw-state-toggle label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: var(--color-surface);
+}
+.raw-state-toggle input[type="radio"]:checked + span {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+.raw-state-toggle input[type="radio"] {
+  margin: 0;
+}
+.raw-state-toggle input[type="radio"]:focus-visible + span {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.raw-pre {
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-comfortable);
+  color: var(--color-ink);
+  max-height: 16rem;                  /* M4 raw-preview block, M2a literal */
+  overflow: auto;
+  white-space: pre;
+}
+.raw-pre .line {
+  display: block;
+}
+.raw-pre .line.text {
+  color: var(--color-ink-muted);
+  font-style: italic;
+}
+.raw-pre .line.text .marker {
+  /* Phase 4-equivalent: muted-italic marker on the non-JSON fallback
+   * line. Codex measured warn-on-surface-raised at 3.97:1 light → fails
+   * AA. Muted-on-surface-raised passes (light 6.64:1 / dark 7.03:1).
+   * The .line.text parent already cascades color: var(--color-ink-muted)
+   * + font-style: italic; the marker just adjusts size + spacing. */
+  font-size: var(--text-xs);
+  margin-left: var(--space-2);
+}
+.raw-caption {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  font-style: italic;
+}
+.raw-error {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: color-mix(in srgb, var(--color-error) 70%, var(--color-ink));
+}
+.raw-loading {
+  margin: 0;
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+  font-style: italic;
+  letter-spacing: 0.01em;
+}
+.retry-btn {
+  appearance: none;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  /* Hover background change is INSTANT — Retry button's
+   * background-color is not on the spec's motion budget at
+   * working/phase-5.md:84-95. */
+}
+.retry-btn:hover {
+  background: color-mix(in srgb, var(--color-ink) 4%, var(--color-surface));
+}
+.retry-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.not-imported {
+  margin: 0;
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+  font-style: italic;
+  max-inline-size: var(--measure);
+  line-height: var(--leading-comfortable);
+}
+
+/* ============================================================================
+ *  Skim + Transcript placeholders — editorial, restrained, NOT illustrated.
+ * =========================================================================== */
+.placeholder {
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+  font-style: italic;
+  letter-spacing: 0.01em;
+  text-align: center;
+  padding: var(--space-8) 0;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+.placeholder strong {
+  display: block;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: var(--text-lg);
+  color: var(--color-ink-muted);
+  margin-bottom: var(--space-2);
+  letter-spacing: -0.005em;
+}
+
+/* ----- Selected-row "Open detail" affordance — none in M2b. ----- */
+</style>
+</head>
+<body>
+
+<header class="toolbar" role="banner">
+  <h1><span class="marker">M2b</span>SessionView shell + Tabs primitive</h1>
+  <span aria-hidden="true">·</span>
+  <span>distill-portal · phase-5 · m2b-shell</span>
+  <span class="spacer"></span>
+  <button class="ctrl" type="button" id="theme-toggle" aria-pressed="false">Light / Dark</button>
+  <button class="ctrl" type="button" id="motion-toggle" aria-pressed="false">Reduced motion</button>
+  <button class="ctrl" type="button" id="switch-session">Switch session ↻</button>
+</header>
+
+<main class="inspection" role="main">
+
+  <!-- LIST PANE STUB — abbreviated; M1a/M1b territory. -->
+  <aside class="list-pane" aria-label="Session list">
+    <header>
+      <strong>14 sessions</strong>
+      <span aria-hidden="true">·</span>
+      <span>filtered</span>
+    </header>
+    <div class="list-rows" role="list">
+      <div class="row" role="listitem">
+        <span class="row-title">Plan: phase-5 M3 dispatch</span>
+        <span class="row-tool">claude-code</span>
+        <span class="row-meta">07:14 · /home/dev/projects/distill-portal</span>
+      </div>
+      <div class="row" role="listitem" aria-current="true" data-row-key="row-active">
+        <span class="row-title">Refactor: split-pane shell + tab primitive</span>
+        <span class="row-tool">claude-code</span>
+        <span class="row-meta">17:42 · /home/dev/projects/distill-portal</span>
+      </div>
+      <div class="row" role="listitem">
+        <span class="row-title">Codex review · M2a oklch ramp</span>
+        <span class="row-tool">codex</span>
+        <span class="row-meta">14:08 · /home/dev/projects/distill-portal</span>
+      </div>
+      <div class="row" role="listitem">
+        <span class="row-title">Bun test suite — flake repro</span>
+        <span class="row-tool">claude-code</span>
+        <span class="row-meta">12:55 · /home/dev/projects/distill-portal</span>
+      </div>
+      <div class="row" role="listitem">
+        <span class="row-title">(untitled)</span>
+        <span class="row-tool">codex</span>
+        <span class="row-meta">11:17 · /home/dev/scratch/playground</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- SESSION PANE — outer keyed by selectedRowKey; remounts on switch. -->
+  <article class="session-pane" id="session-pane" aria-label="Session view">
+
+    <!-- Narrow-mode quiet "Back to list" row — only shows below 900 px. -->
+    <div class="back-to-list">
+      <button type="button">← Back to list</button>
+    </div>
+
+    <!-- MINIMAL HEADER — title + tool badge + status + conflict (no copy
+         path, no subagent header badge, no sourcePathIsStale hint, no
+         "Open raw" — those defer to M4). -->
+    <header class="session-header">
+      <h2 class="session-title">
+        Refactor: split-pane shell &amp; tab primitive
+      </h2>
+      <span class="tool-badge">claude-code</span>
+      <span class="badge outdated">outdated</span>
+      <span class="badge conflict" title="Source ↔ stored disagreed during load — refresh to re-fetch.">Conflict</span>
+    </header>
+
+    <!-- TAB STRIP — order: Transcript / Skim / Raw / Metadata. Default
+         active at M2b = Metadata (per Resolved Decision #11). -->
+    <div
+      class="tabs"
+      role="tablist"
+      aria-label="Session content tabs"
+      data-active-tab="metadata"
+    >
+      <button id="tab-transcript" role="tab" aria-controls="panel-transcript" aria-selected="false" tabindex="-1">Transcript</button>
+      <button id="tab-skim"       role="tab" aria-controls="panel-skim"       aria-selected="false" tabindex="-1">Skim</button>
+      <button id="tab-raw"        role="tab" aria-controls="panel-raw"        aria-selected="false" tabindex="-1">Raw</button>
+      <button id="tab-metadata"   role="tab" aria-controls="panel-metadata"   aria-selected="true"  tabindex="0">Metadata</button>
+      <span class="indicator" aria-hidden="true"></span>
+    </div>
+
+    <!-- TAB PANELS — visited tabs stay mounted with `hidden`, unvisited
+         remain unmounted. The panel's React subtree is STABLE (NOT keyed
+         on activeTab); the cross-fade-IN is driven by toggling an inline
+         `style.animation` from `none` → `tab-fade-in 120ms var(--ease-out) both`
+         on the `<div role="tabpanel">` itself. See activate() below.
+
+         tabIndex={0} is added by the activate() function to the active
+         Skim, Transcript, AND Raw panels. Skim + Transcript have
+         placeholder content with no focusable child; Raw's success
+         state renders a non-focusable <pre> (Retry only appears in
+         error / non_2xx), so the panel itself must catch the Tab
+         landing for keyboard users. Metadata is the lone exception —
+         its Copy path button is always focusable and serves as the
+         first Tab stop inside the panel. WAI-ARIA APG Tabs pattern. -->
+    <div class="tabpanels">
+      <div id="panel-transcript" role="tabpanel" aria-labelledby="tab-transcript" hidden>
+        <div class="tabpanel-content"></div>
+      </div>
+      <div id="panel-skim" role="tabpanel" aria-labelledby="tab-skim" hidden>
+        <div class="tabpanel-content"></div>
+      </div>
+      <div id="panel-raw" role="tabpanel" aria-labelledby="tab-raw" hidden>
+        <div class="tabpanel-content"></div>
+      </div>
+      <div id="panel-metadata" role="tabpanel" aria-labelledby="tab-metadata">
+        <div class="tabpanel-content"></div>
+      </div>
+    </div>
+
+  </article>
+</main>
+
+<!-- =========================================================================
+ *   Inline JS — minimal, prototype-only. Production lives in:
+ *     - apps/frontend/src/components/Tabs.tsx          (ARIA + keyboard)
+ *     - apps/frontend/src/features/sessions/SessionView.tsx
+ *     - .../SessionMetadata.tsx
+ *     - .../RawTab.tsx
+ *
+ *   This script wires:
+ *     - Tab activation (click + ArrowLeft/ArrowRight/Home/End).
+ *     - Indicator slide (transform: translateX + scaleX(width)).
+ *     - Tabpanel `hidden` toggle + lazy-on-first-activation + visited set.
+ *     - Cross-fade re-fire on activation via animation-name re-trigger
+ *       on the panel's own element (NOT a remount of panel content —
+ *       Resolved Decision #12 / spec lines 650-658 keep-mounted contract).
+ *     - tabIndex=0 on active Skim + Transcript + Raw panels (Skim and
+ *       Transcript placeholders have no focusable child; Raw's success
+ *       state renders a non-focusable <pre> with Retry only in
+ *       error/non_2xx, so the panel must catch the Tab landing).
+ *       Metadata is the lone exception — Copy path button is always
+ *       focusable and serves as the first Tab stop in the panel.
+ *     - Page-turn fade (re-mount of .session-pane on Switch session click).
+ *     - Theme + reduced-motion toggles.
+ *     - Raw-tab state cycling (idle / loading / success / error / non_2xx /
+ *       not_imported) via in-place repopulate of the panel's content,
+ *       NOT a remount of the panel container.
+ *
+ *   The PROTOTYPE JS is intentionally vanilla so the visual contract is
+ *   legible without React. The production primitive is a React component;
+ *   the indicator slide can equally be implemented via CSS :has() selectors
+ *   driven by the data-active-tab attribute.
+ * ======================================================================= -->
+<script>
+(() => {
+  'use strict';
+
+  /* ---------- Theme + reduced-motion toggles --------------------------- */
+  const themeBtn = document.getElementById('theme-toggle');
+  const motionBtn = document.getElementById('motion-toggle');
+  themeBtn.addEventListener('click', () => {
+    const cur = document.documentElement.getAttribute('data-theme');
+    const next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    themeBtn.setAttribute('aria-pressed', String(next === 'dark'));
+    themeBtn.textContent = next === 'dark' ? 'Light mode' : 'Dark mode';
+    // Re-anchor the indicator after theme swap (font metrics may shift).
+    placeIndicator(activeTabId);
+  });
+  motionBtn.addEventListener('click', () => {
+    const cur = document.documentElement.getAttribute('data-motion');
+    const next = cur === 'reduce' ? '' : 'reduce';
+    document.documentElement.setAttribute('data-motion', next);
+    motionBtn.setAttribute('aria-pressed', String(next === 'reduce'));
+    motionBtn.textContent = next === 'reduce' ? 'Motion: reduced' : 'Reduced motion';
+  });
+
+  /* ---------- Tabs primitive ------------------------------------------- */
+  const TAB_IDS = ['transcript', 'skim', 'raw', 'metadata'];
+  const tablist = document.querySelector('.tabs[role="tablist"]');
+  const indicator = tablist.querySelector('.indicator');
+  const tabs = TAB_IDS.map(id => document.getElementById(`tab-${id}`));
+  const panels = TAB_IDS.map(id => document.getElementById(`panel-${id}`));
+  let activeTabId = 'metadata';                   // M2b default per spec
+  const visited = new Set([activeTabId]);          // lazy-on-first-activation
+
+  function focusTab(id) {
+    document.getElementById(`tab-${id}`).focus();
+  }
+
+  function activate(id, { focus = true } = {}) {
+    if (!TAB_IDS.includes(id)) return;
+    activeTabId = id;
+    visited.add(id);
+    tablist.setAttribute('data-active-tab', id);
+
+    // ARIA + tabindex
+    tabs.forEach(t => {
+      const isActive = t.id === `tab-${id}`;
+      t.setAttribute('aria-selected', String(isActive));
+      t.setAttribute('tabindex', isActive ? '0' : '-1');
+    });
+
+    // Panel hidden + lazy mount + cross-fade re-fire via animation-name toggle.
+    // Production: the panel's React subtree is STABLE; this prototype mirrors
+    // that by populating the panel content ONCE on first visit (lazy mount),
+    // then toggling the panel's inline `animation` style between `none` and
+    // `tab-fade-in 120ms var(--ease-out) both` so the keyframes re-fire
+    // without disturbing the DOM children. This honors the keep-mounted
+    // contract (Resolved Decision #12 / spec lines 650–658).
+    panels.forEach(p => {
+      const pid = p.id.replace('panel-', '');
+      const shouldRender = visited.has(pid);
+      const isActive = pid === id;
+      if (!shouldRender) {
+        p.hidden = true;
+        // a11y: inactive panels never carry tabindex.
+        p.removeAttribute('tabindex');
+        // unvisited panels stay empty (lazy mount) — content not yet in DOM.
+        const content = p.querySelector('.tabpanel-content');
+        if (content && !content.dataset.populated) content.replaceChildren();
+        // animation must be `none` while inactive so the next activation
+        // re-fires the keyframe via the property-string transition.
+        p.style.animation = 'none';
+        return;
+      }
+      p.hidden = !isActive;
+      // populate ONCE on first visit; subsequent activations leave the
+      // existing content in place (keep-mounted).
+      const content = p.querySelector('.tabpanel-content');
+      if (content && !content.dataset.populated) {
+        content.appendChild(buildPanelBody(pid));
+        content.dataset.populated = 'true';
+      }
+      if (isActive) {
+        // Toggle animation-name to re-fire the cross-fade keyframe.
+        // Force a reflow between `none` and the real animation so the
+        // browser registers the property-string change even when the
+        // previous activation was on the same element type.
+        p.style.animation = 'none';
+        // eslint-disable-next-line no-unused-expressions
+        p.offsetHeight; // reflow
+        p.style.animation = 'tab-fade-in var(--motion-base) var(--ease-out) both';
+        // Skim + Transcript + Raw active panels need tabIndex=0 so Tab
+        // from the active tab lands inside the panel. Skim + Transcript
+        // placeholders have no focusable child; Raw's success state has
+        // none either (the rendered <pre class="raw-pre"> is not
+        // focusable, and Retry only appears in error / non_2xx). Adding
+        // tabIndex=0 unconditionally on the active Raw panel covers the
+        // success state without conditional state-machine branching.
+        // Metadata is the lone exception — its Copy path button is
+        // always focusable, so the panel itself doesn't need tabIndex.
+        // WAI-ARIA APG explicitly permits tabindex="0" on a tabpanel
+        // even when it has focusable children; the panel just becomes
+        // the first stop, then focus moves into its descendants.
+        if (pid === 'skim' || pid === 'transcript' || pid === 'raw') {
+          p.setAttribute('tabindex', '0');
+        } else {
+          p.removeAttribute('tabindex');
+        }
+      } else {
+        p.style.animation = 'none';
+        p.removeAttribute('tabindex');
+      }
+    });
+
+    placeIndicator(id);
+    if (focus) focusTab(id);
+  }
+
+  function placeIndicator(id) {
+    const tab = document.getElementById(`tab-${id}`);
+    if (!tab) return;
+    const tablistRect = tablist.getBoundingClientRect();
+    const tabRect = tab.getBoundingClientRect();
+    const x = tabRect.left - tablistRect.left;
+    // Indicator width matches the tab text width (the [role=tab] span fills
+    // its content, since padding is vertical-only). scaleX from a fixed
+    // 1 px-wide element to the actual width via transform.
+    indicator.style.transform = `translateX(${x}px) scaleX(${tabRect.width})`;
+  }
+
+  // Keyboard nav per WAI-ARIA APG tabs pattern (selection follows focus).
+  tablist.addEventListener('keydown', (e) => {
+    const idx = TAB_IDS.indexOf(activeTabId);
+    if (idx < 0) return;
+    let nextIdx = idx;
+    switch (e.key) {
+      case 'ArrowLeft':  nextIdx = (idx - 1 + TAB_IDS.length) % TAB_IDS.length; break;
+      case 'ArrowRight': nextIdx = (idx + 1) % TAB_IDS.length; break;
+      case 'Home':       nextIdx = 0; break;
+      case 'End':        nextIdx = TAB_IDS.length - 1; break;
+      default: return;
+    }
+    e.preventDefault();
+    activate(TAB_IDS[nextIdx]);
+  });
+  // Click activation.
+  tabs.forEach((tab, idx) => {
+    tab.addEventListener('click', () => activate(TAB_IDS[idx]));
+  });
+
+  /* ---------- Panel content renderers ---------------------------------- */
+  /* In production the panel's React subtree is stable; here a panel is
+   * populated ONCE on first visit (see activate()). The repopulate helper
+   * below is used ONLY by the Raw state radios + Retry button so the prototype
+   * can demo state transitions WITHOUT remounting the panel container — the
+   * panel container element itself is not replaced (keep-mounted contract);
+   * only its contents are re-rendered in place. */
+  function repopulatePanelContent(id) {
+    const panel = document.getElementById(`panel-${id}`);
+    if (!panel) return;
+    const content = panel.querySelector('.tabpanel-content');
+    if (!content) return;
+    content.replaceChildren();
+    content.appendChild(buildPanelBody(id));
+    content.dataset.populated = 'true';
+  }
+
+  function buildPanelBody(id) {
+    switch (id) {
+      case 'metadata':   return buildMetadata();
+      case 'raw':        return buildRaw();
+      case 'transcript': return buildPlaceholder('Coming in Milestone 4', 'Transcript');
+      case 'skim':       return buildPlaceholder('Coming in Milestone 5', 'Skim');
+    }
+    return document.createElement('div');
+  }
+
+  /* ---------- Metadata panel ------------------------------------------- */
+  function buildMetadata() {
+    const wrap = document.createDocumentFragment();
+    const dl = document.createElement('dl');
+    dl.className = 'metadata-meta';
+    const fields = [
+      ['session_key',       'mono', 'claude-code:01HZQT2XYK'],
+      ['session_uid',       'mono', '0192a7f3-b4c1-7e8a-9f02-3d5b6c8e1a0f'],
+      ['row_key',           'mono', 'source-stored:claude-code:01HZQT2XYK::0192a7f3-b4c1-7e8a-9f02-3d5b6c8e1a0f'],
+      ['tool',              'mono', 'claude-code'],
+      ['source_session_id', 'mono', '01HZQT2XYK7VH3K9N4G6BM2P3F'],
+      ['presence',          'mono', 'source-stored'],
+      ['status',            'pillrow', null],
+      ['status_conflict',   'mono', 'true'],
+      ['title',             'plain', 'Refactor: split-pane shell & tab primitive'],
+      ['project_path',      'mono', '/home/dev/projects/distill-portal'],
+      ['source_path_label', 'sourcepath', null],   /* swaps "Source path" / "Last seen source path" */
+      ['source_path_is_stale', 'mono', 'true'],
+      ['source_fingerprint', 'mono', 'sha256:7f8e2d1c…b4a3'],
+      ['has_subagent_sidecars', 'subagent', 'true'],
+      ['stored_raw_ref',    'mono', 'blob:8f3e2d1c-b4a3-4d2e-9f01-7c6b5a4d3e2f'],
+      ['created_at (source clock)', 'ts', ['2026-04-28T09:14:32Z', '9h ago']],
+      ['source_updated_at (source clock)', 'ts', ['2026-04-28T17:42:18Z', '1h ago']],
+      ['ingested_at (backend clock)', 'ts', ['2026-04-28T17:43:01Z', '1h ago']],
+    ];
+    for (const [name, kind, value] of fields) {
+      const dt = document.createElement('dt');
+      const dd = document.createElement('dd');
+
+      switch (kind) {
+        case 'mono':
+          dt.textContent = name;
+          dd.className = 'mono';
+          dd.textContent = value;
+          break;
+        case 'plain':
+          dt.textContent = name;
+          dd.textContent = value;
+          break;
+        case 'pillrow': {
+          dt.textContent = 'status';
+          const row = document.createElement('div');
+          row.className = 'pill-row';
+          const pill = document.createElement('span');
+          pill.className = 'badge outdated';
+          pill.textContent = 'outdated';
+          row.appendChild(pill);
+          const note = document.createElement('span');
+          note.className = 'conflict-note';
+          note.textContent = '(disagreed during load)';
+          row.appendChild(note);
+          dd.appendChild(row);
+          break;
+        }
+        case 'sourcepath': {
+          dt.textContent = 'last seen source path';   /* swap fired (sourcePathIsStale) */
+          const row = document.createElement('div');
+          row.className = 'source-path-row';
+          const path = document.createElement('span');
+          path.className = 'path';
+          path.textContent = '/home/dev/.claude/sessions/2026-04-28-claude-code-session.jsonl';
+          row.appendChild(path);
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'copy-path-btn';
+          btn.textContent = 'Copy path';
+          const hint = document.createElement('span');
+          hint.className = 'copy-hint';
+          hint.hidden = true;
+          btn.addEventListener('click', async () => {
+            try {
+              await navigator.clipboard.writeText(path.textContent);
+              hint.textContent = 'Copied';
+            } catch {
+              hint.textContent = 'Selected — press Ctrl/Cmd + C to copy';
+            }
+            hint.hidden = false;
+            setTimeout(() => { hint.hidden = true; }, 2000);
+          });
+          row.appendChild(btn);
+          row.appendChild(hint);
+          dd.appendChild(row);
+          break;
+        }
+        case 'subagent': {
+          dt.textContent = name;
+          const row = document.createElement('div');
+          row.className = 'pill-row';
+          const val = document.createElement('span');
+          val.className = 'mono';
+          val.textContent = value;
+          val.style.fontFamily = 'var(--font-mono)';
+          row.appendChild(val);
+          const badge = document.createElement('span');
+          badge.className = 'subagent-badge';
+          badge.textContent = 'Has Claude Code subagent sidecars on disk — not ingested in v1';
+          row.appendChild(badge);
+          dd.appendChild(row);
+          break;
+        }
+        case 'ts': {
+          dt.textContent = name;
+          const iso = document.createElement('span');
+          iso.className = 'mono';
+          iso.style.fontFamily = 'var(--font-mono)';
+          iso.style.fontSize = 'var(--text-sm)';
+          iso.textContent = value[0];
+          const rel = document.createElement('span');
+          rel.className = 'muted';
+          rel.style.color = 'var(--color-ink-muted)';
+          rel.style.marginLeft = 'var(--space-2)';
+          rel.textContent = `(${value[1]})`;
+          dd.appendChild(iso);
+          dd.appendChild(rel);
+          break;
+        }
+      }
+      dl.appendChild(dt);
+      dl.appendChild(dd);
+    }
+    wrap.appendChild(dl);
+
+    // "Open raw" anchor — only when storedSessionUid !== null (true for our
+    // representative row).
+    const openRaw = document.createElement('p');
+    openRaw.className = 'open-raw';
+    const a = document.createElement('a');
+    a.href = '/api/v1/sessions/0192a7f3-b4c1-7e8a-9f02-3d5b6c8e1a0f/raw';
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = 'Open raw ↗';
+    openRaw.appendChild(a);
+    wrap.appendChild(openRaw);
+
+    return wrap;
+  }
+
+  /* ---------- Raw panel + state toggle --------------------------------- */
+  let rawState = 'success';
+
+  function buildRaw() {
+    const wrap = document.createDocumentFragment();
+
+    // Prototype-only state toggle — not part of the production RawTab UI.
+    const toggle = document.createElement('div');
+    toggle.className = 'raw-state-toggle';
+    const label = document.createElement('span');
+    label.textContent = 'state:';
+    toggle.appendChild(label);
+    for (const s of ['idle', 'loading', 'success', 'error', 'non_2xx', 'not_imported']) {
+      const lbl = document.createElement('label');
+      const inp = document.createElement('input');
+      inp.type = 'radio';
+      inp.name = 'rawstate';
+      inp.value = s;
+      if (s === rawState) inp.checked = true;
+      const txt = document.createElement('span');
+      txt.textContent = s;
+      lbl.appendChild(inp);
+      lbl.appendChild(txt);
+      inp.addEventListener('change', () => {
+        rawState = s;
+        // Re-render only the body, not the toggle, so the radio's focus is
+        // preserved and the cross-fade fires on the body alone.
+        renderRawBody(body);
+      });
+      toggle.appendChild(lbl);
+    }
+    wrap.appendChild(toggle);
+
+    const body = document.createElement('div');
+    renderRawBody(body);
+    wrap.appendChild(body);
+
+    return wrap;
+  }
+
+  function renderRawBody(host) {
+    host.replaceChildren();
+    switch (rawState) {
+      case 'idle':
+      case 'loading': {
+        const p = document.createElement('p');
+        p.className = 'raw-loading';
+        p.textContent = 'Loading raw preview…';
+        host.appendChild(p);
+        return;
+      }
+      case 'error': {
+        const p = document.createElement('p');
+        p.className = 'raw-error';
+        p.textContent = 'Failed to load raw preview: network unreachable.';
+        host.appendChild(p);
+        host.appendChild(retryButton());
+        return;
+      }
+      case 'non_2xx': {
+        const p = document.createElement('p');
+        p.className = 'raw-error';
+        p.textContent = 'HTTP 503: backend unavailable — service is restarting.';
+        host.appendChild(p);
+        host.appendChild(retryButton());
+        return;
+      }
+      case 'not_imported': {
+        const p = document.createElement('p');
+        p.className = 'not-imported';
+        p.textContent =
+          'This session has not been imported yet — only the source-side '
+          + 'metadata is available. Click Import in the action bar to fetch '
+          + 'the raw payload.';
+        host.appendChild(p);
+        return;
+      }
+      case 'success':
+      default: {
+        const pre = document.createElement('pre');
+        pre.className = 'raw-pre';
+        pre.setAttribute('aria-label', 'Raw NDJSON preview');
+        const lines = [
+          '{"type":"user","message":{"role":"user","content":"Refactor the SessionView..."},"timestamp":"2026-04-28T17:42:00Z"}',
+          '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I\'ll start by extracting SessionMetadata from SessionDetail."}]},"timestamp":"2026-04-28T17:42:05Z"}',
+          '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_01","name":"Read","input":{"file_path":"/repo/apps/frontend/src/features/sessions/SessionDetail.tsx"}}]},"timestamp":"2026-04-28T17:42:09Z"}',
+          '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01","content":"// 478 lines of SessionDetail.tsx ..."}]},"timestamp":"2026-04-28T17:42:09Z"}',
+          '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Got it — copying the <dl> block verbatim."}]},"timestamp":"2026-04-28T17:42:11Z"}',
+          '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_02","name":"Write","input":{"file_path":"/repo/apps/frontend/src/features/sessions/SessionMetadata.tsx"}}]},"timestamp":"2026-04-28T17:42:13Z"}',
+          '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_02","content":"OK"}]},"timestamp":"2026-04-28T17:42:13Z"}',
+          '{"type":"summary","summary":"M2b extraction in flight","leafUuid":"0a3"}',
+          '{"type":"user","message":{"role":"user","content":"Now wire the Tabs primitive."},"timestamp":"2026-04-28T17:42:18Z"}',
+          '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Tabs.tsx is going to render aria-tab buttons + indicator span."}]},"timestamp":"2026-04-28T17:42:21Z"}',
+          'not-a-json-line — bad sentinel for the parser',
+          '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Indicator slides via transform: translateX driven by data-active-tab."}]},"timestamp":"2026-04-28T17:42:25Z"}',
+        ];
+        for (const raw of lines) {
+          const line = document.createElement('div');
+          line.className = 'line';
+          if (raw.startsWith('{') || raw.startsWith('[')) {
+            line.textContent = raw;
+          } else {
+            line.classList.add('text');
+            line.textContent = raw + ' ';
+            const m = document.createElement('span');
+            m.className = 'marker';
+            m.textContent = '(non-JSON line)';
+            line.appendChild(m);
+          }
+          pre.appendChild(line);
+        }
+        const cap = document.createElement('p');
+        cap.className = 'raw-caption';
+        cap.textContent = 'Showing first 12 lines (full payload below the caps).';
+        host.appendChild(pre);
+        host.appendChild(cap);
+        return;
+      }
+    }
+  }
+
+  function retryButton() {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'retry-btn';
+    btn.textContent = 'Retry';
+    btn.addEventListener('click', () => {
+      rawState = 'loading';
+      // re-render Raw panel CONTENT in place (panel container stays mounted;
+      // keep-mounted contract preserved).
+      repopulatePanelContent('raw');
+      setTimeout(() => {
+        rawState = 'success';
+        repopulatePanelContent('raw');
+      }, 600);
+    });
+    return btn;
+  }
+
+  /* ---------- Skim + Transcript placeholders --------------------------- */
+  function buildPlaceholder(message, label) {
+    const wrap = document.createElement('div');
+    wrap.className = 'placeholder';
+    const strong = document.createElement('strong');
+    strong.textContent = label;
+    wrap.appendChild(strong);
+    const span = document.createElement('span');
+    span.textContent = message;
+    wrap.appendChild(span);
+    return wrap;
+  }
+
+  /* ---------- Page-turn fade (Switch session button) ------------------- */
+  document.getElementById('switch-session').addEventListener('click', () => {
+    const old = document.getElementById('session-pane');
+    const fresh = old.cloneNode(true);
+    old.replaceWith(fresh);
+    // Re-bind: easiest is to reload the page state by reattaching via a
+    // micro-routine. For the prototype we simply reload all listeners.
+    location.reload();
+  });
+
+  /* ---------- Initial mount -------------------------------------------- */
+  function mount() {
+    activate(activeTabId, { focus: false });
+    // Indicator needs another frame to settle (Fraunces swap can shift
+    // metrics by ~1 px; M2a documented this).
+    requestAnimationFrame(() => placeIndicator(activeTabId));
+    window.addEventListener('resize', () => placeIndicator(activeTabId));
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mount);
+  } else {
+    mount();
+  }
+})();
+</script>
+</body>
+</html>

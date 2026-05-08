@@ -1,0 +1,97 @@
+/*
+ * Tabs primitive — visual treatment per design.md §3.1, motion.md
+ * surfaces 1 + 2.
+ *
+ * Selectors owned here:
+ *   - `.tabs`             → the `<div role="tablist">` shell. Hairline
+ *                           border-bottom + horizontal layout. NO
+ *                           background fill (inherits --color-surface
+ *                           from the session pane).
+ *   - `.tabs .tab`        → the `<button role="tab">` children. Text-
+ *                           only, no chrome. Active vs inactive is
+ *                           pure typographic (color + weight).
+ *   - `.tabs .indicator`  → the absolutely-positioned 1-px ink stroke
+ *                           that slides under the active tab. Base
+ *                           size is 1 × 1 px; the JS writes
+ *                           `transform: translateX(${x}px)
+ *                                       scaleX(${width}px)` to grow
+ *                           it to the active tab's measured width.
+ *
+ * Structural literals introduced here (per the design.md §9 invariant):
+ *   - `height: 2.5rem` on `.tabs` (40 px strip — spec line 935 +
+ *     design.md acceptance #16). WCAG 2.5.5 AAA touch-target shortfall
+ *     accepted per design.md §6.6.
+ *   - `padding-inline: 0` on `.tabs .tab` so the indicator slides
+ *     between LABEL widths (the measured `getBoundingClientRect().width`
+ *     equals the label width, not button-with-padding width — see
+ *     design.md acceptance #11).
+ *   - `bottom: -1px` on `.tabs .indicator` so the stroke sits on the
+ *     hairline border-bottom of `.tabs` rather than above it.
+ *
+ * Motion: indicator slides over `--motion-base` (120 ms)
+ * `--ease-standard` via `transition: transform`. Reduced-motion
+ * zero-out lives in `styles/global.css`.
+ */
+
+.tabs {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 2.5rem;
+  padding: 0 var(--space-4);
+  gap: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  /* No background fill — inherits the session pane surface. */
+}
+
+.tabs .tab {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  /* `padding-inline: 0` is load-bearing — see file header. */
+  padding: var(--space-2) 0;
+  margin: 0;
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  /* Hover / focus-visible / active are INSTANT — no transition. */
+}
+
+.tabs .tab[aria-selected="true"] {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+.tabs .tab:hover:not([aria-selected="true"]) {
+  color: color-mix(in srgb, var(--color-ink) 80%, var(--color-ink-muted));
+}
+
+.tabs .tab:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.tabs .tab[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.tabs .indicator {
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  /* `width: 1px` is load-bearing — see Tabs.tsx + design.md acceptance #10. */
+  width: 1px;
+  height: 1px;
+  background: var(--color-accent);
+  transform-origin: left;
+  /* Initial transform gets overwritten by the useLayoutEffect on first
+   * mount; we still set a no-op default so an unmeasured indicator is
+   * visually invisible (scaleX(0)) rather than a 1 px speck. */
+  transform: translateX(0) scaleX(0);
+  transition: transform var(--motion-base) var(--ease-standard);
+  pointer-events: none;
+}

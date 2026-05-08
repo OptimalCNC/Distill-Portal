@@ -1,3 +1,18 @@
+/**
+ * DEAD-BUT-TESTED through Phase 5 M5; deleted in M6 per
+ * `working/phase-5.md` Resolved Decision #6 + spec line 231. Do NOT
+ * delete in earlier chunks.
+ *
+ * As of Phase 5 M2b this module is no longer reachable from the
+ * running app — `SessionsView.tsx` no longer mounts the modal
+ * drawer, and `App.tsx` no longer threads the `onOpenDetail`
+ * callback. The new M2b extractions `SessionMetadata.tsx` (18-field
+ * `<dl>` body) and `RawTab.tsx` (raw-preview block) are independent
+ * extractions, NOT in-place edits, so SessionDetail.tsx stays
+ * byte-equivalent and its tests remain green via direct
+ * `import { SessionDetail } from "./SessionDetail"`. M6 deletes this
+ * file + SessionDetail.css + SessionDetail.test.tsx.
+ */
 // Drawer body for the unified inspection list.
 //
 // Renders every field on the merged `SessionRow` so a user can inspect

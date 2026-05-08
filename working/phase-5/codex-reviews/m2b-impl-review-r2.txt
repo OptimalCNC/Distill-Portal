@@ -1,0 +1,2228 @@
+Reading prompt from stdin...
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/huwei/ai_codings/distill-portal
+model: gpt-5.5
+provider: OpenAI
+approval: never
+sandbox: workspace-write [workdir, /tmp, /home/huwei/.codex/memories]
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019e053c-2d5b-7070-bb34-011659fe5f6e
+--------
+user
+You are continuing as the external non-Claude reviewer providing the round-2 implementation review for M2b on `phase-5` of distill-portal. Your round-1 verdict was `needs changes` with:
+
+- BLOCKING (Tabs.tsx:99): `scaleX(${width}px)` is INVALID CSS — should be `scaleX(${width})` (unitless). Browser rejects → indicator stays at default scaleX(0) → INVISIBLE INDICATOR.
+- BLOCKING (SessionView.css:240-243): `.session-conflict-badge` uses error recipe but spec line 622 + design.md checklist 24 + colors.md H09 require warn recipe.
+- NIT (SessionsTable.tsx:20-21, 42-48, 83-88, 174-178): stale drawer/"Open detail" comments contradict M2b collapse.
+
+The developer applied a fix-up round-2 pass. Verify each fix landed correctly. Re-evaluate for any new round-2 defects.
+
+## Developer's round-2 fix-up summary (verbatim)
+
+### Finding 1 (BLOCKING — invalid scaleX): fixed at apps/frontend/src/components/Tabs.tsx (now line 102 after doc-comment expansion)
+
+New inline statement reads:
+```
+indicator.style.transform = `translateX(${x}px) scaleX(${width})`;
+```
+Surrounding comment extended to call out scaleX() takes unitless number. Header JSDoc lines 28-44 updated.
+
+Regression test ADDED at apps/frontend/src/components/Tabs.test.tsx (just before existing "Enter / Space" test):
+```
+test("Tabs: indicator transform is unitless scaleX (regression: scaleX(...px) is invalid CSS and would hide the indicator)", () => {
+  ...
+  const indicator = container.querySelector(".indicator") as HTMLSpanElement;
+  expect(indicator).not.toBeNull();
+  const transform = indicator.style.transform;
+  expect(transform).not.toMatch(/scaleX\([\d.]+px\)/);
+  expect(transform).toMatch(/scaleX\([\d.]+\)/);
+});
+```
+Test count: 316 (was 315) across 23 files.
+
+### Finding 2 (BLOCKING — wrong color recipe): fixed at apps/frontend/src/features/sessions/SessionView.css lines 240-243
+
+```
+.session-conflict-badge {
+  background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-warn) 70%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+}
+```
+Percentages preserved; only color token swapped from --color-error to --color-warn. Comment immediately above cites Phase-5 spec line 622 + design.md checklist 24 + colors.md H09 + notes M2b header element is structurally new (not byte-equivalent extraction), so spec redirect to warn applies.
+
+No test changes (no test asserted recipe color).
+
+### Finding 3 (NIT — stale comments): fixed at apps/frontend/src/features/sessions/SessionsTable.tsx (four comment blocks rewritten)
+
+- File-header block at original lines 19-21 now states dropped Phase-4 columns surface in M2b Metadata tab inside SessionView on right pane.
+- File-header block at original lines 42-50 describes M2b row-click semantic; both Phase-4 onOpenDetail and M1b vestigial "Open detail" button noted as collapsed.
+- JSDoc on onSelectRow prop (original lines 83-89) similarly updated.
+- Inline comment on handleRowOpen (original lines 174-178) attributes M1b drawer-auto-mount retirement and M2b "Open detail" collapse.
+
+Non-stale technical context preserved verbatim (checkbox-cell stopPropagation, aria-current, data-deep-link, row event handler structure).
+
+### Verification gates (developer ran all)
+
+| Command | Output | Result |
+|---|---|---|
+| cargo check --workspace | clean | PASS |
+| cargo test --workspace | all crates pass | PASS |
+| cargo test -p distill-portal-ui-api-contracts --features ts-bindings | 1 passed; 0 failed; 1 ignored | PASS |
+| bun run test (frontend) | **316 pass / 0 fail / 1236 expects / 23 files / 1495 ms** | PASS |
+| bun run build (frontend) | index.html 0.40 kB, index-*.css 21.34 kB, index-*.js 239.78 kB; built in 523 ms | PASS |
+| bun run test:e2e (frontend Playwright) | 1 passed (3.5s) | PASS |
+| Hex audit | 24 | PASS |
+| Token count | 83 | PASS |
+
+## Round-2 fix-up file scope
+
+Files touched in round-2 fix-up (subset of apps/frontend/):
+- apps/frontend/src/components/Tabs.tsx (already in round-1 file list)
+- apps/frontend/src/components/Tabs.test.tsx (already in round-1)
+- apps/frontend/src/features/sessions/SessionView.css (already in round-1)
+- apps/frontend/src/features/sessions/SessionsTable.tsx (NEW touch in round-2 — comment-only)
+
+All under apps/frontend/. No protected paths touched. Backend-protection re-cleared by subset analysis (no new files; comment-only edit to SessionsTable.tsx).
+
+## Coordinator's call on the 2 round-1 normal-Claude NITs (left as-is)
+
+- "View raw" vs "Open raw" anchor text: implementation preserves Phase 4 byte-equivalence ("View raw"). Coordinator leaves as documentation drift to revisit in M6 doc sweep.
+- `.tab-placeholder` `padding: var(--space-8) var(--space-6)` (24 px horizontal inset) vs design.md item 46's `var(--space-8) 0`. Coordinator leaves as visual deviation; design intent preserved.
+
+## Source files
+
+- `working/phase-5.md` (frozen at commit `05467ad` on `main`, 2026-04-28)
+- `progress/phase-5.progress.md`
+- `working/phase-5/designs/m2b-shell/` (post-design-round-5 final artifact)
+- `working/phase-5/codex-reviews/m2b-impl-review-r1.txt` (your round-1 verbatim stdout)
+- `working/phase-5/codex-reviews/m2b-design-review-r{1,2,3,4}.txt` (your design-review history)
+- All implementation files at apps/frontend/src/ + apps/frontend/e2e/inspection.spec.ts
+
+## Protected paths (frozen)
+
+`apps/backend/**`, `apps/backend/tests/**`, `components/collector-runtime/**`, `components/configuration/**`, `components/ingest-service/**`, `components/observability/**`, `components/raw-session-store/**`, `components/ui-api-contracts/**`, `tests/e2e/**` (Rust), root `Cargo.toml`, root `Cargo.lock`.
+
+## Rules
+
+- review only from text + code provided
+- read the actual files (Read / Bash / grep — you have access)
+- verify each round-1 BLOCKING + NIT against the cited file:line
+- new findings allowed (round-2 may introduce different defects)
+- if approval-relevant evidence is missing, the verdict must be `needs more evidence`
+- `approved` and `approved with nits` are not allowed while `Missing Evidence` is not `none`
+- compute oklch numerics if a contrast question arises
+
+## Output exactly this structure
+
+- **Verdict**: one of `approved`, `approved with nits`, `needs changes`, `needs more evidence`
+- **Round-1 Verification Trace**: numbered (Finding 1 BLOCKING, Finding 2 BLOCKING, Finding 3 NIT), each with `verified fixed at <file>:<line>` or `partially fixed (still needs <X>)` or `not fixed (cite where)`.
+- **Findings**: NEW round-2 findings (not from round 1) with severity (BLOCKING / NIT) + file:line + spec/design section + computed numerics where applicable, or `none`
+- **Missing Evidence**: exact missing evidence required, or `none`
+- **Required Changes**: exact code changes required before approval, or `none`
+- **Notes**: optional improvements, or `none`
+
+codex
+I’ll verify the three cited fixes directly against the current files, then do a narrow round-2 scan around the touched code for regressions or missing evidence.
+exec
+/bin/bash -lc "sed -n '1,220p' README.md" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+# Distill Portal
+
+Distill Portal is a local-first portal for collecting, storing, and analyzing coding sessions produced by AI coding tools.
+
+Read [PRD.md](PRD.md) for the product summary and functional requirements.
+
+For developers, please read [docs/README.md](docs/README.md) for documentation on the repository structure, component ownership, features, and development commands.
+
+## Contributing
+
+- Read [PRD.md](PRD.md) for the product summary and functional requirements.
+- Read [ARCHITECTURE.md](ARCHITECTURE.md) for the architecture.
+- Read [docs/README.md](docs/README.md) for the repository structure, component ownership, features, and development commands.
+
+### Hard Rules
+
+- Backend owns machine-consumable HTTP routes; do not reintroduce backend-owned end-user HTML.
+- Frontend talks to the backend only over HTTP and only consumes generated contract types from `components/ui-api-contracts/bindings/*.ts`.
+- `apps/frontend` must not import from `components/collector-runtime`, `components/ingest-service`, or `components/raw-session-store`.
+- HTTP payload changes must update `components/ui-api-contracts`, the Rust and TS sides of both apps, and relevant tests together.
+- Keep docs aligned with any layout, command, dependency, or payload-shape change.
+
+### Quick Checks
+
+Fast checks to run before committing:
+
+```bash
+cargo check --workspace
+cargo test --workspace
+```
+
+From `apps/frontend/`:
+
+```bash
+bun run test
+```
+
+See [docs/dev-commands.md](docs/dev-commands.md) for the full reference, including targeted Rust suites, the TypeScript contract-drift check, and the browser e2e suite.
+
+## Quick Start
+
+Run the backend:
+
+```bash
+cargo run -p distill-portal-backend
+```
+
+Run the frontend (from `apps/frontend/`):
+
+```bash
+bun install
+bun run dev
+```
+
+Then open the frontend address. By default:
+
+- backend: `http://127.0.0.1:4000`
+- frontend (Vite dev server): `http://127.0.0.1:4100`
+
+See `docs/dev-commands.md` for the full list of frontend and test commands.
+
+exec
+/bin/bash -lc "sed -n '1,220p' docs/README.md" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+# Distill Portal Docs
+
+Start here when you need to orient yourself in the Distill Portal workspace. The backend is Rust under `apps/backend`; the frontend is Bun + Vite + React + TypeScript under `apps/frontend`.
+
+This file is both the docs entry point and the repo map.
+
+## Start With Your Task
+
+| I want to... | Start here |
+| --- | --- |
+| Modify the inspection UI | [`playbooks/modify-frontend-page.md`](playbooks/modify-frontend-page.md), [`../apps/frontend/README.md`](../apps/frontend/README.md) |
+| Change a backend API or JSON payload | [`playbooks/modify-backend-api.md`](playbooks/modify-backend-api.md), [`dependency-rules.md`](dependency-rules.md) |
+| Change session storage behavior | [`playbooks/modify-session-store.md`](playbooks/modify-session-store.md) |
+| Run or test locally | [`dev-commands.md`](dev-commands.md) |
+| Check dependency boundaries | [`dependency-rules.md`](dependency-rules.md) |
+| Understand a feature | [`features/inspection-surface.md`](features/inspection-surface.md), [`features/session-store.md`](features/session-store.md) |
+| Understand product + architecture intent | [`../PRD.md`](../PRD.md), [`../ARCHITECTURE.md`](../ARCHITECTURE.md) |
+| Audit historical planning or delivery | [`../working/README.md`](../working/README.md), [`../progress/README.md`](../progress/README.md) |
+
+## Apps
+
+- `apps/backend` — Rust backend binary: runtime wiring, scan/ingest/store orchestration, machine-consumable HTTP routes. See [`../apps/backend/README.md`](../apps/backend/README.md).
+- `apps/frontend` — Bun + Vite + React + TypeScript inspection UI. The unified session list (table, filters, view, drawer body, merge / filter / sort / paginate / persistence helpers) lives under `apps/frontend/src/features/sessions/`; shared React primitives (action bar, scan-errors callout, native-`<dialog>`-backed drawer shell, pagination strip, toast) live under `apps/frontend/src/components/`. CSS is co-located: each `.tsx`/`.ts` imports its sibling `.css` (no CSS Modules, no CSS-in-JS, no Tailwind); `src/styles/` carries only the three global sheets `reset.css`, `tokens.css`, `global.css`. See [`../apps/frontend/README.md`](../apps/frontend/README.md).
+
+## Components
+
+Reusable, app-independent crates. Each owns its own README:
+
+- [`collector-runtime`](../components/collector-runtime/README.md) — source discovery, safe JSONL reads, tool-specific parsers (Claude Code, Codex)
+- [`configuration`](../components/configuration/README.md) — backend runtime config loading
+- [`ingest-service`](../components/ingest-service/README.md) — content-addressed ingest decisions, replace-on-sync
+- [`observability`](../components/observability/README.md) — tracing subscriber bootstrap
+- [`raw-session-store`](../components/raw-session-store/README.md) — SQLite metadata + blob-store persistence
+- [`ui-api-contracts`](../components/ui-api-contracts/README.md) — shared HTTP payload types; source of truth for the Rust → TS bindings
+
+## Feature Guides
+
+- [`features/inspection-surface.md`](features/inspection-surface.md) — page ownership, API touchpoints, and tests for the inspection workflow
+- [`features/session-store.md`](features/session-store.md) — storage ownership, backend touchpoints, and tests for persisted session behavior
+
+## Playbooks
+
+Short recipes for common changes:
+
+- [`playbooks/modify-frontend-page.md`](playbooks/modify-frontend-page.md) — shortest safe path for UI changes
+- [`playbooks/modify-backend-api.md`](playbooks/modify-backend-api.md) — shortest safe path for backend API changes
+- [`playbooks/modify-session-store.md`](playbooks/modify-session-store.md) — shortest safe path for storage changes
+
+## Verification Map
+
+| Surface | Command |
+| --- | --- |
+| Workspace compile | `cargo check --workspace` |
+| Full Rust test suite | `cargo test --workspace` |
+| Backend HTTP API | `cargo test -p distill-portal-backend --test http_api` |
+| Collector parsers | `cargo test -p distill-portal-collector-runtime --test parsers` |
+| Typed Rust-client HTTP smoke | `cargo test -p distill-portal-e2e --test inspection_surface` |
+| TypeScript contract bindings freshness | `cargo test -p distill-portal-ui-api-contracts --features ts-bindings` |
+| Frontend unit tests | `bun run test` (from `apps/frontend/`) |
+| Browser e2e (Playwright) | `bun run test:e2e` (from `apps/frontend/`) |
+
+## Repo Map
+
+- `apps/backend` — backend binary and its tests
+- `apps/frontend` — Bun/React frontend
+- `components/*` — reusable implementation crates
+- `docs/` — this tree (dependency rules, commands, features, playbooks)
+- `tests/e2e` — real HTTP-boundary Rust integration tests
+- `tests/fixtures` — sample Claude Code and Codex sessions used by parser and backend tests
+- `working/` — historical planning specs for completed phases (see [`../working/README.md`](../working/README.md))
+- `progress/` — historical delivery logs for completed phases (see [`../progress/README.md`](../progress/README.md))
+
+## Historical Material
+
+- [`../working/`](../working/) — frozen planning specs. Not current-state instructions. See [`working/README.md`](../working/README.md).
+- [`../progress/`](../progress/) — frozen delivery logs. Not current-state instructions. See [`progress/README.md`](../progress/README.md).
+
+exec
+/bin/bash -lc "sed -n '1,240p' docs/dependency-rules.md" in /home/huwei/ai_codings/distill-portal
+exec
+/bin/bash -lc "sed -n '1,260p' docs/dev-commands.md" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+# Dependency Rules
+
+## Allowed Directions
+
+- `apps/backend` may depend on:
+  - `components/collector-runtime`
+  - `components/configuration`
+  - `components/ingest-service`
+  - `components/observability`
+  - `components/raw-session-store`
+  - `components/ui-api-contracts`
+- `apps/frontend` (Bun + Vite + React + TypeScript) may depend on:
+  - `components/ui-api-contracts/bindings/*.ts` (generated TypeScript types; one-way import only)
+  - external npm packages managed via Bun for UI, HTTP fetch, and test tooling. Phase 4 adopted a strict 2-package escape-hatch budget for browser-only concerns native APIs cannot meet; one slot is consumed (`focus-trap-react@^11`, fixing a native `<dialog>` Tab-cycling gap), one slot remains reserved (`@tanstack/react-virtual`, gated on documented evidence that pagination plus `useMemo` cannot keep render time bounded). Adding a third escape-hatch package requires a fresh planning round.
+  - all backend communication is over HTTP to `apps/backend`
+- `components/ingest-service` may depend on:
+  - `components/collector-runtime`
+  - `components/raw-session-store`
+- `components/raw-session-store` may depend on:
+  - `components/ui-api-contracts`
+- `components/collector-runtime` may depend on:
+  - `components/ui-api-contracts`
+- `components/configuration`, `components/observability`, and `components/ui-api-contracts` should not depend on app crates
+
+## Forbidden Directions
+
+- `apps/frontend` must not depend on:
+  - `components/collector-runtime`
+  - `components/ingest-service`
+  - `components/raw-session-store`
+- No component crate may depend on `apps/backend` or `apps/frontend`
+- `apps/backend` must not render end-user HTML
+- `apps/frontend` must not reach into storage or ingest internals directly
+
+## Contract Handling
+
+- Shared page and JSON payloads live in `components/ui-api-contracts`
+- `components/ui-api-contracts/src/lib.rs` is the single source of truth for the contract. The TypeScript declarations under `components/ui-api-contracts/bindings/` are checked-in generated artifacts derived from `src/lib.rs` by the `ts-bindings` cargo feature — they are the canonical downstream output and must stay in sync with the Rust source: regenerate and commit them together with any Rust contract change, never hand-edited
+- The Bun frontend consumes contract types via one-way TypeScript imports from `components/ui-api-contracts/bindings/*.ts`, using the `@contracts/*` path alias wired in `apps/frontend/tsconfig.json` (or a direct relative path). The frontend MUST NOT re-declare contract types by hand; the thin barrel at `apps/frontend/src/lib/contracts.ts` re-exports the generated types for internal consumption
+- If a backend JSON shape changes, update:
+  - `components/ui-api-contracts/src/lib.rs`
+  - `components/ui-api-contracts/bindings/*.ts` (regenerate via `cargo test -p distill-portal-ui-api-contracts --features ts-bindings -- --ignored regenerate_ts_bindings`; see `docs/dev-commands.md`)
+  - `apps/backend/src/http_api.rs`
+  - the typed API layer in `apps/frontend/src/lib/` (`api.ts`, `contracts.ts`)
+  - any impacted frontend rendering under `apps/frontend/src/App.tsx`, the unified session feature at `apps/frontend/src/features/sessions/`, or the shared React primitives under `apps/frontend/src/components/`
+  - the relevant tests in `apps/backend/tests/http_api.rs`, `apps/frontend/src/App.test.tsx`, `apps/frontend/e2e/inspection.spec.ts`, and `tests/e2e/tests/inspection_surface.rs`
+
+## Layer Ownership
+
+- Storage writes and reads belong to `components/raw-session-store`
+- Replace-on-sync ingest rules belong to `components/ingest-service`
+- Source discovery and parsing belong to `components/collector-runtime`
+- Environment variable mapping belongs to `components/configuration`
+- HTTP routes belong to the app crates only
+
+## Frontend Dev-Time Topology
+
+- `apps/frontend/` is a Bun-managed package (`package.json`, `bun.lock`, `vite.config.ts`, `index.html`, `src/*.tsx`).
+- Frontend dev-time proxying of `/api/v1/**` and `/health` to the backend belongs in `apps/frontend/vite.config.ts`, not in any application code path.
+- The Bun app must continue to honor the frontend-boundary rules above: no direct dependency on `components/collector-runtime`, `components/ingest-service`, or `components/raw-session-store`; all backend communication goes over HTTP to the Rust backend.
+
+### Phase 5 M2a notes — Fraunces self-hosted as static asset
+
+Phase 5 introduces a single self-hosted variable serif (Fraunces) for the Archive-room display layer (empty-pane preface, future M5 chapter-break labels, future app title). The font ships as two `.woff2` files at `apps/frontend/public/fonts/Fraunces-subset.woff2` (Roman) and `apps/frontend/public/fonts/Fraunces-Italic-subset.woff2` (Italic), referenced by two `@font-face` blocks in `apps/frontend/src/styles/tokens.css`. Per Phase 5 §Resolved Decision #15, **a self-hosted font file is a static asset, not a runtime dependency** — the 2-package escape-hatch budget (currently 1/2 consumed by `focus-trap-react@^11`) is **not affected**. No bundler plugin, font-loading library, or JS dep is involved; Vite serves the woff2 files directly from `public/`. To regenerate (only when upstream Fraunces revs, ~yearly per Google Fonts cadence): download both variable fonts from `https://github.com/undercasetype/Fraunces` (`fonts/variable/Fraunces[SOFT,WONK,opsz,wght].ttf` + the Italic counterpart), run `fonttools varLib.instancer <input.ttf> SOFT=50 WONK=0 -o <pinned.ttf>` to drop the design-time-only SOFT and WONK axes (saves ~70 KB per file), then `pyftsubset <pinned.ttf> --output-file=apps/frontend/public/fonts/Fraunces-subset.woff2 --unicodes='U+0020-007E,U+00A0-00FF,U+2010-2027,U+2030-2052' --layout-features='kern,liga,smcp,onum' --flavor=woff2 --desubroutinize`. Target file size: ~80 KB per file. Reversibility: deleting both `@font-face` blocks AND both woff2 files yields a still-cohesive system-serif aesthetic (Charter / Iowan Old Style / Georgia at ~99% of Fraunces's visual size via the `size-adjust` override, no broken layout).
+
+ succeeded in 0ms:
+# Dev Commands
+
+## Run The Backend
+
+```bash
+cargo run -p distill-portal-backend
+```
+
+Useful backend env vars:
+
+- `DISTILL_PORTAL_BACKEND_BIND` or `DISTILL_PORTAL_BIND`
+- `DISTILL_PORTAL_DATA_DIR`
+- `DISTILL_PORTAL_POLL_INTERVAL_SECS`
+- `DISTILL_PORTAL_CLAUDE_ROOTS`
+- `DISTILL_PORTAL_CODEX_ROOTS`
+
+## Run The Frontend
+
+The frontend lives under `apps/frontend/` as a Bun-managed package (`package.json`, `bun.lock`, `vite.config.ts`, `index.html`, `src/*.tsx`).
+
+Commands (run from `apps/frontend/`):
+
+```bash
+bun install
+bun run dev
+bun run build
+bun run test
+```
+
+- `bun run dev` starts the Vite dev server on `http://127.0.0.1:4100` with `strictPort: true` so a port collision fails fast.
+- `bun run build` writes static assets to `apps/frontend/dist/`.
+- `bun run test` runs `bun test src` (the unit suite; browser e2e is `bun run test:e2e`, documented below). After Phase 4 the unit suite is 231 tests / 891 expect calls across 17 files covering the unified session list, the session detail drawer, pagination, the toast queue, and the shared React primitives:
+  - **Mounted-`App` integration** — `apps/frontend/src/App.test.tsx`: the read-only unified-list render against three `Promise.allSettled` GETs, the rescan and import mutation flows (including an explicit race-window reproducer for the stale-selection bug), per-panel independent-error behavior, the four documented empty-state branches, the click-time intersection rule under filter and pagination races, the toast queue replacing the old inline `lastReport`, and the cross-page bulk-select / retry-after-intervening-rescan invariants.
+  - **Unified session feature** — `apps/frontend/src/features/sessions/`: `SessionsTable.test.tsx`, `SessionFilters.test.tsx`, `SessionDetail.test.tsx` (component-level integration), and pure helpers `mergeSessions.test.ts`, `filterSessions.test.ts`, `applyPagination.test.ts`, `relativeTime.test.ts`, `useSessionFilters.test.ts` (incl. 12+ corrupt-input fallbacks), `useToastQueue.test.ts`, `lastRescan.test.ts`, and the streaming `rawPreview.test.ts` (line-cap + byte-cap + abort + non-JSON fallback).
+  - **Shared React primitives** — `apps/frontend/src/components/`: `ActionBar.test.tsx` (idle zero/non-zero selection, pending rescan/import disabled states, sticky modifier, last-rescan caption, hidden-by-filter caption + clear affordances), `Drawer.test.tsx` (native `<dialog>` shell, focus restoration, Esc-close, backdrop close), `Pagination.test.tsx` (page-size selector + Prev/Next + caption + clamp), `Toast.test.tsx` (kind variants + Retry + Dismiss roles), `ScanErrorsCallout.test.tsx` (renders nothing when empty).
+  - The variant-matrix `StatusBadge.test.tsx` from M2 was retired in M6 (Chunk G); the four-variant DOM-shape contract is preserved by a dedicated test in `SessionsTable.test.tsx` (`SessionsTable: inlined status badge renders all 4 variants ...`) that iterates over `up_to_date / not_stored / outdated / source_missing` and asserts the inlined `<span class="badge {variant}">{label}</span>` markup byte-for-byte for each variant. `App.test.tsx` continues to assert the `up-to-date` variant at the integration level.
+
+## Dev Topology
+
+```
+browser
+   |
+   v
+http://127.0.0.1:4100  <-- Vite dev server (bun run dev)
+   |
+   |  /api/v1/**  and  /health   proxied by Vite
+   v
+http://127.0.0.1:4000  <-- Rust backend (cargo run -p distill-portal-backend)
+```
+
+- Backend: `127.0.0.1:4000` (Rust, `cargo run -p distill-portal-backend`).
+- Frontend dev server: `127.0.0.1:4100` (Bun + Vite, `bun run dev` under `apps/frontend/`).
+- Vite proxies `/api/v1/**` and `/health` to the backend so browser code can use same-origin paths without ad hoc CORS setup. Dev-time proxy config lives in `apps/frontend/vite.config.ts`, not in application code.
+
+## Run Both Together
+
+Terminal 1:
+
+```bash
+cargo run -p distill-portal-backend
+```
+
+Terminal 2 (from `apps/frontend/`):
+
+```bash
+bun run dev
+```
+
+Then open `http://127.0.0.1:4100/` in the browser. The Rust backend must be running for `/health` and `/api/v1/**` to resolve through the Vite proxy.
+
+## Browser E2E (Playwright)
+
+The inspection-surface browser e2e lives under `apps/frontend/e2e/` and
+drives Chromium against the Bun + Vite dev server, which proxies to a
+real Rust backend spawned inside the harness (`e2e/harness/backend.ts`).
+The harness uses `Bun.spawn` per the Bun-first rule, so the suite must
+be run with Bun as the runtime (`bun --bun x playwright test`, wired
+into the `test:e2e` script below).
+
+Commands (run from `apps/frontend/`):
+
+```bash
+bun run test:e2e:install   # one-time: install Chromium via Playwright
+bun run test:e2e           # spawns the backend, starts Vite, runs Chromium
+```
+
+The harness binds the backend to `127.0.0.1:4000` because
+`vite.config.ts` proxies `/api/v1/**` and `/health` to that address;
+tests run serially (`workers: 1`) so the port is never double-bound.
+See `playwright.config.ts` for the full configuration.
+
+## Targeted Tests
+
+```bash
+cargo test -p distill-portal-collector-runtime --test parsers
+cargo test -p distill-portal-backend --test http_api
+cargo test -p distill-portal-e2e --test inspection_surface
+```
+
+## TypeScript Contract Bindings
+
+The Rust contract types in `components/ui-api-contracts/src/lib.rs` are the source of truth. TypeScript declarations under `components/ui-api-contracts/bindings/` are generated from them via the `ts-bindings` cargo feature (off by default) and must be regenerated whenever the Rust contract changes.
+
+Verify the checked-in TS files match the current Rust source (fails on drift):
+
+```bash
+cargo test -p distill-portal-ui-api-contracts --features ts-bindings
+```
+
+Regenerate the checked-in TS files after a contract change:
+
+```bash
+cargo test -p distill-portal-ui-api-contracts --features ts-bindings -- --ignored regenerate_ts_bindings
+```
+
+See `components/ui-api-contracts/README.md` for the tool-choice rationale and the full list of generated files.
+
+## Workspace Verification
+
+```bash
+cargo check --workspace
+cargo test --workspace
+```
+
+codex
+I’ve loaded the repo rules. Next I’m checking the exact round-2 touched files with line numbers, plus quick searches for the original failure patterns.
+exec
+/bin/bash -lc 'git status --short' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+ M apps/frontend/e2e/inspection.spec.ts
+ M apps/frontend/src/App.test.tsx
+ M apps/frontend/src/App.tsx
+ M apps/frontend/src/components/Drawer.tsx
+ M apps/frontend/src/features/sessions/SessionDetail.tsx
+ M apps/frontend/src/features/sessions/SessionView.css
+ M apps/frontend/src/features/sessions/SessionView.test.tsx
+ M apps/frontend/src/features/sessions/SessionView.tsx
+ M apps/frontend/src/features/sessions/SessionsTable.tsx
+ M apps/frontend/src/features/sessions/SessionsView.test.tsx
+ M apps/frontend/src/features/sessions/SessionsView.tsx
+?? apps/frontend/src/components/Tabs.css
+?? apps/frontend/src/components/Tabs.test.tsx
+?? apps/frontend/src/components/Tabs.tsx
+?? apps/frontend/src/features/sessions/RawTab.css
+?? apps/frontend/src/features/sessions/RawTab.test.tsx
+?? apps/frontend/src/features/sessions/RawTab.tsx
+?? apps/frontend/src/features/sessions/SessionMetadata.css
+?? apps/frontend/src/features/sessions/SessionMetadata.test.tsx
+?? apps/frontend/src/features/sessions/SessionMetadata.tsx
+?? working/phase-5/codex-reviews/m2b-design-review-r2.txt
+?? working/phase-5/codex-reviews/m2b-design-review-r3.txt
+?? working/phase-5/codex-reviews/m2b-design-review-r4.txt
+?? working/phase-5/codex-reviews/m2b-design-review.txt
+?? working/phase-5/codex-reviews/m2b-impl-review-r1.txt
+?? working/phase-5/codex-reviews/m2b-impl-review-r2.txt
+?? working/phase-5/designs/m2b-shell/
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/features/sessions/SessionView.css | sed -n '220,260p'" in /home/huwei/ai_codings/distill-portal
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/components/Tabs.test.tsx | sed -n '1,220p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   220	
+   221	/* Tool badge — hairline-bordered transparent ground (mirrors the
+   222	 * SessionsTable `.title-cell-tool` recipe). NOT the filled
+   223	 * `.badge.{variant}` recipe (status is the row's dedicated pill;
+   224	 * tool is a quieter contextual signal). */
+   225	.session-tool-badge {
+   226	  display: inline-block;
+   227	  padding: 0 var(--space-2);
+   228	  font-family: var(--font-mono);
+   229	  font-size: var(--text-xs);
+   230	  color: var(--color-ink-muted);
+   231	  border: 1px solid var(--color-border);
+   232	  border-radius: var(--radius-sm);
+   233	  letter-spacing: 0.02em;
+   234	}
+   235	
+   236	/* Conflict pill in the header. Uses the warn color recipe per
+   237	 * Phase-5 spec line 622 + design.md checklist item 24 + colors.md
+   238	 * H09 — `statusConflict` is an attention signal (the row's run mode
+   239	 * disagrees with its terminal status), NOT a stop-the-line error,
+   240	 * so the warn semantic is correct. Phase-4's `.drawer-conflict-badge`
+   241	 * used the error recipe; the M2b minimal-header conflict badge is a
+   242	 * structurally new element, not a byte-equivalent extraction, so the
+   243	 * spec redirect to warn applies here. */
+   244	.session-conflict-badge {
+   245	  background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+   246	  color: color-mix(in srgb, var(--color-warn) 70%, var(--color-text));
+   247	  border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+   248	}
+   249	
+   250	/* Wrapper around the four <TabPanel> elements. */
+   251	.session-pane-tabs {
+   252	  /* No padding — each panel body owns its own inset. */
+   253	}
+   254	
+   255	/* Skim + Transcript editorial placeholder (M2b). Centered dashed
+   256	 * box with italic Fraunces label + chrome subline. Per design.md
+   257	 * §3.5 + acceptance #46. */
+   258	.tab-placeholder {
+   259	  display: flex;
+   260	  flex-direction: column;
+
+ succeeded in 0ms:
+     1	// Component tests for the Tabs primitive (M2b).
+     2	//
+     3	// Coverage:
+     4	//   1. ARIA roles + linkage: tablist + 4 tabs + each tab carries
+     5	//      role="tab", aria-controls, aria-selected, tabindex.
+     6	//   2. Roving tabindex discipline: exactly one tab has tabindex="0"
+     7	//      at any moment (the active one); the other three have
+     8	//      tabindex="-1".
+     9	//   3. Click on tab → activates it (onValueChange fires; aria-selected
+    10	//      flips; focus moves to the clicked tab).
+    11	//   4. Keyboard nav: ArrowLeft / ArrowRight cycle (with wrap from
+    12	//      first → last and last → first); Home jumps to first; End
+    13	//      jumps to last.
+    14	//   5. Selection follows focus (automatic activation per WAI-ARIA
+    15	//      APG): a single ArrowRight press changes the active tab AND
+    16	//      moves focus.
+    17	//   6. Reduced-motion smoke (CSS source contains the @media reduced-
+    18	//      motion block from global.css; the indicator's transition is
+    19	//      zeroed by that rule — covered indirectly because the rule
+    20	//      lives in global.css; we only verify the indicator carries
+    21	//      `transition: transform` so the global rule has something to
+    22	//      zero).
+    23	import { afterEach, expect, mock, test } from "bun:test";
+    24	import { act, cleanup, render } from "@testing-library/react";
+    25	import { useState } from "react";
+    26	import { Tabs, type TabDescriptor } from "./Tabs";
+    27	
+    28	afterEach(() => {
+    29	  cleanup();
+    30	});
+    31	
+    32	type TabId = "transcript" | "skim" | "raw" | "metadata";
+    33	
+    34	const TABS: ReadonlyArray<TabDescriptor<TabId>> = [
+    35	  { id: "transcript", label: "Transcript", panel: "transcript-panel" },
+    36	  { id: "skim",       label: "Skim",       panel: "skim-panel" },
+    37	  { id: "raw",        label: "Raw",        panel: "raw-panel" },
+    38	  { id: "metadata",   label: "Metadata",   panel: "metadata-panel" },
+    39	];
+    40	
+    41	function Harness({
+    42	  initial = "metadata" as TabId,
+    43	  onChange,
+    44	}: {
+    45	  initial?: TabId;
+    46	  onChange?: (next: TabId) => void;
+    47	}) {
+    48	  const [value, setValue] = useState<TabId>(initial);
+    49	  return (
+    50	    <Tabs<TabId>
+    51	      ariaLabel="Test tabs"
+    52	      value={value}
+    53	      onValueChange={(next) => {
+    54	        setValue(next);
+    55	        onChange?.(next);
+    56	      }}
+    57	      tabs={TABS}
+    58	    />
+    59	  );
+    60	}
+    61	
+    62	test("Tabs: ARIA roles + linkage — tablist with 4 tabs each carrying role/aria-controls/aria-selected/tabindex", () => {
+    63	  const { container } = render(<Harness />);
+    64	  const tablist = container.querySelector('[role="tablist"]');
+    65	  expect(tablist).not.toBeNull();
+    66	  expect(tablist?.getAttribute("aria-label")).toBe("Test tabs");
+    67	  const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
+    68	  expect(tabs.length).toBe(4);
+    69	  // Each tab carries id=tab-<id>, aria-controls=panel-<id>,
+    70	  // aria-selected, and tabindex.
+    71	  const ids = tabs.map((t) => t.getAttribute("id"));
+    72	  expect(ids).toEqual([
+    73	    "tab-transcript",
+    74	    "tab-skim",
+    75	    "tab-raw",
+    76	    "tab-metadata",
+    77	  ]);
+    78	  for (const tab of tabs) {
+    79	    const id = tab.getAttribute("id") ?? "";
+    80	    const tabId = id.replace(/^tab-/, "");
+    81	    expect(tab.getAttribute("aria-controls")).toBe(`panel-${tabId}`);
+    82	    expect(tab.getAttribute("aria-selected")).toMatch(/^(true|false)$/);
+    83	    expect(tab.getAttribute("tabindex")).toMatch(/^(-1|0)$/);
+    84	  }
+    85	});
+    86	
+    87	test("Tabs: roving tabindex — exactly one tab has tabindex=0 at any moment (the active one)", () => {
+    88	  const { container } = render(<Harness initial="metadata" />);
+    89	  const tabs = Array.from(
+    90	    container.querySelectorAll('[role="tab"]'),
+    91	  ) as HTMLButtonElement[];
+    92	  const tabindex0 = tabs.filter((t) => t.tabIndex === 0);
+    93	  expect(tabindex0.length).toBe(1);
+    94	  expect(tabindex0[0]?.id).toBe("tab-metadata");
+    95	  // Click on Skim → only Skim has tabindex=0.
+    96	  act(() => {
+    97	    (tabs.find((t) => t.id === "tab-skim") as HTMLButtonElement).click();
+    98	  });
+    99	  const tabsAfter = Array.from(
+   100	    container.querySelectorAll('[role="tab"]'),
+   101	  ) as HTMLButtonElement[];
+   102	  const tabindex0After = tabsAfter.filter((t) => t.tabIndex === 0);
+   103	  expect(tabindex0After.length).toBe(1);
+   104	  expect(tabindex0After[0]?.id).toBe("tab-skim");
+   105	});
+   106	
+   107	test("Tabs: click activates and moves focus", () => {
+   108	  const onChange = mock((_next: TabId) => {});
+   109	  const { container } = render(<Harness onChange={onChange} />);
+   110	  const skimTab = container.querySelector("#tab-skim") as HTMLButtonElement;
+   111	  act(() => {
+   112	    skimTab.click();
+   113	  });
+   114	  expect(onChange).toHaveBeenCalledTimes(1);
+   115	  expect(onChange.mock.calls[0]?.[0]).toBe("skim");
+   116	  // aria-selected flipped on Skim.
+   117	  expect(skimTab.getAttribute("aria-selected")).toBe("true");
+   118	  // The other tabs are aria-selected="false".
+   119	  const others = Array.from(
+   120	    container.querySelectorAll('[role="tab"]'),
+   121	  ).filter((t) => t.id !== "tab-skim");
+   122	  for (const t of others) {
+   123	    expect(t.getAttribute("aria-selected")).toBe("false");
+   124	  }
+   125	});
+   126	
+   127	test("Tabs: ArrowRight cycles forward; wraps from last to first", () => {
+   128	  const { container } = render(<Harness initial="metadata" />);
+   129	  const tablist = container.querySelector(
+   130	    '[role="tablist"]',
+   131	  ) as HTMLDivElement;
+   132	  // ArrowRight from "metadata" (last) → wraps to "transcript".
+   133	  act(() => {
+   134	    tablist.dispatchEvent(
+   135	      new window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+   136	    );
+   137	  });
+   138	  expect(
+   139	    container.querySelector("#tab-transcript")?.getAttribute("aria-selected"),
+   140	  ).toBe("true");
+   141	});
+   142	
+   143	test("Tabs: ArrowLeft cycles backward; wraps from first to last", () => {
+   144	  const { container } = render(<Harness initial="transcript" />);
+   145	  const tablist = container.querySelector(
+   146	    '[role="tablist"]',
+   147	  ) as HTMLDivElement;
+   148	  // ArrowLeft from "transcript" (first) → wraps to "metadata".
+   149	  act(() => {
+   150	    tablist.dispatchEvent(
+   151	      new window.KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }),
+   152	    );
+   153	  });
+   154	  expect(
+   155	    container.querySelector("#tab-metadata")?.getAttribute("aria-selected"),
+   156	  ).toBe("true");
+   157	});
+   158	
+   159	test("Tabs: Home jumps to first tab; End jumps to last tab", () => {
+   160	  const { container } = render(<Harness initial="raw" />);
+   161	  const tablist = container.querySelector(
+   162	    '[role="tablist"]',
+   163	  ) as HTMLDivElement;
+   164	  act(() => {
+   165	    tablist.dispatchEvent(
+   166	      new window.KeyboardEvent("keydown", { key: "Home", bubbles: true }),
+   167	    );
+   168	  });
+   169	  expect(
+   170	    container.querySelector("#tab-transcript")?.getAttribute("aria-selected"),
+   171	  ).toBe("true");
+   172	  act(() => {
+   173	    tablist.dispatchEvent(
+   174	      new window.KeyboardEvent("keydown", { key: "End", bubbles: true }),
+   175	    );
+   176	  });
+   177	  expect(
+   178	    container.querySelector("#tab-metadata")?.getAttribute("aria-selected"),
+   179	  ).toBe("true");
+   180	});
+   181	
+   182	test("Tabs: selection follows focus — keyboard nav moves focus AND fires onValueChange in lockstep", () => {
+   183	  const onChange = mock((_next: TabId) => {});
+   184	  const { container } = render(
+   185	    <Harness initial="transcript" onChange={onChange} />,
+   186	  );
+   187	  const tablist = container.querySelector(
+   188	    '[role="tablist"]',
+   189	  ) as HTMLDivElement;
+   190	  act(() => {
+   191	    tablist.dispatchEvent(
+   192	      new window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+   193	    );
+   194	  });
+   195	  // onValueChange fired with the next tab in lockstep.
+   196	  expect(onChange).toHaveBeenCalledTimes(1);
+   197	  expect(onChange.mock.calls[0]?.[0]).toBe("skim");
+   198	  // aria-selected reflects the change.
+   199	  expect(
+   200	    container.querySelector("#tab-skim")?.getAttribute("aria-selected"),
+   201	  ).toBe("true");
+   202	});
+   203	
+   204	test("Tabs: data-active-tab attribute mirrors aria-selected for CSS hooks", () => {
+   205	  const { container } = render(<Harness initial="raw" />);
+   206	  const tablist = container.querySelector(
+   207	    '[role="tablist"]',
+   208	  ) as HTMLDivElement;
+   209	  expect(tablist.getAttribute("data-active-tab")).toBe("raw");
+   210	  act(() => {
+   211	    (
+   212	      container.querySelector("#tab-skim") as HTMLButtonElement
+   213	    ).click();
+   214	  });
+   215	  expect(tablist.getAttribute("data-active-tab")).toBe("skim");
+   216	});
+   217	
+   218	test("Tabs: indicator <span> renders inside the tablist with aria-hidden", () => {
+   219	  const { container } = render(<Harness />);
+   220	  const tablist = container.querySelector('[role="tablist"]');
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/components/Tabs.tsx | sed -n '1,180p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+     1	// Accessible tablist primitive for the Phase-5 right-pane tab strip.
+     2	//
+     3	// Implements the WAI-ARIA APG "tabs" pattern (automatic activation:
+     4	// selection follows focus). Rendered as a flat `<div role="tablist">`
+     5	// containing one `<button role="tab">` per tab plus a single
+     6	// absolutely-positioned `<span class="indicator">` whose
+     7	// `transform: translateX(...) scaleX(...)` is computed from the active
+     8	// tab's bounding box and animated over `--motion-base` (120 ms)
+     9	// `--ease-standard`.
+    10	//
+    11	// Controlled-only API: `value` + `onValueChange` come from the parent
+    12	// (SessionView holds activeTab + visitedTabs). The primitive does NOT
+    13	// own the active value, so M2b's `visitedTabs` mechanism stays in
+    14	// SessionView and the panels themselves are rendered by the parent.
+    15	//
+    16	// Accessibility:
+    17	//   - `<div role="tablist" aria-label>` wraps the four tab buttons.
+    18	//   - Each `<button role="tab" id aria-controls aria-selected
+    19	//     tabindex>` carries the WAI-ARIA APG roving-tabindex pattern:
+    20	//     exactly one tab has `tabindex="0"` (the active one); the others
+    21	//     have `tabindex="-1"`.
+    22	//   - Selection follows focus: ArrowLeft / ArrowRight cycle (with
+    23	//     wrap); Home / End jump to first / last; Enter / Space are
+    24	//     no-ops because activation already happened on focus.
+    25	//   - On click → activate + focus.
+    26	//   - Indicator is `aria-hidden="true"` — purely decorative.
+    27	//
+    28	// Indicator measurement:
+    29	//   - `useLayoutEffect` re-runs whenever `value` changes AND on
+    30	//     `ResizeObserver` watching the tablist (covers viewport resize
+    31	//     + Fraunces font swap remeasurement). Computes
+    32	//     `tabRect.left - tablistRect.left` and `tabRect.width` directly
+    33	//     via `getBoundingClientRect()` and writes a single
+    34	//     `transform: translateX(${x}px) scaleX(${width})` declaration
+    35	//     so the CSS `transition: transform` animates both components as
+    36	//     one compositor-cheap step. NOTE: `scaleX()` takes a UNITLESS
+    37	//     number (a multiplier of the element's own width); writing
+    38	//     `scaleX(${width}px)` is INVALID CSS and the browser drops the
+    39	//     declaration, so we pass the raw pixel count without a unit.
+    40	//   - The indicator's CSS base size is `width: 1px; height: 1px;`
+    41	//     (Tabs.css). `scaleX(N) × 1 px = N px`; without the 1 px base
+    42	//     the empty span would resolve to `width: auto = 0` and the
+    43	//     indicator would never appear.
+    44	//   - Initial mount uses `requestAnimationFrame` to defer the first
+    45	//     measurement by one frame so Fraunces' fallback metrics shifts
+    46	//     (M2a §4 documented the ~1 px swap delta on Charter →
+    47	//     Fraunces) don't strand the indicator off-target.
+    48	import {
+    49	  useCallback,
+    50	  useEffect,
+    51	  useLayoutEffect,
+    52	  useRef,
+    53	  type KeyboardEvent,
+    54	  type ReactNode,
+    55	} from "react";
+    56	import "./Tabs.css";
+    57	
+    58	export type TabDescriptor<TabId extends string> = {
+    59	  id: TabId;
+    60	  label: string;
+    61	  panel: ReactNode | (() => ReactNode);
+    62	};
+    63	
+    64	export type TabsProps<TabId extends string> = {
+    65	  /** ARIA tablist label; required for screen-reader context. */
+    66	  ariaLabel: string;
+    67	  /** Currently-active tab id (controlled). */
+    68	  value: TabId;
+    69	  /** Called when the active tab changes. */
+    70	  onValueChange: (next: TabId) => void;
+    71	  /** Tabs in render order. The label is the visible button text. */
+    72	  tabs: ReadonlyArray<TabDescriptor<TabId>>;
+    73	};
+    74	
+    75	export function Tabs<TabId extends string>({
+    76	  ariaLabel,
+    77	  value,
+    78	  onValueChange,
+    79	  tabs,
+    80	}: TabsProps<TabId>) {
+    81	  const tablistRef = useRef<HTMLDivElement | null>(null);
+    82	  const indicatorRef = useRef<HTMLSpanElement | null>(null);
+    83	  const tabButtonsRef = useRef<Map<TabId, HTMLButtonElement>>(new Map());
+    84	
+    85	  // Compute + apply the indicator transform. Returns true when the
+    86	  // measurement landed (the active tab button was found in the
+    87	  // refs map AND the tablist has rendered).
+    88	  const measureIndicator = useCallback(() => {
+    89	    const indicator = indicatorRef.current;
+    90	    const tablist = tablistRef.current;
+    91	    if (indicator === null || tablist === null) return false;
+    92	    const activeButton = tabButtonsRef.current.get(value) ?? null;
+    93	    if (activeButton === null) return false;
+    94	    const tablistRect = tablist.getBoundingClientRect();
+    95	    const tabRect = activeButton.getBoundingClientRect();
+    96	    const x = tabRect.left - tablistRect.left;
+    97	    const width = tabRect.width;
+    98	    // One declaration so CSS `transition: transform` animates both
+    99	    // components as one compositor-cheap step. The base CSS size is
+   100	    // 1 × 1 px (see Tabs.css `.tabs .indicator`); `scaleX(N) × 1 = N`
+   101	    // grows the indicator to the tab's measured pixel width.
+   102	    // `scaleX()` takes a UNITLESS number — `scaleX(${width}px)` is
+   103	    // invalid CSS and the browser would drop the whole declaration.
+   104	    indicator.style.transform = `translateX(${x}px) scaleX(${width})`;
+   105	    return true;
+   106	  }, [value]);
+   107	
+   108	  // Run measurement on every active-tab change. `useLayoutEffect`
+   109	  // fires synchronously after DOM mutations but before paint, so the
+   110	  // user never sees a single-frame "wrong indicator position".
+   111	  useLayoutEffect(() => {
+   112	    measureIndicator();
+   113	  }, [measureIndicator]);
+   114	
+   115	  // Initial mount: defer the FIRST measurement by one rAF so
+   116	  // Fraunces fallback metrics settle before we read
+   117	  // getBoundingClientRect (M2a §4 documented the ~1 px swap delta).
+   118	  useEffect(() => {
+   119	    const id = requestAnimationFrame(() => {
+   120	      measureIndicator();
+   121	    });
+   122	    return () => cancelAnimationFrame(id);
+   123	    // mount-only; subsequent active-tab changes flow through the
+   124	    // useLayoutEffect above.
+   125	    // eslint-disable-next-line react-hooks/exhaustive-deps
+   126	  }, []);
+   127	
+   128	  // ResizeObserver watches the tablist itself: viewport resize +
+   129	  // Fraunces font swap both fire layout changes that re-flow the
+   130	  // tab buttons. Re-measure on every observation.
+   131	  useEffect(() => {
+   132	    const tablist = tablistRef.current;
+   133	    if (tablist === null) return;
+   134	    if (typeof ResizeObserver === "undefined") return;
+   135	    const observer = new ResizeObserver(() => {
+   136	      measureIndicator();
+   137	    });
+   138	    observer.observe(tablist);
+   139	    return () => observer.disconnect();
+   140	  }, [measureIndicator]);
+   141	
+   142	  const activate = useCallback(
+   143	    (id: TabId, focusButton: boolean) => {
+   144	      onValueChange(id);
+   145	      if (focusButton) {
+   146	        const btn = tabButtonsRef.current.get(id);
+   147	        if (btn !== undefined) btn.focus();
+   148	      }
+   149	    },
+   150	    [onValueChange],
+   151	  );
+   152	
+   153	  const onKeyDown = useCallback(
+   154	    (event: KeyboardEvent<HTMLDivElement>) => {
+   155	      const key = event.key;
+   156	      if (
+   157	        key !== "ArrowLeft" &&
+   158	        key !== "ArrowRight" &&
+   159	        key !== "Home" &&
+   160	        key !== "End"
+   161	      ) {
+   162	        return;
+   163	      }
+   164	      event.preventDefault();
+   165	      const idx = tabs.findIndex((t) => t.id === value);
+   166	      if (idx === -1) return;
+   167	      let nextIdx: number;
+   168	      if (key === "ArrowLeft") {
+   169	        nextIdx = idx === 0 ? tabs.length - 1 : idx - 1;
+   170	      } else if (key === "ArrowRight") {
+   171	        nextIdx = idx === tabs.length - 1 ? 0 : idx + 1;
+   172	      } else if (key === "Home") {
+   173	        nextIdx = 0;
+   174	      } else {
+   175	        nextIdx = tabs.length - 1;
+   176	      }
+   177	      const nextTab = tabs[nextIdx];
+   178	      if (nextTab !== undefined) {
+   179	        activate(nextTab.id, true);
+   180	      }
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/features/sessions/SessionsTable.tsx | sed -n '1,220p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+     1	// Presentational table for the unified inspection list.
+     2	//
+     3	// Receives the merged + filtered + sorted `SessionRow[]` plus the
+     4	// `selected` set + toggle handlers from the parent. Selection keys are
+     5	// always backend-provided `sourceSessionKey` strings — never the
+     6	// React-only `rowKey` fallback for `stored_only` rows. The table
+     7	// renders a checkbox ONLY on importable rows
+     8	// (`isImportable(row) === true`) so non-importable rows cannot enter
+     9	// the import POST.
+    10	//
+    11	// Per `working/phase-4.md` §Action Bar and Mutation UX, the bulk-select
+    12	// affordance toggles ALL importable rows in the current filter window.
+    13	// Non-importable rows are invisible to the bulk action.
+    14	//
+    15	// Per Phase-5 spec §Compact list rows (lines 520–531) the table is
+    16	// compressed to FIVE columns: Select + Title + Status + Project +
+    17	// Updated. The Title cell carries a two-line stack: bold title + tool
+    18	// badge inline (line 1); muted mono rowKey + optional `(refresh)`
+    19	// marker (line 2). The dropped Phase-4 columns (Tool / Stored Copy /
+    20	// Source Path) are now surfaced by the M2b Metadata tab inside
+    21	// `SessionView` on the right pane (no drawer; the Phase-4 `<Drawer>`
+    22	// is retained as DEAD-BUT-TESTED scaffolding only).
+    23	//
+    24	// Per spec, a row whose `statusConflict` is true gets a small
+    25	// "(refresh)" affordance inside the Title cell — telegraphing the
+    26	// "fetched state changed during load — refresh" hint. M1b warmed
+    27	// the marker color from `--color-text-muted` (Phase 4) to
+    28	// `--color-warn`; the M2a fix-up round 2 reverted it back to
+    29	// `--color-text-muted` (italic) because the oklch retint regressed
+    30	// the warn-as-text pair vs `--color-surface` to 4.21:1 (fails AA
+    31	// 4.5:1 normal text). See `working/phase-5/designs/m2a-tokens/wcag.md`
+    32	// "Codex fix-up round 2 closure" and the M1b designer's documented
+    33	// mitigation in `working/phase-5/designs/m1b-shell/colors.md` lines
+    34	// 56-58. The hint copy is unchanged; only the visual treatment
+    35	// stepped back from "warning sienna" to "muted gray italic".
+    36	//
+    37	// As of M3 the "Updated" cell renders a relative-time string against
+    38	// a single `now` captured at refetch time in `App.tsx` (passed in as a
+    39	// prop) so the page does not ticker-update. The full ISO timestamp
+    40	// stays available via the `title=` hover hint for users who need the
+    41	// absolute value.
+    42	//
+    43	// As of M2b (Phase 5) the row click semantic is: a click anywhere
+    44	// on the row OR pressing Enter while the row is focused calls
+    45	// `onSelectRow(row.rowKey)` ONLY. `onSelectRow` updates the URL via
+    46	// `useSelectedSession`, which causes `SessionView` to mount on the
+    47	// right pane with the Metadata tab selected by default. There is no
+    48	// drawer and no "Open detail" button — both the Phase-4
+    49	// `onOpenDetail(rowKey, triggerEl)` call and the M1b vestigial
+    50	// "Open detail" button were collapsed in M2b alongside the
+    51	// `forwardRef` / `SessionsViewHandle` plumbing on `SessionsView`.
+    52	// The checkbox cell still stops propagation so toggling selection
+    53	// never triggers `onSelectRow` (a11y bug magnet preserved verbatim
+    54	// from Phase 4).
+    55	//
+    56	// As of M6 (Chunk G) the status pill is rendered inline (the dedicated
+    57	// `StatusBadge` component was retired). The transform —
+    58	// `variant = status.replace(/_/g, "-")` for the CSS class and
+    59	// `label = status.replace(/_/g, " ")` for the visible text — is
+    60	// preserved byte-for-byte at the call site so the DOM shape stays
+    61	// `<span class="badge {variant}">{label}</span>`.
+    62	//
+    63	// CSS lives in the sibling `SessionsTable.css` (selectors
+    64	// `.table-wrap`, table chrome, `.badge.*`, `.title-cell*`,
+    65	// `.select-col`).
+    66	// Global utility classes (`.muted`, `.mono`, `.stack`, `.empty`) live
+    67	// in `styles/global.css`; the filter-bar CSS is in
+    68	// `SessionFilters.css`.
+    69	import { relativeTimeFrom } from "./relativeTime";
+    70	import { isImportable, type SessionRow } from "./types";
+    71	import "./SessionsTable.css";
+    72	
+    73	export type SessionsTableProps = {
+    74	  rows: SessionRow[];
+    75	  /** Backend-provided `sourceSessionKey` values currently selected. */
+    76	  selected: Set<string>;
+    77	  /** Toggle a single importable row by its `sourceSessionKey`. */
+    78	  onToggle: (sourceSessionKey: string) => void;
+    79	  /** Toggle all importable rows: if any importable row is unchecked, select all; otherwise clear. */
+    80	  onToggleAll: () => void;
+    81	  /** Pinned-`now` ISO string used by the relative-time cell renderer. */
+    82	  now: string;
+    83	  /** M1a: rowKey of the currently URL-selected session. The matched
+    84	   *  row carries `aria-current="true"` for assistive tech and the
+    85	   *  selected-row visual treatment. `null` means no selection. */
+    86	  selectedRowKey?: string | null;
+    87	  /** M1a/M1b/M2b: setter for the URL-synced selection. Called on row
+    88	   *  click (NOT on checkbox-cell click — the importability rule's
+    89	   *  stopPropagation guard remains load-bearing). M1b removed the
+    90	   *  Phase-4 `onOpenDetail` call from the row click path; M2b
+    91	   *  collapsed the vestigial "Open detail" button as well. The URL
+    92	   *  update is now the SOLE row-open gesture: `useSelectedSession`
+    93	   *  reads the new `?session=...` value and `SessionView` mounts on
+    94	   *  the right pane with the Metadata tab selected by default. */
+    95	  onSelectRow?: (rowKey: string) => void;
+    96	  /** M1a: rowKey of the row that should fire the deep-link pulse on
+    97	   *  the current paint. Set on initial mount only when
+    98	   *  `URLSearchParams.get("session")` was non-null; cleared by the
+    99	   *  parent via `onAnimationEnd` OR a 2 s safety timer. Click-driven
+   100	   *  selection MUST NOT set this — the pulse marks URL-driven
+   101	   *  arrivals only (spec line 585 + Resolved Decision #19). */
+   102	  pendingDeepLinkPulseRowKey?: string | null;
+   103	  /** M1a: notify the parent that the deep-link pulse animation has
+   104	   *  ended on `rowKey` so the parent can clear
+   105	   *  `pendingDeepLinkPulseRowKey`. Optional. */
+   106	  onDeepLinkPulseEnd?: (rowKey: string) => void;
+   107	};
+   108	
+   109	export function SessionsTable({
+   110	  rows,
+   111	  selected,
+   112	  onToggle,
+   113	  onToggleAll,
+   114	  now,
+   115	  selectedRowKey = null,
+   116	  onSelectRow,
+   117	  pendingDeepLinkPulseRowKey = null,
+   118	  onDeepLinkPulseEnd,
+   119	}: SessionsTableProps) {
+   120	  if (rows.length === 0) {
+   121	    return (
+   122	      <div className="empty">
+   123	        No sessions have been discovered or stored yet.
+   124	      </div>
+   125	    );
+   126	  }
+   127	  // Header bulk-select state is computed from the importable subset
+   128	  // only. A row that cannot be selected (no checkbox) does not
+   129	  // participate in "all selected" / "indeterminate" math.
+   130	  const importableKeys: string[] = [];
+   131	  for (const row of rows) {
+   132	    if (isImportable(row) && row.sourceSessionKey !== null) {
+   133	      importableKeys.push(row.sourceSessionKey);
+   134	    }
+   135	  }
+   136	  const importableSelectedCount = importableKeys.reduce(
+   137	    (acc, k) => (selected.has(k) ? acc + 1 : acc),
+   138	    0,
+   139	  );
+   140	  const allChecked =
+   141	    importableKeys.length > 0 &&
+   142	    importableSelectedCount === importableKeys.length;
+   143	  const someChecked =
+   144	    importableSelectedCount > 0 &&
+   145	    importableSelectedCount < importableKeys.length;
+   146	  // When zero rows are importable we still render the header checkbox
+   147	  // but it stays disabled — there's nothing to bulk-select.
+   148	  const headerCheckboxDisabled = importableKeys.length === 0;
+   149	
+   150	  return (
+   151	    <div className="table-wrap">
+   152	      <table>
+   153	        <thead>
+   154	          <tr>
+   155	            <th className="select-col">
+   156	              <input
+   157	                type="checkbox"
+   158	                aria-label="Select all importable sessions"
+   159	                checked={allChecked}
+   160	                disabled={headerCheckboxDisabled}
+   161	                ref={(el) => {
+   162	                  if (el) el.indeterminate = someChecked;
+   163	                }}
+   164	                onChange={onToggleAll}
+   165	              />
+   166	            </th>
+   167	            <th>Title</th>
+   168	            <th>Status</th>
+   169	            <th>Project</th>
+   170	            <th>Updated</th>
+   171	          </tr>
+   172	        </thead>
+   173	        <tbody>
+   174	          {rows.map((row) => {
+   175	            const importable = isImportable(row);
+   176	            const checked =
+   177	              row.sourceSessionKey !== null &&
+   178	              selected.has(row.sourceSessionKey);
+   179	            const handleRowOpen = () => {
+   180	              // M2b: row "open" gesture is URL-synced selection ONLY.
+   181	              // The Phase-4 `onOpenDetail` drawer auto-mount was
+   182	              // retired in M1b; the M1b vestigial "Open detail" button
+   183	              // was collapsed in M2b. The URL update flows through
+   184	              // `useSelectedSession` and `SessionView` mounts on the
+   185	              // right pane with the Metadata tab selected by default.
+   186	              if (onSelectRow) onSelectRow(row.rowKey);
+   187	            };
+   188	            const isSelected = selectedRowKey === row.rowKey;
+   189	            const isPulseTarget =
+   190	              pendingDeepLinkPulseRowKey === row.rowKey;
+   191	            return (
+   192	              <tr
+   193	                key={row.rowKey}
+   194	                tabIndex={0}
+   195	                aria-current={isSelected ? "true" : undefined}
+   196	                data-deep-link={isPulseTarget ? "true" : undefined}
+   197	                onAnimationEnd={
+   198	                  isPulseTarget && onDeepLinkPulseEnd
+   199	                    ? () => onDeepLinkPulseEnd(row.rowKey)
+   200	                    : undefined
+   201	                }
+   202	                onClick={(event) => {
+   203	                  // Walk up from the click target to see whether the
+   204	                  // event came from inside the checkbox column. A
+   205	                  // click on the checkbox cell (or anything inside
+   206	                  // it) toggles selection only — it MUST NOT trigger
+   207	                  // the row-open path (a11y bug magnet). The
+   208	                  // `event.stopPropagation()` on the cell handles
+   209	                  // most cases; this guard is the belt-and-braces
+   210	                  // backup in case the propagation interception is
+   211	                  // bypassed by an event-time bubble re-fire.
+   212	                  const target = event.target as HTMLElement | null;
+   213	                  if (target?.closest("td.select-col") !== null) return;
+   214	                  handleRowOpen();
+   215	                }}
+   216	                onKeyDown={(event) => {
+   217	                  if (event.key !== "Enter") return;
+   218	                  // Same checkbox-cell guard as the click handler.
+   219	                  const target = event.target as HTMLElement | null;
+   220	                  if (target?.closest("td.select-col") !== null) return;
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/components/Tabs.test.tsx | sed -n '218,360p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   218	test("Tabs: indicator <span> renders inside the tablist with aria-hidden", () => {
+   219	  const { container } = render(<Harness />);
+   220	  const tablist = container.querySelector('[role="tablist"]');
+   221	  const indicator = tablist?.querySelector(".indicator");
+   222	  expect(indicator).not.toBeNull();
+   223	  expect(indicator?.getAttribute("aria-hidden")).toBe("true");
+   224	});
+   225	
+   226	test("Tabs: indicator transform is unitless scaleX (regression: scaleX(...px) is invalid CSS and would hide the indicator)", () => {
+   227	  // `scaleX()` takes a UNITLESS number (a multiplier of the element's
+   228	  // own width). Writing `scaleX(${width}px)` produces invalid CSS that
+   229	  // the browser drops, falling back to the `.indicator` default
+   230	  // transform and rendering the active-tab ink-stroke INVISIBLE.
+   231	  // This regression assertion fails the moment a `px` suffix sneaks
+   232	  // back into the scaleX argument.
+   233	  const { container } = render(<Harness initial="metadata" />);
+   234	  const indicator = container.querySelector(".indicator") as HTMLSpanElement;
+   235	  expect(indicator).not.toBeNull();
+   236	  const transform = indicator.style.transform;
+   237	  // Negative assertion: NO `scaleX(<number>px)` form anywhere.
+   238	  expect(transform).not.toMatch(/scaleX\([\d.]+px\)/);
+   239	  // Positive assertion: a unitless `scaleX(<number>)` IS present.
+   240	  expect(transform).toMatch(/scaleX\([\d.]+\)/);
+   241	});
+   242	
+   243	test("Tabs: Enter / Space on a focused tab is a no-op (selection already followed focus)", () => {
+   244	  // Selection-follows-focus means Enter/Space on the active tab is
+   245	  // redundant. The native `<button>` element handles activation
+   246	  // synchronously on click; we don't intercept Enter/Space in the
+   247	  // keydown handler, so neither key changes the active value.
+   248	  const onChange = mock((_next: TabId) => {});
+   249	  const { container } = render(
+   250	    <Harness initial="metadata" onChange={onChange} />,
+   251	  );
+   252	  const tablist = container.querySelector(
+   253	    '[role="tablist"]',
+   254	  ) as HTMLDivElement;
+   255	  act(() => {
+   256	    tablist.dispatchEvent(
+   257	      new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+   258	    );
+   259	    tablist.dispatchEvent(
+   260	      new window.KeyboardEvent("keydown", { key: " ", bubbles: true }),
+   261	    );
+   262	  });
+   263	  // No state change beyond the initial render.
+   264	  expect(onChange).toHaveBeenCalledTimes(0);
+   265	});
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/features/sessions/SessionsTable.tsx | sed -n '216,360p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   216	                onKeyDown={(event) => {
+   217	                  if (event.key !== "Enter") return;
+   218	                  // Same checkbox-cell guard as the click handler.
+   219	                  const target = event.target as HTMLElement | null;
+   220	                  if (target?.closest("td.select-col") !== null) return;
+   221	                  // Prevent the default form-submission behaviour
+   222	                  // (no form here, but Enter on a focused element
+   223	                  // can still trigger native actions in some
+   224	                  // contexts).
+   225	                  event.preventDefault();
+   226	                  handleRowOpen();
+   227	                }}
+   228	              >
+   229	                <td
+   230	                  className="select-col"
+   231	                  // Stop click propagation BEFORE the row's onClick
+   232	                  // sees it — toggling selection should never trigger
+   233	                  // the row-open path.
+   234	                  onClick={(event) => event.stopPropagation()}
+   235	                >
+   236	                  {importable && row.sourceSessionKey !== null ? (
+   237	                    <input
+   238	                      type="checkbox"
+   239	                      aria-label={`Select ${row.sourceSessionKey}`}
+   240	                      checked={checked}
+   241	                      onChange={() => onToggle(row.sourceSessionKey!)}
+   242	                    />
+   243	                  ) : null}
+   244	                </td>
+   245	                <td>
+   246	                  <div className="title-cell">
+   247	                    <div className="title-cell-line1">
+   248	                      <span className="title-cell-title">
+   249	                        {row.title ?? "(untitled)"}
+   250	                      </span>
+   251	                      <span className="title-cell-tool">{row.tool}</span>
+   252	                    </div>
+   253	                    <div className="title-cell-line2">
+   254	                      <span className="title-cell-rowkey">
+   255	                        {row.rowKey}
+   256	                      </span>
+   257	                      {row.statusConflict ? (
+   258	                        <span
+   259	                          className="title-cell-refresh"
+   260	                          title="Source and stored status disagreed during load — refresh to re-fetch."
+   261	                        >
+   262	                          (refresh)
+   263	                        </span>
+   264	                      ) : null}
+   265	                    </div>
+   266	                  </div>
+   267	                </td>
+   268	                <td>
+   269	                  <span
+   270	                    className={`badge ${row.status.replace(/_/g, "-")}`}
+   271	                  >
+   272	                    {row.status.replace(/_/g, " ")}
+   273	                  </span>
+   274	                </td>
+   275	                <td
+   276	                  className="project-cell"
+   277	                  title={row.projectPath ?? undefined}
+   278	                >
+   279	                  {row.projectPath ?? "—"}
+   280	                </td>
+   281	                <td
+   282	                  className="mono updated-cell"
+   283	                  title={row.sourceUpdatedAt ?? undefined}
+   284	                >
+   285	                  {relativeTimeFrom(now, row.sourceUpdatedAt)}
+   286	                </td>
+   287	              </tr>
+   288	            );
+   289	          })}
+   290	        </tbody>
+   291	      </table>
+   292	    </div>
+   293	  );
+   294	}
+
+exec
+/bin/bash -lc 'rg -n "session-conflict-badge|color-warn|statusConflict|line 622|checklist item 24|H09|tab-placeholder|View raw|Open raw" working/phase-5.md working/phase-5/designs/m2b-shell apps/frontend/src/features/sessions apps/frontend/src/components' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+working/phase-5.md:135:- Compact list rows showing four essentials per row: Title (with inline tool badge + muted rowKey + statusConflict refresh marker), Status pill, Project (truncated with title= hover), Updated relative-time. Phase 4's Source Path / Stored Copy / Tool columns move to the Metadata tab.
+working/phase-5.md:143:- Metadata tab: relocates the 18 SessionRow fields verbatim from the Phase 4 drawer body, plus the subagent sidecar badge (PRD line 226 — flag exists in `SessionRow.hasSubagentSidecars`), the sourcePathIsStale "Last seen source path" label, and the statusConflict badge.
+working/phase-5.md:420:When `truncated: true`, the SkimView/TranscriptView render a small banner: "Truncated at 5 MB — full payload not parsed. Use the **Open raw** anchor in the session header to inspect the full payload." (The Raw tab is also capped — at 256 KB / 20 lines, byte-equivalent to Phase 4 — so it is not the right escape hatch for > 5 MB payloads. The header's "Open raw" anchor opens the full `/api/v1/sessions/<storedSessionUid>/raw` endpoint in a new tab with no client-side cap.)
+working/phase-5.md:526:| **Title**   | Bold `row.title || "(untitled)"` on top line in `--font-chrome`; muted `row.tool` badge + `row.rowKey` (`--font-mono`, `--text-xs`) below; `(refresh)` marker if `statusConflict` |
+working/phase-5.md:622:- **Conflict badge** if `row.statusConflict` ("Source ↔ stored disagreed"). Status warning color recipe.
+working/phase-5.md:626:- **"Open raw" anchor** (target=`_blank`, identical href to Phase 4 — `/api/v1/sessions/<storedSessionUid>/raw`). Quiet text link. **Rendered only when `row.storedSessionUid !== null`**; source-only rows replace it with the same "Not yet imported — click Import to fetch raw" copy used in the Raw tab.
+working/phase-5.md:675:| `truncated` | Per-tab content + a top-of-pane warning banner: "Truncated at 5 MB — full payload not parsed. Use the **Open raw** anchor in the session header to inspect the full payload." (Raw tab is also capped; the unconditional escape hatch is the header anchor.) |
+working/phase-5.md:715:If `parsed.truncated`, a small banner at the top of the Transcript: "Truncated at 5 MB — full payload not parsed. Use the **Open raw** anchor in the session header to inspect the full payload." Banner styled with warning status color and a `--motion-base` opacity entrance.
+working/phase-5.md:727:The 18-field `<dl>` extracted verbatim from `apps/frontend/src/features/sessions/SessionDetail.tsx` (lines 160–256 in Phase 4 close), plus the subagent sidecar badge if `row.hasSubagentSidecars`, the sourcePathIsStale label, the statusConflict badge, the copy-to-clipboard button for sourcePath, and the "Open raw" anchor (also present in the header — both surfaces keep the affordance for discoverability). **The "Open raw" anchor is rendered only when `row.storedSessionUid !== null`** (Phase 4 invariant; preserved verbatim).
+working/phase-5.md:1092:- Metadata tab carries all 18 SessionRow fields + subagent sidecar badge + sourcePathIsStale label + statusConflict badge + copy-to-clipboard.
+working/phase-5.md:1146:5. **Full-document fetch cap = 5 MB** (constant `STREAM_RAW_TEXT_BYTE_CAP`); truncation banner directs users to the session-header **"Open raw"** anchor (which opens the full uncapped `/api/v1/sessions/<storedSessionUid>/raw` endpoint in a new tab) as the escape hatch for > 5 MB payloads. The Raw tab itself remains capped at 256 KB / 20 lines (byte-equivalent to Phase 4) and is the verifiability hatch for *small-to-medium* payloads.
+apps/frontend/src/components/Drawer.tsx:32://   3-focusable-element drawer (Close, Copy path, View raw), open the
+apps/frontend/src/features/sessions/SessionMetadata.css:19: *   - `.metadata-raw-link-row`           → "View raw" anchor row
+working/phase-5/designs/m2b-shell/colors.md:84:| H09 | Conflict badge text (warn-recipe pill)       | warn 70% mix on ink   | warn 15% mix on surface | 5.43:1 | 7.74:1 | AAA · normal text   | AA 4.5:1        |
+working/phase-5/designs/m2b-shell/colors.md:105:| M12 | "Open raw" anchor text                       | `--color-accent`      | `--color-surface`   | 4.84:1   | 5.78:1   | passes 4.5:1 AA · normal text | AA 4.5:1 |
+working/phase-5/designs/m2b-shell/colors.md:106:| M13 | "Open raw" anchor hover underline            | `--color-accent-hover` | `--color-surface`  | (light L=50: ~5.92:1; dark L=72: ~6.74:1) | — | passes AA · normal text | AA 4.5:1 |
+working/phase-5/designs/m2b-shell/colors.md:107:| M14 | Top-divider hairline (above Open raw)        | `--color-border`      | `--color-surface`   | 1.49:1   | 1.35:1   | not WCAG-gated      | n/a             |
+working/phase-5/designs/m2b-shell/colors.md:139:used `--color-warn` here (3.97:1 light → fails AA normal text);
+working/phase-5/designs/m2b-shell/colors.md:167:| Passing AA normal text (≥ 4.5:1)          | 28    | T01–T03, H01–H09, M01–M07, M09, M10, M12, M13, R01, R02, R03, R04–R08, P01, P02 |
+working/phase-5/designs/m2b-shell/colors.md:228:| `--color-warn`           | `oklch(58% 0.15 60)`   | `oklch(72% 0.13 60)`   |
+apps/frontend/src/features/sessions/RawTab.test.tsx:50:    statusConflict: false,
+apps/frontend/src/features/sessions/SessionsTable.tsx:24:// Per spec, a row whose `statusConflict` is true gets a small
+apps/frontend/src/features/sessions/SessionsTable.tsx:28:// `--color-warn`; the M2a fix-up round 2 reverted it back to
+apps/frontend/src/features/sessions/SessionsTable.tsx:257:                      {row.statusConflict ? (
+apps/frontend/src/features/sessions/SessionsView.test.tsx:49:    statusConflict: false,
+apps/frontend/src/features/sessions/SessionDetail.test.tsx:13://   5. `statusConflict: true` row renders the "Conflict" badge in the
+apps/frontend/src/features/sessions/SessionDetail.test.tsx:24://   9. "View raw" anchor renders only when `storedSessionUid !== null`
+apps/frontend/src/features/sessions/SessionDetail.test.tsx:70:    statusConflict: false,
+apps/frontend/src/features/sessions/SessionDetail.test.tsx:266:test("SessionDetail: statusConflict=true renders the Conflict badge in the header", () => {
+apps/frontend/src/features/sessions/SessionDetail.test.tsx:267:  const row = buildRow({ statusConflict: true });
+apps/frontend/src/features/sessions/SessionDetail.test.tsx:275:test("SessionDetail: statusConflict=false does NOT render the Conflict badge", () => {
+apps/frontend/src/features/sessions/SessionDetail.test.tsx:276:  const row = buildRow({ statusConflict: false });
+apps/frontend/src/features/sessions/SessionDetail.test.tsx:354:test("SessionDetail: 'View raw' anchor renders only when storedSessionUid !== null", () => {
+apps/frontend/src/features/sessions/SessionsTable.css:138:  background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionsTable.css:139:  color: color-mix(in srgb, var(--color-warn) 70%, var(--color-text));
+apps/frontend/src/features/sessions/SessionsTable.css:140:  border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionsTable.css:210: * (Phase 4) to --color-warn so it would scan as a state hint. The
+apps/frontend/src/features/sessions/SessionsTable.css:211: * M2a oklch retint of --color-warn dropped the warn-as-text pair
+apps/frontend/src/features/sessions/SessionView.tsx:12://     subagent badge, sourcePathIsStale hint, and "Open raw" header
+apps/frontend/src/features/sessions/SessionView.tsx:287:      {row.statusConflict ? (
+apps/frontend/src/features/sessions/SessionView.tsx:289:          className="badge session-conflict-badge"
+apps/frontend/src/features/sessions/SessionView.tsx:343:    <div className="tab-placeholder">
+apps/frontend/src/features/sessions/SessionView.tsx:352:    <div className="tab-placeholder">
+apps/frontend/src/features/sessions/mergeSessions.test.ts:30:// set `statusConflict: true` and keep the source-side status.
+apps/frontend/src/features/sessions/mergeSessions.test.ts:136:  expect(row.statusConflict).toBe(false);
+apps/frontend/src/features/sessions/mergeSessions.test.ts:179:  expect(row.statusConflict).toBe(false);
+apps/frontend/src/features/sessions/mergeSessions.test.ts:222:  expect(row.statusConflict).toBe(false);
+apps/frontend/src/features/sessions/mergeSessions.test.ts:228:// presence: both — disagreement branch (statusConflict)
+apps/frontend/src/features/sessions/mergeSessions.test.ts:231:test("mergeSessions: both + disagreement (source=outdated, stored=up_to_date) sets statusConflict; source wins", () => {
+apps/frontend/src/features/sessions/mergeSessions.test.ts:249:  expect(row.statusConflict).toBe(true);
+apps/frontend/src/features/sessions/mergeSessions.test.ts:255:test("mergeSessions: both + disagreement (source=up_to_date, stored=source_missing) sets statusConflict; source wins", () => {
+apps/frontend/src/features/sessions/mergeSessions.test.ts:279:  expect(row.statusConflict).toBe(true);
+apps/frontend/src/features/sessions/mergeSessions.test.ts:323:  expect(row.statusConflict).toBe(false);
+apps/frontend/src/features/sessions/mergeSessions.test.ts:341:  expect(row.statusConflict).toBe(false);
+apps/frontend/src/features/sessions/mergeSessions.test.ts:368:  expect(row.statusConflict).toBe(false);
+apps/frontend/src/features/sessions/mergeSessions.ts:23://     `statusConflict` is set so the UI can surface the
+apps/frontend/src/features/sessions/mergeSessions.ts:50:  // we surface the disagreement via `statusConflict`.
+apps/frontend/src/features/sessions/mergeSessions.ts:60:      const statusConflict = matchedStored.status !== src.status;
+apps/frontend/src/features/sessions/mergeSessions.ts:79:        statusConflict,
+apps/frontend/src/features/sessions/mergeSessions.ts:106:        statusConflict: false,
+apps/frontend/src/features/sessions/mergeSessions.ts:138:      statusConflict: false,
+apps/frontend/src/features/sessions/SessionMetadata.tsx:17://   - Same "View raw" anchor recipe — rendered ONLY when
+apps/frontend/src/features/sessions/SessionMetadata.tsx:127:          {row.statusConflict ? (
+apps/frontend/src/features/sessions/SessionMetadata.tsx:136:        <dd className="mono">{row.statusConflict ? "true" : "false"}</dd>
+apps/frontend/src/features/sessions/SessionMetadata.tsx:222:            View raw
+apps/frontend/src/features/sessions/SessionMetadata.test.tsx:14://   4. statusConflict=true renders "(disagreed during load)" muted
+apps/frontend/src/features/sessions/SessionMetadata.test.tsx:22://   9. "View raw" anchor renders only when storedSessionUid !== null.
+apps/frontend/src/features/sessions/SessionMetadata.test.tsx:48:    statusConflict: false,
+apps/frontend/src/features/sessions/SessionMetadata.test.tsx:141:test("SessionMetadata: statusConflict=true renders '(disagreed during load)' muted note in status <dd>", () => {
+apps/frontend/src/features/sessions/SessionMetadata.test.tsx:142:  const row = buildRow({ statusConflict: true });
+apps/frontend/src/features/sessions/SessionMetadata.test.tsx:157:test("SessionMetadata: statusConflict=false omits the muted note", () => {
+apps/frontend/src/features/sessions/SessionMetadata.test.tsx:158:  const row = buildRow({ statusConflict: false });
+apps/frontend/src/features/sessions/SessionMetadata.test.tsx:248:test("SessionMetadata: 'View raw' anchor renders only when storedSessionUid !== null", () => {
+apps/frontend/src/features/sessions/types.ts:43:  /** Authoritative status. When both sides report status, source-side wins; the stored-side disagreement is recorded in `statusConflict`. */
+apps/frontend/src/features/sessions/types.ts:46:  statusConflict: boolean;
+apps/frontend/src/features/sessions/SessionsTable.test.tsx:17://   7. M1b `(refresh)` affordance: a row with `statusConflict: true`
+apps/frontend/src/features/sessions/SessionsTable.test.tsx:19://      with `statusConflict: false` does not.
+apps/frontend/src/features/sessions/SessionsTable.test.tsx:57:    statusConflict: false,
+apps/frontend/src/features/sessions/SessionsTable.test.tsx:321:test("SessionsTable: M1b (refresh) marker lives INSIDE the Title cell when statusConflict=true; absent otherwise", () => {
+apps/frontend/src/features/sessions/SessionsTable.test.tsx:328:    statusConflict: true,
+apps/frontend/src/features/sessions/SessionsTable.test.tsx:339:    statusConflict: false,
+apps/frontend/src/features/sessions/SessionView.test.tsx:63:    statusConflict: false,
+apps/frontend/src/features/sessions/SessionView.test.tsx:531:test("SessionView ready: conflict badge renders only when row.statusConflict=true", () => {
+apps/frontend/src/features/sessions/SessionView.test.tsx:540:      row={buildRow({ statusConflict: false })}
+apps/frontend/src/features/sessions/SessionView.test.tsx:548:    noConflict.container.querySelector(".session-conflict-badge"),
+apps/frontend/src/features/sessions/SessionView.test.tsx:556:      row={buildRow({ statusConflict: true })}
+apps/frontend/src/features/sessions/SessionView.test.tsx:564:    ".session-conflict-badge",
+apps/frontend/src/features/sessions/SessionDetail.tsx:23://     `statusConflict`) a small "Conflict" badge alongside.
+apps/frontend/src/features/sessions/SessionDetail.tsx:36://   - "View raw" anchor (only rendered for stored sessions, i.e.
+apps/frontend/src/features/sessions/SessionDetail.tsx:149:  // Only render the "View raw" anchor and the raw preview placeholder
+apps/frontend/src/features/sessions/SessionDetail.tsx:165:        {row.statusConflict ? (
+apps/frontend/src/features/sessions/SessionDetail.tsx:199:          {row.statusConflict ? (
+apps/frontend/src/features/sessions/SessionDetail.tsx:208:        <dd className="mono">{row.statusConflict ? "true" : "false"}</dd>
+apps/frontend/src/features/sessions/SessionDetail.tsx:281:            View raw
+working/phase-5/designs/m2b-shell/design.md:37:   "Open raw" anchor all defer to M4. Narrow viewports (< 900 px)
+working/phase-5/designs/m2b-shell/design.md:79:   the sourcePathIsStale label swap, plus the statusConflict-derived
+working/phase-5/designs/m2b-shell/design.md:81:   plus the "Open raw" anchor (rendered only when
+working/phase-5/designs/m2b-shell/design.md:99:hint, header-side subagent badge, "Open raw" header anchor — all M4);
+working/phase-5/designs/m2b-shell/design.md:209:    {row.statusConflict && <span class="badge conflict">Conflict</span>}
+working/phase-5/designs/m2b-shell/design.md:294:  {row.storedSessionUid && <p class="open-raw"><a>Open raw ↗</a></p>}
+working/phase-5/designs/m2b-shell/design.md:517:- `statusConflict` true / false — header conflict badge + "(disagreed
+working/phase-5/designs/m2b-shell/design.md:523:- `storedSessionUid` null / non-null — "Open raw" anchor renders only
+working/phase-5/designs/m2b-shell/design.md:576:      button, Open raw anchor, Retry button, prototype's state
+working/phase-5/designs/m2b-shell/design.md:602:button hover, the Retry button hover, and the "Open raw" anchor
+working/phase-5/designs/m2b-shell/design.md:739:    is always rendered and always focusable (and the "Open raw"
+working/phase-5/designs/m2b-shell/design.md:794:- Open raw anchor.
+working/phase-5/designs/m2b-shell/design.md:811:| **"Open raw" anchor** (`--color-accent`)         | 4.84:1 | 5.78:1 | AA · normal text |
+working/phase-5/designs/m2b-shell/design.md:850:records the decision; checklist item 24 already assumes it; §10 no
+working/phase-5/designs/m2b-shell/design.md:913:hint, "Open raw" header anchor — the "full header" surfaces).
+working/phase-5/designs/m2b-shell/design.md:982:### 7.5 The "Open raw" anchor on Metadata tab
+working/phase-5/designs/m2b-shell/design.md:984:Spec line 727 says the Metadata tab carries the "Open raw" anchor
+working/phase-5/designs/m2b-shell/design.md:1032:  equivalence to Phase 4; Metadata tab field list; "Open raw"
+working/phase-5/designs/m2b-shell/design.md:1172:    when `row.statusConflict`.
+working/phase-5/designs/m2b-shell/design.md:1174:    subagent badge, sourcePathIsStale hint, or "Open raw" anchor.
+working/phase-5/designs/m2b-shell/design.md:1263:    during load)" note when `row.statusConflict`.
+working/phase-5/designs/m2b-shell/design.md:1273:35. The "Open raw" anchor renders ONLY when
+working/phase-5/designs/m2b-shell/design.md:1399:    correct labels, sourcePathIsStale label swap, statusConflict
+working/phase-5/designs/m2b-shell/design.md:1400:    badge + note, subagent badge, "Open raw" anchor presence/absence,
+working/phase-5/designs/m2b-shell/prototype.html:26: *      "Last seen source path" label swap, statusConflict badge, Copy path
+working/phase-5/designs/m2b-shell/prototype.html:27: *      button, "Open raw" anchor.
+working/phase-5/designs/m2b-shell/prototype.html:88:  --color-warn:    oklch(58% 0.15 60);
+working/phase-5/designs/m2b-shell/prototype.html:139:    --color-warn:    oklch(72% 0.13 60);
+working/phase-5/designs/m2b-shell/prototype.html:154:  --color-warn:    oklch(72% 0.13 60);
+working/phase-5/designs/m2b-shell/prototype.html:423:  color: color-mix(in srgb, var(--color-warn) 70%, var(--color-ink));
+working/phase-5/designs/m2b-shell/prototype.html:424:  background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+working/phase-5/designs/m2b-shell/prototype.html:425:  border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+working/phase-5/designs/m2b-shell/prototype.html:438:  color: color-mix(in srgb, var(--color-warn) 70%, var(--color-ink));
+working/phase-5/designs/m2b-shell/prototype.html:439:  background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+working/phase-5/designs/m2b-shell/prototype.html:440:  border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+working/phase-5/designs/m2b-shell/prototype.html:579: *  Metadata tab body — 18-field <dl> + subagent badge + "Open raw" anchor.
+working/phase-5/designs/m2b-shell/prototype.html:680:/* "Open raw" anchor — quiet text link in --color-accent (4.84:1 / 5.78:1) */
+working/phase-5/designs/m2b-shell/prototype.html:916:         "Open raw" — those defer to M4). -->
+working/phase-5/designs/m2b-shell/prototype.html:1302:    // "Open raw" anchor — only when storedSessionUid !== null (true for our
+working/phase-5/designs/m2b-shell/prototype.html:1310:    a.textContent = 'Open raw ↗';
+apps/frontend/src/features/sessions/filterSessions.test.ts:45:    statusConflict: false,
+working/phase-5/designs/m2b-shell/motion.md:36:| 8   | "Open raw" anchor hover underline        | border-bottom color       | pointer enter            |
+apps/frontend/src/features/sessions/SessionView.css:25: *     `.session-conflict-badge`    → header pieces.
+apps/frontend/src/features/sessions/SessionView.css:27: *   - `.tab-placeholder`           → editorial placeholder for Skim +
+apps/frontend/src/features/sessions/SessionView.css:237: * Phase-5 spec line 622 + design.md checklist item 24 + colors.md
+apps/frontend/src/features/sessions/SessionView.css:238: * H09 — `statusConflict` is an attention signal (the row's run mode
+apps/frontend/src/features/sessions/SessionView.css:244:.session-conflict-badge {
+apps/frontend/src/features/sessions/SessionView.css:245:  background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionView.css:246:  color: color-mix(in srgb, var(--color-warn) 70%, var(--color-text));
+apps/frontend/src/features/sessions/SessionView.css:247:  border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+apps/frontend/src/features/sessions/SessionView.css:258:.tab-placeholder {
+apps/frontend/src/features/sessions/SessionView.css:271:.tab-placeholder strong {
+apps/frontend/src/features/sessions/SessionView.css:279:.tab-placeholder span {
+
+exec
+/bin/bash -lc "rg -n \"scaleX\\(["'^)]*px'"\\)|--color-error|drawer|Open detail|onOpenDetail|drawer-conflict-badge\" apps/frontend/src/components/Tabs.tsx apps/frontend/src/components/Tabs.test.tsx apps/frontend/src/features/sessions/SessionView.css apps/frontend/src/features/sessions/SessionsTable.tsx" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+apps/frontend/src/features/sessions/SessionsTable.tsx:21:// `SessionView` on the right pane (no drawer; the Phase-4 `<Drawer>`
+apps/frontend/src/features/sessions/SessionsTable.tsx:48:// drawer and no "Open detail" button — both the Phase-4
+apps/frontend/src/features/sessions/SessionsTable.tsx:49:// `onOpenDetail(rowKey, triggerEl)` call and the M1b vestigial
+apps/frontend/src/features/sessions/SessionsTable.tsx:50:// "Open detail" button were collapsed in M2b alongside the
+apps/frontend/src/features/sessions/SessionsTable.tsx:90:   *  Phase-4 `onOpenDetail` call from the row click path; M2b
+apps/frontend/src/features/sessions/SessionsTable.tsx:91:   *  collapsed the vestigial "Open detail" button as well. The URL
+apps/frontend/src/features/sessions/SessionsTable.tsx:181:              // The Phase-4 `onOpenDetail` drawer auto-mount was
+apps/frontend/src/features/sessions/SessionsTable.tsx:182:              // retired in M1b; the M1b vestigial "Open detail" button
+apps/frontend/src/features/sessions/SessionView.css:240: * so the warn semantic is correct. Phase-4's `.drawer-conflict-badge`
+apps/frontend/src/components/Tabs.test.tsx:226:test("Tabs: indicator transform is unitless scaleX (regression: scaleX(...px) is invalid CSS and would hide the indicator)", () => {
+apps/frontend/src/components/Tabs.test.tsx:228:  // own width). Writing `scaleX(${width}px)` produces invalid CSS that
+apps/frontend/src/components/Tabs.test.tsx:237:  // Negative assertion: NO `scaleX(<number>px)` form anywhere.
+apps/frontend/src/components/Tabs.tsx:38://     `scaleX(${width}px)` is INVALID CSS and the browser drops the
+apps/frontend/src/components/Tabs.tsx:102:    // `scaleX()` takes a UNITLESS number — `scaleX(${width}px)` is
+
+codex
+The original three cited edits are present in the current tree: the transform write is unitless, the conflict badge now uses warn tokens, and the stale drawer comments have been rewritten rather than removed. I’m doing one more pass against the design/spec snippets and neighboring CSS to make sure the round-2 changes did not create a new mismatch.
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/styles/tokens.css | sed -n '1,220p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+     1	/*
+     2	 * Design tokens for the inspection surface.
+     3	 *
+     4	 * The single source of truth for color, spacing, radius, typography, and
+     5	 * shadow values used anywhere else in the frontend. Hex literals are
+     6	 * permitted only inside this file; every other CSS file consumes these
+     7	 * tokens via `var(--…)` references (see working/phase-4.md §Design
+     8	 * Tokens; carried forward in working/phase-5.md §Design Tokens).
+     9	 *
+    10	 * Phase 5 / M2a — Design Language tokens (Archive-room aesthetic):
+    11	 *   - oklch() is the source-of-truth color space (warm-paper light /
+    12	 *     deep-ink dark; sienna accent, hue 50-70°). Chromium 111+ ships
+    13	 *     native oklch support. The existing 24 hex literals below form a
+    14	 *     `@supports not (color: oklch(0% 0 0))` fallback layer for older
+    15	 *     browsers (Phase 4 cool-blue palette — cohesive but not warm-paper;
+    16	 *     documented aesthetic regression per design.md §9.3).
+    17	 *   - The Phase 4 token names that survive (`--color-text`,
+    18	 *     `--color-bg`, `--color-text-muted`, `--font-sans`) become aliases
+    19	 *     mapping to the new canonical names (`--color-ink`,
+    20	 *     `--color-surface`, `--color-ink-muted`, `--font-chrome`). This
+    21	 *     "Option B" strategy lets all 11 feature-local CSS files keep their
+    22	 *     existing `var(...)` references unchanged — zero feature-local
+    23	 *     rewrites, one risk surface.
+    24	 *   - Three font stacks (display Fraunces / chrome system-sans / mono
+    25	 *     JetBrains-Mono-prepended). Two `@font-face` rules self-host
+    26	 *     Fraunces from `apps/frontend/public/fonts/`. The Italic axis ships
+    27	 *     as a separate variable file because Fraunces is distributed as two
+    28	 *     variable fonts upstream (Roman + Italic) rather than one
+    29	 *     ital-axis variable font.
+    30	 *   - Type-scale literals revised to spec values
+    31	 *     (working/phase-5.md §Typography tokens, lines 887–905).
+    32	 *     `--text-2xl: 2rem` is **NEW** — first consumer is the empty-mark
+    33	 *     glyph in `SessionView.css`; future consumers are M5 chapter-break
+    34	 *     labels and the eventual app title.
+    35	 *   - Motion tokens: 4 durations (`--motion-fast` 80 ms / `--motion-base`
+    36	 *     120 ms / `--motion-disclosure` 200 ms / `--motion-pulse` 600 ms);
+    37	 *     3 easings (`--ease-standard` / `--ease-out` / `--ease-in-out`).
+    38	 *     Reduced-motion zero-out lives in `global.css` (unchanged from M1a).
+    39	 *   - Surface treatment: `--noise-overlay-light` is the inline-SVG data
+    40	 *     URL (~1 KB) for the reading-wash texture. Applied to `.session-pane`
+    41	 *     in light mode only via `SessionView.css` (see file header there).
+    42	 *
+    43	 * Cascade ordering (unchanged from Phase 4 + M1a):
+    44	 *   `reset.css → tokens.css → global.css → feature-local sibling sheets`.
+    45	 *   This file declares both the canonical oklch tokens AND the aliases AND
+    46	 *   the @supports hex fallback in one block per Resolved Decision #16.
+    47	 *
+    48	 * Hex isolation invariant: `rg -n '#[0-9a-fA-F]{3,8}' apps/frontend/src/ | wc -l`
+    49	 *   = 24 (unchanged from Phase 4 baseline; the 24 literals migrated into
+    50	 *   the @supports fallback block).
+    51	 *
+    52	 * Token count (manual): `grep -cE '^\s*--' apps/frontend/src/styles/tokens.css`
+    53	 *   = 83 (44 Phase 4 baseline tokens declared once at light + 39 redeclared
+    54	 *   inside the `@media (prefers-color-scheme: dark)` block + the
+    55	 *   `@supports` hex fallback block; counted with `grep -cE '^\s*--'` after
+    56	 *   M2a landed). The design.md §3 estimate of ~74 only counted the
+    57	 *   semantically-distinct token names; the actual file count is higher
+    58	 *   because each color token is redeclared (light + dark + light hex
+    59	 *   fallback + dark hex fallback). Phase 4 baseline file count was 44.
+    60	 */
+    61	
+    62	:root {
+    63	  /* ===== Color tokens (oklch source-of-truth) ===== */
+    64	
+    65	  /* Canonical names per Phase 5 spec §Design Tokens. */
+    66	  --color-surface: oklch(98% 0.01 70);
+    67	  --color-surface-raised: oklch(96% 0.01 70);
+    68	  --color-ink: oklch(20% 0.02 70);
+    69	  --color-ink-muted: oklch(45% 0.02 70);
+    70	  --color-border: oklch(85% 0.01 70);
+    71	  --color-border-strong: oklch(65% 0.02 70);
+    72	  --color-accent: oklch(55% 0.15 50);
+    73	  --color-accent-hover: oklch(50% 0.16 50);
+    74	  --color-success: oklch(48% 0.13 155);
+    75	  --color-warn: oklch(58% 0.15 60);
+    76	  --color-error: oklch(52% 0.18 25);
+    77	
+    78	  /* Modal scrim alpha overlay for native `<dialog>::backdrop`. The
+    79	   * Phase 4 baseline uses an `rgba()` literal because the backdrop
+    80	   * needs explicit alpha; this declaration is preserved verbatim and
+    81	   * does NOT need an oklch counterpart (alpha-on-black is colorspace-
+    82	   * agnostic at this opacity). */
+    83	  --color-backdrop: rgba(0, 0, 0, 0.45);
+    84	
+    85	  /* ===== Color aliases (Option B back-compat for Phase 4 consumers) =====
+    86	   * These four declarations let the 11 feature-local CSS files keep
+    87	   * their existing `var(--color-text)` / `var(--color-bg)` /
+    88	   * `var(--color-text-muted)` / `var(--font-sans)` references without
+    89	   * any rewrite. Aliases survive indefinitely; future planners may
+    90	   * incrementally migrate consumers to the canonical names but do not
+    91	   * have to. See design.md §9.1 for rationale. */
+    92	  --color-text: var(--color-ink);
+    93	  --color-text-muted: var(--color-ink-muted);
+    94	  --color-bg: var(--color-surface);
+    95	
+    96	  /* ===== Spacing scale (unchanged from Phase 4) ===== */
+    97	  --space-1: 0.25rem;
+    98	  --space-2: 0.5rem;
+    99	  --space-3: 0.75rem;
+   100	  --space-4: 1rem;
+   101	  --space-6: 1.5rem;
+   102	  --space-8: 2rem;
+   103	
+   104	  /* ===== Radius scale (unchanged from Phase 4) ===== */
+   105	  --radius-sm: 4px;
+   106	  --radius-md: 6px;
+   107	  --radius-lg: 12px;
+   108	
+   109	  /* ===== Typography stacks (Phase 5 / M2a) =====
+   110	   * Three families:
+   111	   *   - `--font-display`: Fraunces self-hosted variable serif at
+   112	   *     `/fonts/Fraunces-subset.woff2` + Italic counterpart. Used for
+   113	   *     editorial display surfaces (empty-pane preface, future M5
+   114	   *     chapter-break labels, future app title). Fallback chain renders
+   115	   *     in Charter / Iowan Old Style / Georgia at ~99% size if the
+   116	   *     woff2 fails to load (size-adjust + ascent-override on @font-face
+   117	   *     below).
+   118	   *   - `--font-chrome`: native system sans stack. All chrome surfaces
+   119	   *     (table cells, filters, badges, tabs, metadata `<dt>`/`<dd>`).
+   120	   *     No download cost.
+   121	   *   - `--font-mono`: JetBrains Mono prepended to the existing Phase 4
+   122	   *     mono fallback chain. NOT self-hosted; system fallback covers
+   123	   *     every developer machine. */
+   124	  --font-display: "Fraunces", Charter, "Iowan Old Style", Georgia, serif;
+   125	  --font-chrome: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI",
+   126	    Roboto, sans-serif;
+   127	  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", SFMono-Regular,
+   128	    Menlo, Consolas, monospace;
+   129	  --font-sans: var(--font-chrome);
+   130	
+   131	  /* ===== Type scale (Phase 5 / M2a — revised to spec values) =====
+   132	   * Phase 4 had `--text-xs` through `--text-xl` at slightly tighter
+   133	   * literals (`0.72rem`, `0.85rem`, `0.95rem`, `1.15rem`, `1.35rem`).
+   134	   * The Phase 5 spec literals (line 894–899) are 16 px-anchored and
+   135	   * shift body text +5% (`0.95rem` → `1rem`). Documented intentional
+   136	   * shift per design.md §12 question 4: ship the spec value. */
+   137	  --text-xs: 0.75rem;
+   138	  --text-sm: 0.875rem;
+   139	  --text-base: 1rem;
+   140	  --text-lg: 1.125rem;
+   141	  --text-xl: 1.5rem;
+   142	  --text-2xl: 2rem;
+   143	
+   144	  /* ===== Leading + measure (Phase 5 / M2a NEW) ===== */
+   145	  --leading-tight: 1.25;
+   146	  --leading-comfortable: 1.55;
+   147	  --measure: 70ch;
+   148	
+   149	  /* ===== Motion tokens (Phase 5 / M2a NEW) =====
+   150	   * 4 durations + 3 easings. Reduced-motion zero-out lives in
+   151	   * `global.css` (a single `@media (prefers-reduced-motion: reduce)`
+   152	   * rule that targets `*, *::before, *::after`); the durations here
+   153	   * become 0.01 ms via the !important zero-out automatically. */
+   154	  --motion-fast: 80ms;
+   155	  --motion-base: 120ms;
+   156	  --motion-disclosure: 200ms;
+   157	  --motion-pulse: 600ms;
+   158	  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+   159	  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+   160	  --ease-in-out: cubic-bezier(0.4, 0, 0.6, 1);
+   161	
+   162	  /* ===== Shadows (unchanged from Phase 4) =====
+   163	   * Per design language §"Hairline over shadow", chrome carries no
+   164	   * drop shadows except the existing Phase 4 sticky action bar / toast
+   165	   * surfaces. */
+   166	  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+   167	  --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.08);
+   168	
+   169	  /* ===== Surface treatment (Phase 5 / M2a NEW) =====
+   170	   * The reading-wash overlay (signature detail #6 per spec line 76).
+   171	   * 80×80 inline SVG with a fractalNoise filter at 3% alpha. ~1 KB
+   172	   * data URL. Applied to `.session-pane` in `SessionView.css` light
+   173	   * mode only; suppressed in dark mode AND under
+   174	   * `prefers-reduced-motion: reduce`.
+   175	   *
+   176	   * URL-encoding deviation from spec line 922: `#` and `%` are reserved
+   177	   * in URLs and MUST be escaped inside a `url(...)` data-URL string so
+   178	   * the CSS parser doesn't treat them as fragment / percent tokens.
+   179	   * This implementation escapes both:
+   180	   *   - `%23n` for `#n` (the SVG filter id reference) — per spec.
+   181	   *   - `100%25` for `100%` (the rect width/height) — additional escape
+   182	   *     the spec snippet omitted; required because Chromium's CSS data-
+   183	   *     URL parser would otherwise interpret the bare `%` and produce
+   184	   *     an invalid SVG. The visual result is byte-equivalent to the
+   185	   *     spec snippet's intent (the `%25` decodes back to `%` inside the
+   186	   *     SVG once the data URL is parsed). */
+   187	  --noise-overlay-light: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.03 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+   188	}
+   189	
+   190	/* ===== Dark mode (oklch source-of-truth) =====
+   191	 * Per Phase 5 §Color philosophy, dark mode is "deep-ink, slightly
+   192	 * warm" rather than the Phase 4 cold near-black. Surface luminance
+   193	 * 15%, chroma 0.01 at hue 70° (warm-paper anchor). Accent stays at
+   194	 * hue 50° but lifts in lightness + chroma so it remains visible
+   195	 * against the deep ink. */
+   196	@media (prefers-color-scheme: dark) {
+   197	  :root {
+   198	    --color-surface: oklch(15% 0.01 70);
+   199	    --color-surface-raised: oklch(18% 0.01 70);
+   200	    --color-ink: oklch(92% 0.01 70);
+   201	    --color-ink-muted: oklch(70% 0.01 70);
+   202	    --color-border: oklch(28% 0.01 70);
+   203	    --color-border-strong: oklch(48% 0.02 70);
+   204	    --color-accent: oklch(65% 0.15 50);
+   205	    --color-accent-hover: oklch(72% 0.13 50);
+   206	    --color-success: oklch(64% 0.13 155);
+   207	    --color-warn: oklch(72% 0.13 60);
+   208	    --color-error: oklch(68% 0.16 25);
+   209	    --color-backdrop: rgba(0, 0, 0, 0.6);
+   210	  }
+   211	}
+   212	
+   213	/* ===== @supports hex fallback layer (Phase 5 / M2a NEW) =====
+   214	 * For browsers without native `oklch()` support (Chromium <111,
+   215	 * Firefox <113, Safari <15.4) the canonical color tokens fall back to
+   216	 * the Phase 4 hex literals. The aesthetic regression (Phase 4
+   217	 * cool-blue palette renders instead of Archive-room warm-paper) is
+   218	 * documented + accepted per design.md §9.3 — the fallback is a
+   219	 * cohesive Phase 4 design, only the hue differs.
+   220	 *
+
+exec
+/bin/bash -lc "nl -ba working/phase-5/designs/m2b-shell/design.md | sed -n '1160,1180p'" in /home/huwei/ai_codings/distill-portal
+exec
+/bin/bash -lc "nl -ba working/phase-5.md | sed -n '616,628p'" in /home/huwei/ai_codings/distill-portal
+exec
+/bin/bash -lc "nl -ba working/phase-5/designs/m2b-shell/colors.md | sed -n '72,92p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+  1160	    initialized to `new Set([DEFAULT_TAB_ON_SELECTION])`.
+  1161	22. `setActiveTab(id)` → updates `activeTab` AND adds `id` to
+  1162	    `visitedTabs` (via `setVisitedTabs(prev => new Set([...prev, id]))`).
+  1163	23. Both `activeTab` and `visitedTabs` reset to defaults on
+  1164	    `selectedRowKey` change (via the `key` remount; no manual reset
+  1165	    needed).
+  1166	24. The minimal header renders `<h2 class="session-title">` in
+  1167	    italic Fraunces at `--text-xl`, color `var(--color-ink)` (or
+  1168	    `var(--color-ink-muted)` italic when row.title is null with
+  1169	    "(untitled)" fallback). Tool badge in `--font-mono --text-xs`
+  1170	    with hairline border. Status pill via Phase 4 `.badge {variant}`
+  1171	    recipe. Conflict badge (variant `conflict` = warn recipe) only
+  1172	    when `row.statusConflict`.
+  1173	25. M2b minimal header does NOT include Copy path button, header-side
+  1174	    subagent badge, sourcePathIsStale hint, or "Open raw" anchor.
+  1175	    Those defer to M4.
+  1176	26. Narrow-viewport "← Back to list" quiet text-button row sits ABOVE
+  1177	    the `.session-header` and only displays under
+  1178	    `@media (max-width: 899.98px)`. Click sets
+  1179	    `narrowMode = "list"` only (preserves selection + URL + tab/scroll
+  1180	    state per Resolved Decision #17).
+
+ succeeded in 0ms:
+   616	
+   617	Layout: two-row composition. **Top row** = session title (left) + utility actions (right). **Bottom row** = badges + secondary metadata. Both rows live above the tab strip; total header height ≈ 88 px on wide viewports, ≈ 120 px on narrow (back-to-list button adds a row).
+   618	
+   619	- **Title** in `--font-display` italic OR upright (test both at M5; pick the one that reads better against Fraunces' optical sizing) at `--text-xl`, `--color-ink`. `row.title || "(untitled)"`. Untitled state renders the parenthetical in `--color-ink-muted` italic.
+   620	- **Tool badge** in `--font-mono` `--text-xs` to the right of (or below, on narrow) the title. Subtle chip with hairline border, no background.
+   621	- **Status pill** (same recipe as the list-row pill).
+   622	- **Conflict badge** if `row.statusConflict` ("Source ↔ stored disagreed"). Status warning color recipe.
+   623	- **Subagent sidecar badge** if `row.hasSubagentSidecars` ("Has Claude Code subagent sidecars on disk — not ingested in v1"). Muted info recipe.
+   624	- **"Last seen source path"** hint inline near sourcePath if `row.sourcePathIsStale`. `--font-mono` `--text-xs` `--color-ink-muted`.
+   625	- **Copy-to-clipboard button** for `row.sourcePath`. Quiet icon-less text button "Copy path".
+   626	- **"Open raw" anchor** (target=`_blank`, identical href to Phase 4 — `/api/v1/sessions/<storedSessionUid>/raw`). Quiet text link. **Rendered only when `row.storedSessionUid !== null`**; source-only rows replace it with the same "Not yet imported — click Import to fetch raw" copy used in the Raw tab.
+   627	- **On narrow viewports**: a "← Back to list" button row above everything else. Quiet text-link styling, not a chunky button — preserves the editorial mood. **"Back to list" only sets `narrowMode = "list"`** (preserves selection + URL + tab state — see §Mobile / narrow viewport). `Esc` is a *different* gesture: it fully clears selection (and resets to list), per §Routing/URL State.
+   628	
+
+ succeeded in 0ms:
+    72	### Session-pane minimal header
+    73	
+    74	| #   | Surface                                      | Foreground            | Background          | Light    | Dark     | Verdict             | Bar             |
+    75	|-----|----------------------------------------------|-----------------------|---------------------|----------|----------|---------------------|-----------------|
+    76	| H01 | Session title (italic Fraunces, ink)         | `--color-ink`         | `--color-surface`   | 17.10:1  | 15.52:1  | AAA · normal text   | AA 4.5:1        |
+    77	| H02 | Session title fallback (untitled italic muted) | `--color-ink-muted` | `--color-surface`   | 7.04:1   | 7.36:1   | AAA · normal text   | AA 4.5:1        |
+    78	| H03 | Tool badge text                              | `--color-ink-muted`   | `--color-surface`   | 7.04:1   | 7.36:1   | AAA · normal text   | AA 4.5:1        |
+    79	| H04 | Tool badge hairline border (decorative)      | `--color-border`      | `--color-surface`   | 1.49:1   | 1.35:1   | not WCAG-gated      | n/a             |
+    80	| H05 | Status pill — outdated foreground            | warn 70% mix on ink   | warn 15% mix on surface | 5.43:1 | 7.74:1 | AAA · normal text   | AA 4.5:1        |
+    81	| H06 | Status pill — up-to-date foreground          | success 70% mix on ink | success 15% mix on surface | 6.69:1 | 6.94:1 | AAA · normal text | AA 4.5:1        |
+    82	| H07 | Status pill — not-stored foreground          | accent 70% mix on ink | accent 15% mix on surface | 5.95:1 | 6.62:1 | AAA · normal text | AA 4.5:1        |
+    83	| H08 | Status pill — source-missing foreground      | error 70% mix on ink  | error 15% mix on surface | 6.60:1 | 6.91:1 | AAA · normal text | AA 4.5:1        |
+    84	| H09 | Conflict badge text (warn-recipe pill)       | warn 70% mix on ink   | warn 15% mix on surface | 5.43:1 | 7.74:1 | AAA · normal text   | AA 4.5:1        |
+    85	| H10 | Header-divider hairline (decorative)         | `--color-border`      | `--color-surface`   | 1.49:1   | 1.35:1   | not WCAG-gated      | n/a             |
+    86	
+    87	All header pairs reuse the Phase 4 status-pill recipes exactly (M2a
+    88	preserved them); no new color recipes introduced.
+    89	
+    90	### Metadata tab body
+    91	
+    92	| #   | Surface                                      | Foreground            | Background          | Light    | Dark     | Verdict             | Bar             |
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/features/sessions/SessionsTable.css | sed -n '120,150p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   120	  font-family: var(--font-mono);
+   121	  border: 1px solid transparent;
+   122	  white-space: nowrap;
+   123	}
+   124	
+   125	.badge.up-to-date {
+   126	  background: color-mix(in srgb, var(--color-success) 15%, var(--color-surface));
+   127	  color: color-mix(in srgb, var(--color-success) 70%, var(--color-text));
+   128	  border-color: color-mix(in srgb, var(--color-success) 35%, var(--color-surface));
+   129	}
+   130	
+   131	.badge.not-stored {
+   132	  background: color-mix(in srgb, var(--color-accent) 15%, var(--color-surface));
+   133	  color: color-mix(in srgb, var(--color-accent) 70%, var(--color-text));
+   134	  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-surface));
+   135	}
+   136	
+   137	.badge.outdated {
+   138	  background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+   139	  color: color-mix(in srgb, var(--color-warn) 70%, var(--color-text));
+   140	  border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+   141	}
+   142	
+   143	.badge.source-missing {
+   144	  background: color-mix(in srgb, var(--color-error) 15%, var(--color-surface));
+   145	  color: color-mix(in srgb, var(--color-error) 70%, var(--color-text));
+   146	  border-color: color-mix(in srgb, var(--color-error) 35%, var(--color-surface));
+   147	}
+   148	
+   149	/*
+   150	 * M1b Title cell anatomy. Two-line stack: bold title + tool badge
+
+codex
+The warn recipe matches the design docs because `--color-text` is an alias for `--color-ink`, so the implemented `warn 70% mix on text` is equivalent to H09’s `warn 70% mix on ink`. I’m running a focused frontend test file now as an extra sanity check; the full gate output is already supplied in the review packet.
+exec
+/bin/bash -lc 'bun test src/components/Tabs.test.tsx' in /home/huwei/ai_codings/distill-portal/apps/frontend
+ succeeded in 278ms:
+
+ 11 pass
+ 0 fail
+ 41 expect() calls
+Ran 11 tests across 1 file. [290.00ms]
+
+exec
+/bin/bash -lc "sed -n '1,220p' working/phase-5/codex-reviews/m2b-impl-review-r1.txt" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+Reading prompt from stdin...
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/huwei/ai_codings/distill-portal
+model: gpt-5.5
+provider: OpenAI
+approval: never
+sandbox: workspace-write [workdir, /tmp, /home/huwei/.codex/memories]
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019e052e-902e-7a92-a2f4-88f8ae04db92
+--------
+user
+You are an external non-Claude reviewer for a concrete implementation chunk in the task named `phase-5` of distill-portal. The coordinator, planner, designer, UI/UX reviewer, backend-protection reviewer, normal reviewer, and developer are all Claude subagents; your job is to provide the independent non-Claude review of the implementation.
+
+This is the round-1 implementation review for **M2b — Tabs primitive + SessionView shell rewire + SessionMetadata + RawTab extractions + vestigial M1b "Open detail" button collapse**.
+
+Important context: the design phase already had 4 codex rounds on `working/phase-5/designs/m2b-shell/` before implementation. Final design verdict: codex `approved` (round 4); Claude UI/UX reviewer `approved with nits` (round 3). Codex caught 8 BLOCKING design defects across rounds 1-3 the Claude reviewers missed (5 + 1 + 1 + 1). Now verify the implementation matches the approved design AND introduces no fresh defects.
+
+## Source files (read as needed)
+
+- `working/phase-5.md` (frozen at commit `05467ad` on `main`, 2026-04-28) — implementation source of truth. Most relevant sections:
+  - §Design Language (lines 15–98)
+  - §Motion & Micro-interactions (lines 80–130)
+  - §Session View → Header (lines 615–629)
+  - §Session View → Tab strip (lines 631–662)
+  - §Session View → State handling for parsed-content tabs (lines 664–677)
+  - §Session View → per-tab subsections (lines 679–729)
+  - §Design Tokens (lines 866–947)
+  - §Resolved Decisions #6, #8, #11, #12, #18, #20 (lines 1138–1166)
+  - §Milestone 2 (lines 990–1005)
+  - §Acceptance Criteria (lines 1080–1102)
+  - §Testing (lines 1106–1122)
+- `progress/phase-5.progress.md` — current snapshot. M1a / M1b / M2a closed at `e05a1ac`. M2b's pre-impl HEAD is `e05a1ac`.
+- `coordinator-prompt.md` — reviewer expectations.
+- `working/phase-5/designs/m2b-shell/design.md` (~1410 lines) — approved design artifact + implementation acceptance checklist (items 1-63).
+- `working/phase-5/designs/m2b-shell/colors.md` — WCAG numerics for every M2b color pair (codex-verified through round 4).
+- `working/phase-5/designs/m2b-shell/motion.md` — motion timing table.
+- `working/phase-5/designs/m2b-shell/prototype.html` — reference prototype.
+- `working/phase-5/codex-reviews/m2b-design-review-r{1,2,3,4}.txt` — your round-1-to-round-4 design-review stdouts.
+- `ARCHITECTURE.md`, `PRD.md`, `docs/dependency-rules.md`, `docs/features/inspection-surface.md` — vocabulary.
+
+## The implementation
+
+Pre-impl HEAD: `e05a1ac` (M2a closed).
+Post-impl working tree: uncommitted on top of `e05a1ac` (developer ran all gates green; awaiting your review).
+
+Files modified (10) + new (9) + design artifacts (4) + codex review artifacts (4):
+```
+ M apps/frontend/e2e/inspection.spec.ts
+ M apps/frontend/src/App.test.tsx
+ M apps/frontend/src/App.tsx
+ M apps/frontend/src/components/Drawer.tsx
+ M apps/frontend/src/features/sessions/SessionDetail.tsx
+ M apps/frontend/src/features/sessions/SessionView.css
+ M apps/frontend/src/features/sessions/SessionView.test.tsx
+ M apps/frontend/src/features/sessions/SessionView.tsx
+ M apps/frontend/src/features/sessions/SessionsView.test.tsx
+ M apps/frontend/src/features/sessions/SessionsView.tsx
+?? apps/frontend/src/components/Tabs.css
+?? apps/frontend/src/components/Tabs.test.tsx
+?? apps/frontend/src/components/Tabs.tsx
+?? apps/frontend/src/features/sessions/RawTab.css
+?? apps/frontend/src/features/sessions/RawTab.test.tsx
+?? apps/frontend/src/features/sessions/RawTab.tsx
+?? apps/frontend/src/features/sessions/SessionMetadata.css
+?? apps/frontend/src/features/sessions/SessionMetadata.test.tsx
+?? apps/frontend/src/features/sessions/SessionMetadata.tsx
+?? working/phase-5/codex-reviews/m2b-design-review-r{1,2,3,4}.txt
+?? working/phase-5/designs/m2b-shell/
+```
+
+Diff stat: `10 files changed, 1341 insertions(+), 1265 deletions(-)` for modified files; ~9 new files added.
+
+## Developer's evidence pack (verbatim summary)
+
+### Required-verification gates (all green per developer)
+
+| Command | Key Output | Result |
+|---|---|---|
+| `cargo check --workspace` | `Finished dev profile in 0.19s` | PASS |
+| `cargo test --workspace` | every test result `ok`, no `FAILED` | PASS |
+| `cargo test -p distill-portal-ui-api-contracts --features ts-bindings` | `1 passed; 0 failed; 1 ignored` | PASS |
+| `bun run test` (from `apps/frontend/`) | **315 pass / 0 fail / 1233 expects / 23 files** (was 278/1086/20 at M2a baseline) | PASS |
+| `bun run build` (from `apps/frontend/`) | `built in 514ms` — `21.35 kB CSS / 239.78 kB JS` (was 19.71 kB CSS / 267.03 kB JS at M2a — JS shrank -27.25 kB from Drawer/SessionDetail tree-shaking) | PASS |
+| `bun run test:e2e` (from `apps/frontend/`) | `1 passed (3.1s)` | PASS |
+| `rg -n '#[0-9a-fA-F]{3,8}' apps/frontend/src/ | wc -l` | `24` (Phase 4 baseline preserved) | PASS |
+| `grep -cE '^\s*--' apps/frontend/src/styles/tokens.css` | `83` (M2a baseline preserved) | PASS |
+
+### Self-flagged developer issues
+
+- **Hex audit collision risk**: developer initially wrote `#29a` (an acceptance-checklist reference) in JSDoc comments inside SessionView.tsx; `rg` matched the literal `#29a` as a 3-hex-char token, bumping the hex count to 26. Resolved by rewriting the references to `acceptance item 29a` (no `#`-prefixed hex shape).
+- **happy-dom KeyboardEvent**: bun + happy-dom does not expose `KeyboardEvent` as a bare global. Tabs.test.tsx uses `new window.KeyboardEvent(...)` for the keydown synthesis (matches the harness convention used elsewhere in the suite).
+- **Playwright session_key strict-mode collision**: after the Metadata tab mounts, the FIXTURE_SESSION_KEY string appears in three locations (the table row's rowKey label + the `session_key` `<dd>` + the `row_key` `<dd>`). The step 11 page-size-change assertion was scoped to `.list-pane` to avoid the strict-mode violation.
+
+### Design Conformance (developer asserts each item 1–63 of design.md §9 implementation acceptance checklist)
+
+- Items 1–17 (Tabs primitive): tablist DOM, ARIA attributes, roving tabindex, ArrowLeft/Right wrap, Home/End, click activation, indicator slide via `useLayoutEffect` + `getBoundingClientRect` + `ResizeObserver` + initial-mount `requestAnimationFrame`, `padding-inline: 0` discipline, indicator base size `1×1px`, color/weight/hover/focus-visible recipes, `2.5rem` strip height, `var(--space-4)` padding, no background fill.
+- Items 18–26 (SessionView): `key={selectedRowKey}` driven via App.tsx, `@keyframes session-page-turn` with explicit `translateX(0)` end state, `activeTab` + `visitedTabs` component-local state, `setActiveTab` adds to visited, defensive `useEffect` reset on `row.rowKey` change, italic Fraunces title at `--text-xl`, mono tool badge, status pill + conflict badge recipes, M2b minimal-header surfaces only.
+- Items 27–29a (Tab panel mounting + cross-fade + tabIndex): object-keyed panels (Object.entries(...).filter(visited).map(...)), no inner key={activeTab}, inline style.animation toggle on the panel <div> for cross-fade-IN-only, tab-fade-in keyframe defined once, hidden for inactive panels, tabIndex={0} on active Skim/Transcript/Raw (Option A: unconditional on isActive for Raw), Metadata panel does NOT carry tabIndex.
+- Items 30–36 (SessionMetadata): all 18 snake_case <dt> labels, source-path label swap, statusConflict (disagreed during load) muted note, hasSubagentSidecars dashed-hairline informational chip, Copy path Clipboard-API → manual-select fallback with verbatim hint copy and 2000 ms timeout, "View raw" anchor only when storedSessionUid !== null, anchor target="_blank" rel="noopener noreferrer", anchor var(--color-accent).
+- Items 37–45 (RawTab): source-only short-circuit, "Not yet imported" verbatim copy, consumeRawPreview reused unchanged with same caps + caption strings + Retry semantics, AbortController with the four (and only four) cleanup triggers (selectedRowKey change → outer remount; storedSessionUid change → useEffect dep; Retry → attempt counter dep; SessionView unmount), tab switches NOT a cleanup trigger.
+- Items 46–48 (placeholders): centered dashed-hairline editorial chip, italic Fraunces label --text-lg, chrome subline --text-sm, --color-ink-muted, "Coming in Milestone 4" + "Coming in Milestone 5" copy.
+- Items 49–51 (ARIA contract): unique id per tab/panel, aria-controls ↔ aria-labelledby linkage, aria-selected exactly one true, hidden HTML attribute on inactive panels.
+- Items 52–53 (vestigial collapse): "Open detail" button removed; SessionDetail.tsx + Drawer.tsx stay on disk with DEAD-BUT-TESTED JSDoc headers; Drawer.test.tsx + SessionDetail.test.tsx still pass via direct import.
+- Items 54–63 (verification): all gates pass; hex audit 24; token count 83; no new color pairs (M2a numbers carry through).
+
+### Tests added/updated
+
+- **NEW** `apps/frontend/src/components/Tabs.test.tsx` (10 tests, ~30 expects).
+- **NEW** `apps/frontend/src/features/sessions/SessionMetadata.test.tsx` (11 tests, ~50 expects).
+- **NEW** `apps/frontend/src/features/sessions/RawTab.test.tsx` (12 tests, ~40 expects).
+- **UPDATED** `SessionView.test.tsx`: full rewrite for the M2b state space.
+- **UPDATED** `SessionsView.test.tsx`: dropped tests #4 + #5 (drawer-body filter regression + openDetail handle); replaced test #3 with the no-`<dialog>`-renders assertion.
+- **UPDATED** `App.test.tsx`: deleted the two M1b drawer-trigger tests; added three M2b tests; updated narrative comments + data-state assertions for the ready-placeholder → ready rename.
+- **UPDATED** `inspection.spec.ts`: substantial rewrite per planner brief (steps 6/7/9/10).
+
+### Developer's handoff notes (specifically called out for reviewers)
+
+- **Keep-mounted contract enforcement (RawTab abort cleanup triggers)**: `apps/frontend/src/features/sessions/RawTab.tsx` lines 65–105. The useEffect lists [sessionUid, attempt] only — tab switches do NOT change either dep, so the effect doesn't re-run and the AbortController is NOT aborted. The four cleanup triggers are documented in the file header.
+- **Cross-fade-IN-only mechanism (style.animation toggle)**: `SessionView.tsx` TabPanel component (the inline style={{ animation: isActive ? "tab-fade-in 120ms var(--ease-out) both" : "none" }}); the keyframe is defined once at module scope in SessionView.css. NO key={activeTab} on the panel content tree.
+- **tabIndex={0} matrix**: SessionView.tsx TabPanel — `wantsTabIndex = isActive && (id === "skim" || id === "transcript" || id === "raw")`. Metadata is the lone exception. Inactive panels (hidden=true) never carry tabIndex.
+- **JSDoc DEAD-BUT-TESTED headers**: top of `apps/frontend/src/components/Drawer.tsx` and top of `apps/frontend/src/features/sessions/SessionDetail.tsx`.
+- **Indicator measurement**: `apps/frontend/src/components/Tabs.tsx` `measureIndicator` callback. useLayoutEffect on value change + useEffect ResizeObserver watching the tablist + initial mount requestAnimationFrame.
+- **Outer page-turn fade IS a React key remount**: App.tsx passes `key={selectedRowKey ?? "__empty__"}` to <SessionView>. Selection change → fresh mount → .session-pane's `animation: session-page-turn ...` keyframe fires once.
+
+## Protected paths (frozen — no edits should appear)
+
+`apps/backend/**`, `apps/backend/tests/**`, `components/collector-runtime/**`, `components/configuration/**`, `components/ingest-service/**`, `components/observability/**`, `components/raw-session-store/**`, `components/ui-api-contracts/**`, `tests/e2e/**` (Rust), root `Cargo.toml`, root `Cargo.lock`.
+
+Backend-protection reviewer round 1 verdict: `backend untouched`.
+
+## Forbidden scope reminders
+
+new backend HTTP routes, contract types, or component crates; any change to Rust contract source or regenerated TS bindings; LLM summary generation, first-run consent, provider configuration, per-tool/per-project/per-session summary opt-out; annotations; orphaned-annotations surface; distill / lens / skill-draft curation; archive / Purge / tombstones / `do_not_send_to_llm` flag UI; browse-mode views per PRD lines 193-198; search-within-transcript inside the session view; multi-page routing or a router dependency; Tailwind / CSS-in-JS / state managers / data libs / icon libraries; Bun→Node shims; speculative `@tanstack/react-virtual`.
+
+## Review goals
+
+- Verify the chunk matches `working/phase-5.md` (M2 milestone DoD; Resolved Decisions #6, #8, #11, #12, #18, #20)
+- Verify the claimed scope coverage is accurate (read the actual changed files; don't take the developer's word)
+- Verify Design Conformance: implementation matches `working/phase-5/designs/m2b-shell/design.md` checklist items 1-63
+- Verify the cross-fade-IN-only mechanism actually preserves the keep-mounted contract (RawTab in-flight stream survives tab switches)
+- Verify the indicator measurement is correct (1 px base + scaleX growth + ResizeObserver remeasurement)
+- Verify the tabIndex={0} matrix matches design.md §6.1 + checklist 29a
+- Verify the JSDoc DEAD-BUT-TESTED headers are placed
+- Verify motion budget compliance (every animation/transition declaration matches the spec's motion table)
+- Verify token discipline (no new tokens; only valid tokens consumed)
+- Verify hex-isolation invariant (24)
+- Verify ARIA conformance against WAI-ARIA APG Tabs pattern
+- Verify the `key={tabId}` panel render is object-keyed (NEVER index-keyed)
+- Verify protected paths stayed untouched (backend-protection reviewer pre-cleared)
+- Identify bugs, regressions, missing tests, documentation drift, or unsupported claims
+
+Specifically interrogate (codex precedent says these are catches Claude reviewers miss):
+- Numerical WCAG ratios on any new color pair (the design phase preempted this — verify)
+- Motion budget violations: every `transition:` and `animation:` declaration must match the spec's table OR be on a whitelisted surface
+- Undefined CSS variables (the design phase already caught --space-5/10/12; verify the implementation only consumes valid tokens)
+- React key correctness (object-keyed not index-keyed; the developer confirms but check the implementation)
+- ARIA edge cases (tabIndex={0} matrix; aria-selected; aria-controls linkage; selection-follows-focus; arrow-key wrap)
+- Test coverage edge cases the developer might have missed (e.g., what happens when activeTab id is invalid?)
+
+## Rules
+
+- review only from the text + code provided
+- read the actual files (Read / Bash / grep — you have access)
+- do not assume missing behavior exists elsewhere
+- if approval-relevant evidence is missing, the verdict must be `needs more evidence`
+- `approved` and `approved with nits` are not allowed while `Missing Evidence` is not `none`
+- prefer concrete findings over style opinions
+- compute oklch numerics if a contrast question arises
+
+## Output exactly this structure
+
+- **Verdict**: one of `approved`, `approved with nits`, `needs changes`, `needs more evidence`
+- **Findings**: concise finding bullets with severity (BLOCKING / NIT) + file:line + spec/design section + computed numerics where applicable, or `none`
+- **Missing Evidence**: exact missing evidence required, or `none`
+- **Required Changes**: exact code changes required before approval, or `none`
+- **Notes**: optional improvements, or `none`
+
+codex
+I’ll review this as a code-review pass against the frozen phase/design docs and the actual working tree, then verify the invariants that are cheap to check locally. I’m starting with repo rules, status, and the M2b source/design sections before reading the implementation.
+exec
+/bin/bash -lc 'pwd && git status --short && git diff --name-status e05a1ac --' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+/home/huwei/ai_codings/distill-portal
+ M apps/frontend/e2e/inspection.spec.ts
+ M apps/frontend/src/App.test.tsx
+ M apps/frontend/src/App.tsx
+ M apps/frontend/src/components/Drawer.tsx
+ M apps/frontend/src/features/sessions/SessionDetail.tsx
+ M apps/frontend/src/features/sessions/SessionView.css
+ M apps/frontend/src/features/sessions/SessionView.test.tsx
+ M apps/frontend/src/features/sessions/SessionView.tsx
+ M apps/frontend/src/features/sessions/SessionsView.test.tsx
+ M apps/frontend/src/features/sessions/SessionsView.tsx
+?? apps/frontend/src/components/Tabs.css
+?? apps/frontend/src/components/Tabs.test.tsx
+?? apps/frontend/src/components/Tabs.tsx
+?? apps/frontend/src/features/sessions/RawTab.css
+?? apps/frontend/src/features/sessions/RawTab.test.tsx
+?? apps/frontend/src/features/sessions/RawTab.tsx
+?? apps/frontend/src/features/sessions/SessionMetadata.css
+?? apps/frontend/src/features/sessions/SessionMetadata.test.tsx
+?? apps/frontend/src/features/sessions/SessionMetadata.tsx
+?? working/phase-5/codex-reviews/m2b-design-review-r2.txt
+?? working/phase-5/codex-reviews/m2b-design-review-r3.txt
+?? working/phase-5/codex-reviews/m2b-design-review-r4.txt
+?? working/phase-5/codex-reviews/m2b-design-review.txt
+?? working/phase-5/codex-reviews/m2b-impl-review-r1.txt
+?? working/phase-5/designs/m2b-shell/
+M	apps/frontend/e2e/inspection.spec.ts
+M	apps/frontend/src/App.test.tsx
+M	apps/frontend/src/App.tsx
+M	apps/frontend/src/components/Drawer.tsx
+M	apps/frontend/src/features/sessions/SessionDetail.tsx
+M	apps/frontend/src/features/sessions/SessionView.css
+M	apps/frontend/src/features/sessions/SessionView.test.tsx
+M	apps/frontend/src/features/sessions/SessionView.tsx
+M	apps/frontend/src/features/sessions/SessionsView.test.tsx
+M	apps/frontend/src/features/sessions/SessionsView.tsx
+
+exec
+/bin/bash -lc "rg -n \"scaleX\\(\\"'$'"\\{width\\}\\)|session-conflict-badge|Open detail|onOpenDetail|drawer auto|drawer\" working/phase-5/codex-reviews/m2b-impl-review-r1.txt apps/frontend/src/components/Tabs.tsx apps/frontend/src/features/sessions/SessionView.css apps/frontend/src/features/sessions/SessionsTable.tsx" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+apps/frontend/src/features/sessions/SessionsTable.tsx:21:// `SessionView` on the right pane (no drawer; the Phase-4 `<Drawer>`
+apps/frontend/src/features/sessions/SessionsTable.tsx:48:// drawer and no "Open detail" button — both the Phase-4
+apps/frontend/src/features/sessions/SessionsTable.tsx:49:// `onOpenDetail(rowKey, triggerEl)` call and the M1b vestigial
+apps/frontend/src/features/sessions/SessionsTable.tsx:50:// "Open detail" button were collapsed in M2b alongside the
+apps/frontend/src/features/sessions/SessionsTable.tsx:90:   *  Phase-4 `onOpenDetail` call from the row click path; M2b
+apps/frontend/src/features/sessions/SessionsTable.tsx:91:   *  collapsed the vestigial "Open detail" button as well. The URL
+apps/frontend/src/features/sessions/SessionsTable.tsx:181:              // The Phase-4 `onOpenDetail` drawer auto-mount was
+apps/frontend/src/features/sessions/SessionsTable.tsx:182:              // retired in M1b; the M1b vestigial "Open detail" button
+apps/frontend/src/features/sessions/SessionView.css:25: *     `.session-conflict-badge`    → header pieces.
+apps/frontend/src/features/sessions/SessionView.css:240: * so the warn semantic is correct. Phase-4's `.drawer-conflict-badge`
+apps/frontend/src/features/sessions/SessionView.css:244:.session-conflict-badge {
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:16:This is the round-1 implementation review for **M2b — Tabs primitive + SessionView shell rewire + SessionMetadata + RawTab extractions + vestigial M1b "Open detail" button collapse**.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:105:- Items 52–53 (vestigial collapse): "Open detail" button removed; SessionDetail.tsx + Drawer.tsx stay on disk with DEAD-BUT-TESTED JSDoc headers; Drawer.test.tsx + SessionDetail.test.tsx still pass via direct import.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:114:- **UPDATED** `SessionsView.test.tsx`: dropped tests #4 + #5 (drawer-body filter regression + openDetail handle); replaced test #3 with the no-`<dialog>`-renders assertion.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:115:- **UPDATED** `App.test.tsx`: deleted the two M1b drawer-trigger tests; added three M2b tests; updated narrative comments + data-state assertions for the ready-placeholder → ready rename.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:260:- `bun run test` runs `bun test src` (the unit suite; browser e2e is `bun run test:e2e`, documented below). After Phase 4 the unit suite is 231 tests / 891 expect calls across 17 files covering the unified session list, the session detail drawer, pagination, the toast queue, and the shared React primitives:
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:494:     9	Phase 4 shipped a unified inspection list that solved per-row search/filter/sort/pagination and surfaced an 18-field metadata drawer over a 20-line raw NDJSON preview. The list is correct but layout-heavy: eight content-driven columns (Select / Status / Tool / Title / Project / Updated / Stored Copy / Source Path) consume 1100–1200 px of the 1400 px main, and the modal drawer (`width: min(92vw, 640px)`) overlays the table rather than coexisting. This leaves no surface room to mount the session-content features the PRD describes (transcript in chronological order, skim view with the four block kinds, expand-block-into-raw, derived metadata, eventually summaries / notes / tags / highlights).
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:732:   721	Byte-equivalent to Phase 4's drawer raw-preview block. Mounts `RawTab.tsx` (extracted from `SessionDetail.tsx`'s `RawPreviewBlock`): `streamSessionRaw` + `consumeRawPreview` (20-line OR 256 KB cap, AbortController on tab unmount). The full-document fetch used by Skim/Transcript is a SEPARATE consumer (`streamRawText.ts`, 5 MB cap) — they don't share state.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:740:   729	Phase 5 does NOT add new metadata fields; it relocates the existing 18 fields from drawer to Metadata tab.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:830:   996	- Vestigial M1 drawer link removed; clicking a row now opens SessionView with **Metadata** tab active (the M2-close default per Resolved Decision #11). Skim renders "coming soon" copy until M5; Transcript "coming soon" until M4; Raw + Metadata fully functional.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:834:  1000	- Metadata tab renders all 18 fields exactly as Phase 4 drawer.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:836:  1002	- Raw tab byte-equivalent to Phase 4 drawer raw preview (same caption strings, same cancel-on-unmount).
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:851:  1091	- Raw tab byte-equivalent to Phase 4 drawer raw preview block.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:877:  1117	- **`SessionMetadata.test.tsx`** + **`RawTab.test.tsx`** (M2): verbatim Phase 4 drawer tests adapted to extracted components.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:893:  1148	7. **`focus-trap-react` left installed** as orphan after drawer retirement (negligible cost; future modal needs may revive).
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:916:1:# M2b — Tabs primitive + SessionView shell rewire + SessionMetadata + RawTab + vestigial drawer-trigger collapse
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:2137:   289	          className="badge session-conflict-badge"
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:2215:    25	 *     `.session-conflict-badge`    → header pieces.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:2429:   239	 * .drawer-conflict-badge. */
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:2430:   240	.session-conflict-badge {
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:2498:     3	// Extracted from `SessionDetail.tsx` lines 130–256 (Phase 4 drawer
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:2747:     5	 * The Phase-4 drawer-body sheet (`SessionDetail.css`) remains on
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:2750:     8	 * with tab-panel-body chrome (NOT drawer chrome).
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:3088:     8	 * body chrome (NOT drawer chrome).
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:3586:    28	// As of M2b the SessionsView NO LONGER OWNS the drawer state. The
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:3901:     7	 * running app — the modal drawer entry-point was retired alongside
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:3915:    21	//   - One drawer at a time falls out of `showModal()` semantics: a second
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:3918:    24	//     behaviour. The Phase 4 spec is explicit ("One drawer at a time").
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:3926:    32	//   3-focusable-element drawer (Close, Copy path, View raw), open the
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:3927:    33	//   drawer via Enter on a row, then press Tab repeatedly. After Tab
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:3951:    57	// The drawer is always rendered (never conditionally unmounted); the
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:3956:    62	// CSS for the SHELL (`.drawer`, `.drawer::backdrop`, `.drawer-header`,
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:3957:    63	// `.drawer-title`, `.drawer-body`, `.drawer-close`) lives in the
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:3958:    64	// sibling `Drawer.css`. The drawer-body content vocabulary
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:3959:    65	// (`.drawer-meta`, `.drawer-tool-badge`, `.drawer-conflict-badge`,
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:3967:    73	  /** Whether the drawer should be open. Toggling this prop from false to
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:3976:    82	  /** Element to restore focus to after the drawer closes. The native
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:3984:    90	  /** Drawer contents — header, body, copy buttons, etc. The drawer
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:3992:     8	 * drawer, and `App.tsx` no longer threads the `onOpenDetail`
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4032:    48	// user closes the drawer and opens a different row). The parent
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4035:    51	// so the drawer always shows whatever the merged row carries when
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4042:    58	// preserved byte-for-byte at both call sites (drawer header + status
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4046:    62	// CSS lives in the sibling `SessionDetail.css` (drawer-body chrome +
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4047:    63	// raw-preview block). The drawer SHELL (`.drawer`, `.drawer::backdrop`,
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4048:    64	// `.drawer-header`, `.drawer-title`, `.drawer-body`, `.drawer-close`)
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4343:   624	  // drawer flow ALSO fires on the same click (preserved in M1a;
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4482:/bin/bash -lc "rg -n \"Open detail|openDetail|onOpenDetail|Drawer|SessionDetail|<dialog|key=\\{|map\\(|transition:|animation:|@keyframes|var\\(--|#[0-9a-fA-F]{3,8}\" apps/frontend/src apps/frontend/e2e/inspection.spec.ts" in /home/huwei/ai_codings/distill-portal
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4490:apps/frontend/src/features/sessions/SessionMetadata.css:5: * The Phase-4 drawer-body sheet (`SessionDetail.css`) remains on
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4543:apps/frontend/src/features/sessions/SessionsTable.tsx:44:// `onSelectRow(row.rowKey)` ONLY. The Phase-4 `onOpenDetail(rowKey,
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4544:apps/frontend/src/features/sessions/SessionsTable.tsx:47:// vestigial "Open detail" button rendered by `SessionView` in its
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4545:apps/frontend/src/features/sessions/SessionsTable.tsx:86:   *  Phase-4 `onOpenDetail` call from the row click path; the
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4546:apps/frontend/src/features/sessions/SessionsTable.tsx:87:   *  vestigial "Open detail" button in SessionView is the new drawer
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4548:apps/frontend/src/features/sessions/SessionsTable.tsx:176:              // ONLY. The Phase-4 `onOpenDetail` drawer auto-mount has
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4549:apps/frontend/src/features/sessions/SessionsTable.tsx:177:              // been retired — the vestigial "Open detail" button in
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4554:apps/frontend/src/App.test.tsx:3298:test("M2b: row click does NOT mount any <dialog> element (the modal drawer is gone)", async () => {
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4555:apps/frontend/src/App.test.tsx:3312:  // No <dialog> in the DOM — the modal drawer was unmounted in M2b.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4560:apps/frontend/src/features/sessions/SessionsView.test.tsx:15:// `openDetail` ref handle + the drawer-body filter regression
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4598:apps/frontend/src/features/sessions/SessionDetail.test.tsx:1:// Component-level tests for the SessionDetail drawer body.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4644:apps/frontend/src/features/sessions/SessionDetail.test.tsx:619:test("SessionDetail: drawer-close before cap aborts the in-flight fetch (no follow-on state mutation)", async () => {
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4647:apps/frontend/src/features/sessions/SessionDetail.test.tsx:673:test("SessionDetail: drawer-close AFTER cap is a no-op (post-cap unmount does not throw)", async () => {
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4739:apps/frontend/src/features/sessions/SessionDetail.css:2: * Feature-local CSS for the SessionDetail drawer body.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4742:apps/frontend/src/features/sessions/SessionDetail.css:36: * `Drawer.css` next to the consuming component; the drawer-body content
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4786:apps/frontend/src/features/sessions/SessionsTable.css:17: *     `SessionDetail.tsx` (drawer header + status `<dd>`); the badge
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4787:apps/frontend/src/features/sessions/SessionsTable.css:21: *     `.drawer-tool-badge` override (both in `SessionDetail.css`).
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4897:apps/frontend/src/features/sessions/SessionMetadata.tsx:3:// Extracted from `SessionDetail.tsx` lines 130–256 (Phase 4 drawer
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4899:apps/frontend/src/features/sessions/SessionMetadata.test.tsx:4:// SessionDetail drawer body; tests adapt the relevant assertions
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4936:apps/frontend/src/features/sessions/SessionDetail.tsx:8: * drawer, and `App.tsx` no longer threads the `onOpenDetail`
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:4944:apps/frontend/src/features/sessions/SessionDetail.tsx:62:// CSS lives in the sibling `SessionDetail.css` (drawer-body chrome +
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:5009:apps/frontend/src/features/sessions/SessionsTable.test.tsx:21://      `onSelectRow(row.rowKey)`. The Phase-4 `onOpenDetail` prop is
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:5052:apps/frontend/src/components/Drawer.css:8: *   - `.drawer` — the `<dialog>` element itself; centered modal at a
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:5086:apps/frontend/src/components/Drawer.tsx:64:// sibling `Drawer.css`. The drawer-body content vocabulary
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:5091:apps/frontend/src/components/Drawer.tsx:90:  /** Drawer contents — header, body, copy buttons, etc. The drawer
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:5485:   256	  Milestone 2.") plus the M1b vestigial "Open detail" button. M1a
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:5489:   260	  `ready-placeholder` copy + the M1b "Open detail" button, removes
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:6088:  1364	### Vestigial drawer-trigger collapse
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:6090:  1366	52. The M1a "Open detail" button (vestigial after M1b) is removed
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:6223:  1063	  vestigial "Open detail" trigger.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:6396:   721	Byte-equivalent to Phase 4's drawer raw-preview block. Mounts `RawTab.tsx` (extracted from `SessionDetail.tsx`'s `RawPreviewBlock`): `streamSessionRaw` + `consumeRawPreview` (20-line OR 256 KB cap, AbortController on tab unmount). The full-document fetch used by Skim/Transcript is a SEPARATE consumer (`streamRawText.ts`, 5 MB cap) — they don't share state.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:6404:   729	Phase 5 does NOT add new metadata fields; it relocates the existing 18 fields from drawer to Metadata tab.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:6474:   120	 * tall so the drawer body still fits in the viewport even when the
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:6528:apps/frontend/src/features/sessions/SessionDetail.css:6: * Selectors owned here (M4 drawer-body + raw-preview vocabulary):
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:6529:apps/frontend/src/features/sessions/SessionDetail.css:11: *     - `.drawer-raw-link-row`, `.drawer-raw-preview`,
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:6530:apps/frontend/src/features/sessions/SessionDetail.css:12: *       `.drawer-raw-preview h3`
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:6538:apps/frontend/src/features/sessions/SessionDetail.css:107:.drawer-raw-preview {
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:6539:apps/frontend/src/features/sessions/SessionDetail.css:111:.drawer-raw-preview h3 {
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:6549:apps/frontend/src/features/sessions/SessionDetail.tsx:63:// raw-preview block). The drawer SHELL (`.drawer`, `.drawer::backdrop`,
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:6550:apps/frontend/src/features/sessions/SessionDetail.tsx:287:        <section className="drawer-raw-preview">
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:6982:/bin/bash -lc 'rg -n "session-conflict-badge|statusConflict|Conflict|Source ↔ stored|disagreed during load|status warning|warn recipe|color-warn|color-error" working/phase-5.md working/phase-5/designs/m2b-shell/design.md working/phase-5/designs/m2b-shell/colors.md apps/frontend/src/features/sessions/SessionView.tsx apps/frontend/src/features/sessions/SessionView.css apps/frontend/src/features/sessions/SessionMetadata.tsx apps/frontend/src/features/sessions/SessionMetadata.css apps/frontend/src/features/sessions/SessionView.test.tsx' in /home/huwei/ai_codings/distill-portal
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:7018:apps/frontend/src/features/sessions/SessionView.css:25: *     `.session-conflict-badge`    → header pieces.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:7020:apps/frontend/src/features/sessions/SessionView.css:240:.session-conflict-badge {
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:7025:apps/frontend/src/features/sessions/SessionView.tsx:289:          className="badge session-conflict-badge"
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:7037:apps/frontend/src/features/sessions/SessionView.test.tsx:548:    noConflict.container.querySelector(".session-conflict-badge"),
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:7040:apps/frontend/src/features/sessions/SessionView.test.tsx:564:    ".session-conflict-badge",
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:7043:working/phase-5.md:143:- Metadata tab: relocates the 18 SessionRow fields verbatim from the Phase 4 drawer body, plus the subagent sidecar badge (PRD line 226 — flag exists in `SessionRow.hasSubagentSidecars`), the sourcePathIsStale "Last seen source path" label, and the statusConflict badge.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:7689:   548	    noConflict.container.querySelector(".session-conflict-badge"),
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:7705:   564	    ".session-conflict-badge",
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:7971:     4	// SessionDetail drawer body; tests adapt the relevant assertions
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:7973:     6	// sidecar badge and removes the drawer header (the minimal header
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:8708:    44	// `onSelectRow(row.rowKey)` ONLY. The Phase-4 `onOpenDetail(rowKey,
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:8709:    45	// triggerEl)` call is REMOVED from the row click path — the drawer no
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:8711:    47	// vestigial "Open detail" button rendered by `SessionView` in its
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:8750:    86	   *  Phase-4 `onOpenDetail` call from the row click path; the
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:8751:    87	   *  vestigial "Open detail" button in SessionView is the new drawer
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:8840:   176	              // ONLY. The Phase-4 `onOpenDetail` drawer auto-mount has
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:8841:   177	              // been retired — the vestigial "Open detail" button in
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:8842:   178	              // `SessionView` is the new drawer entry point.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:8961:     1	# M2b — Tabs primitive + SessionView shell rewire + SessionMetadata + RawTab + vestigial drawer-trigger collapse
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:8978:    18	M2b is the **structural rewire** that replaces the Phase 4 modal drawer
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:8981:    21	M1a-vestigial affordance (the "Open detail" trigger) is removed; the
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9367:/bin/bash -lc "rg -n \"import \\{ Drawer \\}|import \\{ SessionDetail \\}|<Drawer|<SessionDetail|onOpenDetail|Open detail\" apps/frontend/src --glob '"'!**/*.test.tsx'"'" in /home/huwei/ai_codings/distill-portal
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9371:apps/frontend/src/features/sessions/SessionsTable.tsx:44:// `onSelectRow(row.rowKey)` ONLY. The Phase-4 `onOpenDetail(rowKey,
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9372:apps/frontend/src/features/sessions/SessionsTable.tsx:47:// vestigial "Open detail" button rendered by `SessionView` in its
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9373:apps/frontend/src/features/sessions/SessionsTable.tsx:86:   *  Phase-4 `onOpenDetail` call from the row click path; the
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9374:apps/frontend/src/features/sessions/SessionsTable.tsx:87:   *  vestigial "Open detail" button in SessionView is the new drawer
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9375:apps/frontend/src/features/sessions/SessionsTable.tsx:176:              // ONLY. The Phase-4 `onOpenDetail` drawer auto-mount has
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9376:apps/frontend/src/features/sessions/SessionsTable.tsx:177:              // been retired — the vestigial "Open detail" button in
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9377:apps/frontend/src/features/sessions/SessionDetail.tsx:8: * drawer, and `App.tsx` no longer threads the `onOpenDetail`
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9413:   158	    <div className="drawer-body">
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9414:   159	      <header className="drawer-header">
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9415:   160	        <h2 className="drawer-title">{row.title ?? "(untitled)"}</h2>
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9416:   161	        <span className="badge mono drawer-tool-badge">{row.tool}</span>
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9422:   167	            className="badge drawer-conflict-badge"
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9430:   175	      <dl className="drawer-meta">
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9473:   218	          <span className="mono drawer-source-path" ref={sourcePathRef}>
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9479:   224	            className="drawer-copy-btn"
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9489:   234	              <span className="muted drawer-copy-hint">Copied</span>
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9495:   240	              <span className="muted drawer-copy-hint">
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9529:   274	        <p className="drawer-raw-link-row">
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9542:   287	        <section className="drawer-raw-preview">
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9548:/bin/bash -lc 'rg -n "drawer-conflict-badge|color-error|color-warn" apps/frontend/src/features/sessions/SessionDetail.css apps/frontend/src/features/sessions/SessionsTable.css' in /home/huwei/ai_codings/distill-portal
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9550:apps/frontend/src/features/sessions/SessionsTable.css:20: *     beyond the `.drawer-conflict-badge` extension and the per-tool
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9559:apps/frontend/src/features/sessions/SessionDetail.css:17: *     - `.drawer-conflict-badge` — header "Conflict" pill; reuses the
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9560:apps/frontend/src/features/sessions/SessionDetail.css:50:.drawer-conflict-badge {
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9572:  - NIT — `apps/frontend/src/features/sessions/SessionsTable.tsx:20-21`, `42-48`, `83-88`, `174-178` — design.md checklist 52: comments still describe the drawer / vestigial “Open detail” button as reachable, contradicting the M2b collapse.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9578:  - Change `.session-conflict-badge` to use `var(--color-warn)` in all three `color-mix()` declarations, and update its comment/test coverage as needed.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9590:  - NIT — `apps/frontend/src/features/sessions/SessionsTable.tsx:20-21`, `42-48`, `83-88`, `174-178` — design.md checklist 52: comments still describe the drawer / vestigial “Open detail” button as reachable, contradicting the M2b collapse.
+working/phase-5/codex-reviews/m2b-impl-review-r1.txt:9596:  - Change `.session-conflict-badge` to use `var(--color-warn)` in all three `color-mix()` declarations, and update its comment/test coverage as needed.
+
+exec
+/bin/bash -lc "rg -n \"scaleX\\(["'^)]*px'"\\)\" apps/frontend/src --glob '"'!**/*.test.tsx'"' --glob '"'!**/*.css'"'" in /home/huwei/ai_codings/distill-portal
+exec
+/bin/bash -lc "rg -n \"\\.session-conflict-badge|--color-error\" apps/frontend/src/features/sessions/SessionView.css apps/frontend/src/features/sessions/SessionView.tsx" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+apps/frontend/src/features/sessions/SessionView.css:25: *     `.session-conflict-badge`    → header pieces.
+apps/frontend/src/features/sessions/SessionView.css:244:.session-conflict-badge {
+
+ succeeded in 0ms:
+apps/frontend/src/components/Tabs.tsx:38://     `scaleX(${width}px)` is INVALID CSS and the browser drops the
+apps/frontend/src/components/Tabs.tsx:102:    // `scaleX()` takes a UNITLESS number — `scaleX(${width}px)` is
+
+codex
+- **Verdict**: approved
+- **Round-1 Verification Trace**:
+  1. Finding 1 BLOCKING: verified fixed at `apps/frontend/src/components/Tabs.tsx:104`; `scaleX(${width})` is unitless, with regression coverage at `apps/frontend/src/components/Tabs.test.tsx:226`.
+  2. Finding 2 BLOCKING: verified fixed at `apps/frontend/src/features/sessions/SessionView.css:244`; `.session-conflict-badge` now uses the warn recipe on lines 245-247.
+  3. Finding 3 NIT: verified fixed at `apps/frontend/src/features/sessions/SessionsTable.tsx:43`; the row-click / drawer / “Open detail” comments now describe the M2b collapse correctly, including the prop JSDoc and inline row-open comment.
+- **Findings**: none
+- **Missing Evidence**: none
+- **Required Changes**: none
+- **Notes**: focused local check passed: `bun test src/components/Tabs.test.tsx` → 11 pass / 0 fail.
+tokens used
+54,307
+- **Verdict**: approved
+- **Round-1 Verification Trace**:
+  1. Finding 1 BLOCKING: verified fixed at `apps/frontend/src/components/Tabs.tsx:104`; `scaleX(${width})` is unitless, with regression coverage at `apps/frontend/src/components/Tabs.test.tsx:226`.
+  2. Finding 2 BLOCKING: verified fixed at `apps/frontend/src/features/sessions/SessionView.css:244`; `.session-conflict-badge` now uses the warn recipe on lines 245-247.
+  3. Finding 3 NIT: verified fixed at `apps/frontend/src/features/sessions/SessionsTable.tsx:43`; the row-click / drawer / “Open detail” comments now describe the M2b collapse correctly, including the prop JSDoc and inline row-open comment.
+- **Findings**: none
+- **Missing Evidence**: none
+- **Required Changes**: none
+- **Notes**: focused local check passed: `bun test src/components/Tabs.test.tsx` → 11 pass / 0 fail.

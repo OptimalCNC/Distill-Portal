@@ -1,0 +1,1532 @@
+Reading prompt from stdin...
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/huwei/ai_codings/distill-portal
+model: gpt-5.5
+provider: OpenAI
+approval: never
+sandbox: workspace-write [workdir, /tmp, /home/huwei/.codex/memories]
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019e0366-3501-7463-820e-b5f0ca87286b
+--------
+user
+You are continuing as the external non-Claude reviewer providing the round-4 OPTIONAL design opinion on M2b for task `phase-5` of distill-portal. Your round-3 verdict was `needs changes` with:
+
+- 1 BLOCKING: design.md acceptance item 40 still described RawTab cleanup running on tab switch (contradicting the corrected stable-subtree mechanism + spec lines 650-658).
+- 1 NIT: motion.md:145-147 called the cross-fade node `.tabpanel-content`, stale from before round-3's Option A pick.
+
+The designer applied a round-5 revision pass at `working/phase-5/designs/m2b-shell/`. Verify both fixes landed correctly. Re-evaluate for any new round-4 defects.
+
+Designer's round-5 summary (verbatim):
+
+- **Item 40 (BLOCKING)**: Rewrote design.md:1292-1323 from "cleanup runs on tab switch (when the panel re-mounts on first activation, the previous in-flight fetch is aborted)" to an enumerated list of the 4 (and only 4) cleanup triggers: (1) selectedRowKey change → outer SessionView unmounts → RawTab unmounts → AbortController fires; (2) row.storedSessionUid change → useEffect dependency change → cleanup → fresh fetch; (3) Retry button → bumps `attempt` counter → useEffect dependency change → cleanup → fresh fetch; (4) SessionView itself unmounts → RawTab unmounts → AbortController fires. Followed by explicit "Tab switches are NOT a cleanup trigger" paragraph citing Resolved Decision #12 + spec lines 650-658, spelling out that tab switches only toggle `hidden` / `style.animation` / `tabIndex` while leaving the React subtree (and RawTab's useEffect + AbortController) untouched. Wording aligns with items 27/28/29.
+
+- **motion.md:145-147 (NIT)**: Replaced stale `.tabpanel-content` node reference with "the active panel's own `<div role="tabpanel">` element (the same element that carries `hidden`, `tabIndex`, and the inline `animation` style toggle shown above; matches design.md §3.2 / §5.2 / §7.4 + prototype.html:567)". Aligns with Option A cross-fade mechanism wording used everywhere else.
+
+- **Note on prototype.html `.tabpanel-content` references** (intentionally untouched per codex round-3 explicit scoping): the prototype's static inner-content `<div>`s at lines 957/960/963/966/1070/1080/1163 are NOT animation targets — the animation is attached to `<div role="tabpanel">` itself (verified by codex round 3 at prototype.html:567 + 1094). Codex round 3's NIT was scoped explicitly to motion.md:145-147.
+
+## Source files
+
+- `working/phase-5.md` — implementation source of truth (frozen at commit `05467ad` on `main`, 2026-04-28)
+- `progress/phase-5.progress.md` — current snapshot
+- `working/phase-5/designs/m2b-shell/` — the design artifact under review (post round-5):
+  - `design.md` (~1410 lines)
+  - `prototype.html` (~1490 lines)
+  - `colors.md` (~233 lines)
+  - `motion.md` (~211 lines)
+- `working/phase-5/codex-reviews/m2b-design-review.txt` — your round-1 verbatim stdout
+- `working/phase-5/codex-reviews/m2b-design-review-r2.txt` — your round-2 verbatim stdout
+- `working/phase-5/codex-reviews/m2b-design-review-r3.txt` — your round-3 verbatim stdout
+
+## Protected paths (frozen — do not propose edits)
+
+`apps/backend/**`, `apps/backend/tests/**`, `components/collector-runtime/**`, `components/configuration/**`, `components/ingest-service/**`, `components/observability/**`, `components/raw-session-store/**`, `components/ui-api-contracts/**`, `tests/e2e/**`, root `Cargo.toml`, root `Cargo.lock`.
+
+## Rules
+
+- review only from the artifact + the cited spec sections + the cited code files
+- verify each round-3 issue against the cited file:line/section before approving
+- new findings are allowed but should be limited to LEFTOVER-LANGUAGE alignments at this stage of convergence
+- if approval-relevant evidence is missing, the verdict must be `needs more evidence`
+- `approved` and `approved with nits` are not allowed while `Missing Evidence` is not `none`
+
+## Output exactly this structure
+
+- **Verdict**: one of `approved`, `approved with nits`, `needs changes`, `needs more evidence`
+- **Round-3 Verification Trace**: numbered: (item 40 BLOCKING) and (motion.md:145-147 NIT), each with `verified fixed at <file>:<line>` or `partially fixed (still needs <X>)` or `not fixed (cite where)`.
+- **Findings**: NEW round-4 findings with severity (BLOCKING / NIT) + file:line + spec section, or `none`
+- **Missing Evidence**: exact missing artifact content, or `none`
+- **Required Changes**: exact changes required before the design is implementation-ready, or `none`
+- **Notes**: optional improvements or residual risks the coordinator should be aware of, or `none`
+
+codex
+I’ll verify the two cited round-3 issues against the revised artifact, then do a narrow leftover-language pass for contradictions in the same design set.
+exec
+/bin/bash -lc "sed -n '1,220p' README.md" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+# Distill Portal
+
+Distill Portal is a local-first portal for collecting, storing, and analyzing coding sessions produced by AI coding tools.
+
+Read [PRD.md](PRD.md) for the product summary and functional requirements.
+
+For developers, please read [docs/README.md](docs/README.md) for documentation on the repository structure, component ownership, features, and development commands.
+
+## Contributing
+
+- Read [PRD.md](PRD.md) for the product summary and functional requirements.
+- Read [ARCHITECTURE.md](ARCHITECTURE.md) for the architecture.
+- Read [docs/README.md](docs/README.md) for the repository structure, component ownership, features, and development commands.
+
+### Hard Rules
+
+- Backend owns machine-consumable HTTP routes; do not reintroduce backend-owned end-user HTML.
+- Frontend talks to the backend only over HTTP and only consumes generated contract types from `components/ui-api-contracts/bindings/*.ts`.
+- `apps/frontend` must not import from `components/collector-runtime`, `components/ingest-service`, or `components/raw-session-store`.
+- HTTP payload changes must update `components/ui-api-contracts`, the Rust and TS sides of both apps, and relevant tests together.
+- Keep docs aligned with any layout, command, dependency, or payload-shape change.
+
+### Quick Checks
+
+Fast checks to run before committing:
+
+```bash
+cargo check --workspace
+cargo test --workspace
+```
+
+From `apps/frontend/`:
+
+```bash
+bun run test
+```
+
+See [docs/dev-commands.md](docs/dev-commands.md) for the full reference, including targeted Rust suites, the TypeScript contract-drift check, and the browser e2e suite.
+
+## Quick Start
+
+Run the backend:
+
+```bash
+cargo run -p distill-portal-backend
+```
+
+Run the frontend (from `apps/frontend/`):
+
+```bash
+bun install
+bun run dev
+```
+
+Then open the frontend address. By default:
+
+- backend: `http://127.0.0.1:4000`
+- frontend (Vite dev server): `http://127.0.0.1:4100`
+
+See `docs/dev-commands.md` for the full list of frontend and test commands.
+
+exec
+/bin/bash -lc "sed -n '1,240p' docs/dev-commands.md" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+# Dev Commands
+
+## Run The Backend
+
+```bash
+cargo run -p distill-portal-backend
+```
+
+Useful backend env vars:
+
+- `DISTILL_PORTAL_BACKEND_BIND` or `DISTILL_PORTAL_BIND`
+- `DISTILL_PORTAL_DATA_DIR`
+- `DISTILL_PORTAL_POLL_INTERVAL_SECS`
+- `DISTILL_PORTAL_CLAUDE_ROOTS`
+- `DISTILL_PORTAL_CODEX_ROOTS`
+
+## Run The Frontend
+
+The frontend lives under `apps/frontend/` as a Bun-managed package (`package.json`, `bun.lock`, `vite.config.ts`, `index.html`, `src/*.tsx`).
+
+Commands (run from `apps/frontend/`):
+
+```bash
+bun install
+bun run dev
+bun run build
+bun run test
+```
+
+- `bun run dev` starts the Vite dev server on `http://127.0.0.1:4100` with `strictPort: true` so a port collision fails fast.
+- `bun run build` writes static assets to `apps/frontend/dist/`.
+- `bun run test` runs `bun test src` (the unit suite; browser e2e is `bun run test:e2e`, documented below). After Phase 4 the unit suite is 231 tests / 891 expect calls across 17 files covering the unified session list, the session detail drawer, pagination, the toast queue, and the shared React primitives:
+  - **Mounted-`App` integration** — `apps/frontend/src/App.test.tsx`: the read-only unified-list render against three `Promise.allSettled` GETs, the rescan and import mutation flows (including an explicit race-window reproducer for the stale-selection bug), per-panel independent-error behavior, the four documented empty-state branches, the click-time intersection rule under filter and pagination races, the toast queue replacing the old inline `lastReport`, and the cross-page bulk-select / retry-after-intervening-rescan invariants.
+  - **Unified session feature** — `apps/frontend/src/features/sessions/`: `SessionsTable.test.tsx`, `SessionFilters.test.tsx`, `SessionDetail.test.tsx` (component-level integration), and pure helpers `mergeSessions.test.ts`, `filterSessions.test.ts`, `applyPagination.test.ts`, `relativeTime.test.ts`, `useSessionFilters.test.ts` (incl. 12+ corrupt-input fallbacks), `useToastQueue.test.ts`, `lastRescan.test.ts`, and the streaming `rawPreview.test.ts` (line-cap + byte-cap + abort + non-JSON fallback).
+  - **Shared React primitives** — `apps/frontend/src/components/`: `ActionBar.test.tsx` (idle zero/non-zero selection, pending rescan/import disabled states, sticky modifier, last-rescan caption, hidden-by-filter caption + clear affordances), `Drawer.test.tsx` (native `<dialog>` shell, focus restoration, Esc-close, backdrop close), `Pagination.test.tsx` (page-size selector + Prev/Next + caption + clamp), `Toast.test.tsx` (kind variants + Retry + Dismiss roles), `ScanErrorsCallout.test.tsx` (renders nothing when empty).
+  - The variant-matrix `StatusBadge.test.tsx` from M2 was retired in M6 (Chunk G); the four-variant DOM-shape contract is preserved by a dedicated test in `SessionsTable.test.tsx` (`SessionsTable: inlined status badge renders all 4 variants ...`) that iterates over `up_to_date / not_stored / outdated / source_missing` and asserts the inlined `<span class="badge {variant}">{label}</span>` markup byte-for-byte for each variant. `App.test.tsx` continues to assert the `up-to-date` variant at the integration level.
+
+## Dev Topology
+
+```
+browser
+   |
+   v
+http://127.0.0.1:4100  <-- Vite dev server (bun run dev)
+   |
+   |  /api/v1/**  and  /health   proxied by Vite
+   v
+http://127.0.0.1:4000  <-- Rust backend (cargo run -p distill-portal-backend)
+```
+
+- Backend: `127.0.0.1:4000` (Rust, `cargo run -p distill-portal-backend`).
+- Frontend dev server: `127.0.0.1:4100` (Bun + Vite, `bun run dev` under `apps/frontend/`).
+- Vite proxies `/api/v1/**` and `/health` to the backend so browser code can use same-origin paths without ad hoc CORS setup. Dev-time proxy config lives in `apps/frontend/vite.config.ts`, not in application code.
+
+## Run Both Together
+
+Terminal 1:
+
+```bash
+cargo run -p distill-portal-backend
+```
+
+Terminal 2 (from `apps/frontend/`):
+
+```bash
+bun run dev
+```
+
+Then open `http://127.0.0.1:4100/` in the browser. The Rust backend must be running for `/health` and `/api/v1/**` to resolve through the Vite proxy.
+
+## Browser E2E (Playwright)
+
+The inspection-surface browser e2e lives under `apps/frontend/e2e/` and
+drives Chromium against the Bun + Vite dev server, which proxies to a
+real Rust backend spawned inside the harness (`e2e/harness/backend.ts`).
+The harness uses `Bun.spawn` per the Bun-first rule, so the suite must
+be run with Bun as the runtime (`bun --bun x playwright test`, wired
+into the `test:e2e` script below).
+
+Commands (run from `apps/frontend/`):
+
+```bash
+bun run test:e2e:install   # one-time: install Chromium via Playwright
+bun run test:e2e           # spawns the backend, starts Vite, runs Chromium
+```
+
+The harness binds the backend to `127.0.0.1:4000` because
+`vite.config.ts` proxies `/api/v1/**` and `/health` to that address;
+tests run serially (`workers: 1`) so the port is never double-bound.
+See `playwright.config.ts` for the full configuration.
+
+## Targeted Tests
+
+```bash
+cargo test -p distill-portal-collector-runtime --test parsers
+cargo test -p distill-portal-backend --test http_api
+cargo test -p distill-portal-e2e --test inspection_surface
+```
+
+## TypeScript Contract Bindings
+
+The Rust contract types in `components/ui-api-contracts/src/lib.rs` are the source of truth. TypeScript declarations under `components/ui-api-contracts/bindings/` are generated from them via the `ts-bindings` cargo feature (off by default) and must be regenerated whenever the Rust contract changes.
+
+Verify the checked-in TS files match the current Rust source (fails on drift):
+
+```bash
+cargo test -p distill-portal-ui-api-contracts --features ts-bindings
+```
+
+Regenerate the checked-in TS files after a contract change:
+
+```bash
+cargo test -p distill-portal-ui-api-contracts --features ts-bindings -- --ignored regenerate_ts_bindings
+```
+
+See `components/ui-api-contracts/README.md` for the tool-choice rationale and the full list of generated files.
+
+## Workspace Verification
+
+```bash
+cargo check --workspace
+cargo test --workspace
+```
+
+exec
+/bin/bash -lc "sed -n '1,240p' docs/dependency-rules.md" in /home/huwei/ai_codings/distill-portal
+exec
+/bin/bash -lc "sed -n '1,220p' docs/README.md" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+# Distill Portal Docs
+
+Start here when you need to orient yourself in the Distill Portal workspace. The backend is Rust under `apps/backend`; the frontend is Bun + Vite + React + TypeScript under `apps/frontend`.
+
+This file is both the docs entry point and the repo map.
+
+## Start With Your Task
+
+| I want to... | Start here |
+| --- | --- |
+| Modify the inspection UI | [`playbooks/modify-frontend-page.md`](playbooks/modify-frontend-page.md), [`../apps/frontend/README.md`](../apps/frontend/README.md) |
+| Change a backend API or JSON payload | [`playbooks/modify-backend-api.md`](playbooks/modify-backend-api.md), [`dependency-rules.md`](dependency-rules.md) |
+| Change session storage behavior | [`playbooks/modify-session-store.md`](playbooks/modify-session-store.md) |
+| Run or test locally | [`dev-commands.md`](dev-commands.md) |
+| Check dependency boundaries | [`dependency-rules.md`](dependency-rules.md) |
+| Understand a feature | [`features/inspection-surface.md`](features/inspection-surface.md), [`features/session-store.md`](features/session-store.md) |
+| Understand product + architecture intent | [`../PRD.md`](../PRD.md), [`../ARCHITECTURE.md`](../ARCHITECTURE.md) |
+| Audit historical planning or delivery | [`../working/README.md`](../working/README.md), [`../progress/README.md`](../progress/README.md) |
+
+## Apps
+
+- `apps/backend` — Rust backend binary: runtime wiring, scan/ingest/store orchestration, machine-consumable HTTP routes. See [`../apps/backend/README.md`](../apps/backend/README.md).
+- `apps/frontend` — Bun + Vite + React + TypeScript inspection UI. The unified session list (table, filters, view, drawer body, merge / filter / sort / paginate / persistence helpers) lives under `apps/frontend/src/features/sessions/`; shared React primitives (action bar, scan-errors callout, native-`<dialog>`-backed drawer shell, pagination strip, toast) live under `apps/frontend/src/components/`. CSS is co-located: each `.tsx`/`.ts` imports its sibling `.css` (no CSS Modules, no CSS-in-JS, no Tailwind); `src/styles/` carries only the three global sheets `reset.css`, `tokens.css`, `global.css`. See [`../apps/frontend/README.md`](../apps/frontend/README.md).
+
+## Components
+
+Reusable, app-independent crates. Each owns its own README:
+
+- [`collector-runtime`](../components/collector-runtime/README.md) — source discovery, safe JSONL reads, tool-specific parsers (Claude Code, Codex)
+- [`configuration`](../components/configuration/README.md) — backend runtime config loading
+- [`ingest-service`](../components/ingest-service/README.md) — content-addressed ingest decisions, replace-on-sync
+- [`observability`](../components/observability/README.md) — tracing subscriber bootstrap
+- [`raw-session-store`](../components/raw-session-store/README.md) — SQLite metadata + blob-store persistence
+- [`ui-api-contracts`](../components/ui-api-contracts/README.md) — shared HTTP payload types; source of truth for the Rust → TS bindings
+
+## Feature Guides
+
+- [`features/inspection-surface.md`](features/inspection-surface.md) — page ownership, API touchpoints, and tests for the inspection workflow
+- [`features/session-store.md`](features/session-store.md) — storage ownership, backend touchpoints, and tests for persisted session behavior
+
+## Playbooks
+
+Short recipes for common changes:
+
+- [`playbooks/modify-frontend-page.md`](playbooks/modify-frontend-page.md) — shortest safe path for UI changes
+- [`playbooks/modify-backend-api.md`](playbooks/modify-backend-api.md) — shortest safe path for backend API changes
+- [`playbooks/modify-session-store.md`](playbooks/modify-session-store.md) — shortest safe path for storage changes
+
+## Verification Map
+
+| Surface | Command |
+| --- | --- |
+| Workspace compile | `cargo check --workspace` |
+| Full Rust test suite | `cargo test --workspace` |
+| Backend HTTP API | `cargo test -p distill-portal-backend --test http_api` |
+| Collector parsers | `cargo test -p distill-portal-collector-runtime --test parsers` |
+| Typed Rust-client HTTP smoke | `cargo test -p distill-portal-e2e --test inspection_surface` |
+| TypeScript contract bindings freshness | `cargo test -p distill-portal-ui-api-contracts --features ts-bindings` |
+| Frontend unit tests | `bun run test` (from `apps/frontend/`) |
+| Browser e2e (Playwright) | `bun run test:e2e` (from `apps/frontend/`) |
+
+## Repo Map
+
+- `apps/backend` — backend binary and its tests
+- `apps/frontend` — Bun/React frontend
+- `components/*` — reusable implementation crates
+- `docs/` — this tree (dependency rules, commands, features, playbooks)
+- `tests/e2e` — real HTTP-boundary Rust integration tests
+- `tests/fixtures` — sample Claude Code and Codex sessions used by parser and backend tests
+- `working/` — historical planning specs for completed phases (see [`../working/README.md`](../working/README.md))
+- `progress/` — historical delivery logs for completed phases (see [`../progress/README.md`](../progress/README.md))
+
+## Historical Material
+
+- [`../working/`](../working/) — frozen planning specs. Not current-state instructions. See [`working/README.md`](../working/README.md).
+- [`../progress/`](../progress/) — frozen delivery logs. Not current-state instructions. See [`progress/README.md`](../progress/README.md).
+
+ succeeded in 0ms:
+# Dependency Rules
+
+## Allowed Directions
+
+- `apps/backend` may depend on:
+  - `components/collector-runtime`
+  - `components/configuration`
+  - `components/ingest-service`
+  - `components/observability`
+  - `components/raw-session-store`
+  - `components/ui-api-contracts`
+- `apps/frontend` (Bun + Vite + React + TypeScript) may depend on:
+  - `components/ui-api-contracts/bindings/*.ts` (generated TypeScript types; one-way import only)
+  - external npm packages managed via Bun for UI, HTTP fetch, and test tooling. Phase 4 adopted a strict 2-package escape-hatch budget for browser-only concerns native APIs cannot meet; one slot is consumed (`focus-trap-react@^11`, fixing a native `<dialog>` Tab-cycling gap), one slot remains reserved (`@tanstack/react-virtual`, gated on documented evidence that pagination plus `useMemo` cannot keep render time bounded). Adding a third escape-hatch package requires a fresh planning round.
+  - all backend communication is over HTTP to `apps/backend`
+- `components/ingest-service` may depend on:
+  - `components/collector-runtime`
+  - `components/raw-session-store`
+- `components/raw-session-store` may depend on:
+  - `components/ui-api-contracts`
+- `components/collector-runtime` may depend on:
+  - `components/ui-api-contracts`
+- `components/configuration`, `components/observability`, and `components/ui-api-contracts` should not depend on app crates
+
+## Forbidden Directions
+
+- `apps/frontend` must not depend on:
+  - `components/collector-runtime`
+  - `components/ingest-service`
+  - `components/raw-session-store`
+- No component crate may depend on `apps/backend` or `apps/frontend`
+- `apps/backend` must not render end-user HTML
+- `apps/frontend` must not reach into storage or ingest internals directly
+
+## Contract Handling
+
+- Shared page and JSON payloads live in `components/ui-api-contracts`
+- `components/ui-api-contracts/src/lib.rs` is the single source of truth for the contract. The TypeScript declarations under `components/ui-api-contracts/bindings/` are checked-in generated artifacts derived from `src/lib.rs` by the `ts-bindings` cargo feature — they are the canonical downstream output and must stay in sync with the Rust source: regenerate and commit them together with any Rust contract change, never hand-edited
+- The Bun frontend consumes contract types via one-way TypeScript imports from `components/ui-api-contracts/bindings/*.ts`, using the `@contracts/*` path alias wired in `apps/frontend/tsconfig.json` (or a direct relative path). The frontend MUST NOT re-declare contract types by hand; the thin barrel at `apps/frontend/src/lib/contracts.ts` re-exports the generated types for internal consumption
+- If a backend JSON shape changes, update:
+  - `components/ui-api-contracts/src/lib.rs`
+  - `components/ui-api-contracts/bindings/*.ts` (regenerate via `cargo test -p distill-portal-ui-api-contracts --features ts-bindings -- --ignored regenerate_ts_bindings`; see `docs/dev-commands.md`)
+  - `apps/backend/src/http_api.rs`
+  - the typed API layer in `apps/frontend/src/lib/` (`api.ts`, `contracts.ts`)
+  - any impacted frontend rendering under `apps/frontend/src/App.tsx`, the unified session feature at `apps/frontend/src/features/sessions/`, or the shared React primitives under `apps/frontend/src/components/`
+  - the relevant tests in `apps/backend/tests/http_api.rs`, `apps/frontend/src/App.test.tsx`, `apps/frontend/e2e/inspection.spec.ts`, and `tests/e2e/tests/inspection_surface.rs`
+
+## Layer Ownership
+
+- Storage writes and reads belong to `components/raw-session-store`
+- Replace-on-sync ingest rules belong to `components/ingest-service`
+- Source discovery and parsing belong to `components/collector-runtime`
+- Environment variable mapping belongs to `components/configuration`
+- HTTP routes belong to the app crates only
+
+## Frontend Dev-Time Topology
+
+- `apps/frontend/` is a Bun-managed package (`package.json`, `bun.lock`, `vite.config.ts`, `index.html`, `src/*.tsx`).
+- Frontend dev-time proxying of `/api/v1/**` and `/health` to the backend belongs in `apps/frontend/vite.config.ts`, not in any application code path.
+- The Bun app must continue to honor the frontend-boundary rules above: no direct dependency on `components/collector-runtime`, `components/ingest-service`, or `components/raw-session-store`; all backend communication goes over HTTP to the Rust backend.
+
+### Phase 5 M2a notes — Fraunces self-hosted as static asset
+
+Phase 5 introduces a single self-hosted variable serif (Fraunces) for the Archive-room display layer (empty-pane preface, future M5 chapter-break labels, future app title). The font ships as two `.woff2` files at `apps/frontend/public/fonts/Fraunces-subset.woff2` (Roman) and `apps/frontend/public/fonts/Fraunces-Italic-subset.woff2` (Italic), referenced by two `@font-face` blocks in `apps/frontend/src/styles/tokens.css`. Per Phase 5 §Resolved Decision #15, **a self-hosted font file is a static asset, not a runtime dependency** — the 2-package escape-hatch budget (currently 1/2 consumed by `focus-trap-react@^11`) is **not affected**. No bundler plugin, font-loading library, or JS dep is involved; Vite serves the woff2 files directly from `public/`. To regenerate (only when upstream Fraunces revs, ~yearly per Google Fonts cadence): download both variable fonts from `https://github.com/undercasetype/Fraunces` (`fonts/variable/Fraunces[SOFT,WONK,opsz,wght].ttf` + the Italic counterpart), run `fonttools varLib.instancer <input.ttf> SOFT=50 WONK=0 -o <pinned.ttf>` to drop the design-time-only SOFT and WONK axes (saves ~70 KB per file), then `pyftsubset <pinned.ttf> --output-file=apps/frontend/public/fonts/Fraunces-subset.woff2 --unicodes='U+0020-007E,U+00A0-00FF,U+2010-2027,U+2030-2052' --layout-features='kern,liga,smcp,onum' --flavor=woff2 --desubroutinize`. Target file size: ~80 KB per file. Reversibility: deleting both `@font-face` blocks AND both woff2 files yields a still-cohesive system-serif aesthetic (Charter / Iowan Old Style / Georgia at ~99% of Fraunces's visual size via the `size-adjust` override, no broken layout).
+
+codex
+I’ve loaded the repo instructions. Next I’m checking the revised lines, the frozen spec lines 650-658, and the prototype’s actual animation target so the verdict is tied to the cited evidence.
+exec
+/bin/bash -lc "nl -ba working/phase-5/designs/m2b-shell/design.md | sed -n '1260,1345p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+  1260	31. The source-path `<dt>` label swaps "source path" / "last seen
+  1261	    source path" based on `row.sourcePathIsStale`.
+  1262	32. The status `<dd>` renders the status pill PLUS a muted "(disagreed
+  1263	    during load)" note when `row.statusConflict`.
+  1264	33. The has_subagent_sidecars `<dd>` renders the boolean PLUS the
+  1265	    subagent sidecar badge ("Has Claude Code subagent sidecars on
+  1266	    disk — not ingested in v1") when `row.hasSubagentSidecars`. Badge
+  1267	    styling: dashed `var(--color-border-strong)` border,
+  1268	    `var(--color-ink-muted)` text, `--font-chrome --text-xs`.
+  1269	34. Copy path button preserves the Phase 4 fallback chain
+  1270	    (Clipboard API → manual select). Hint copy preserved verbatim:
+  1271	    "Copied" / "Selected — press Ctrl/Cmd + C to copy". Hint clears
+  1272	    after 2000 ms.
+  1273	35. The "Open raw" anchor renders ONLY when
+  1274	    `row.storedSessionUid !== null`. Anchor target is
+  1275	    `/api/v1/sessions/{uid}/raw`, opens in new tab via
+  1276	    `target="_blank" rel="noopener noreferrer"`.
+  1277	36. Anchor text color is `var(--color-accent)` (light 4.84:1 / dark
+  1278	    5.78:1 — passes AA normal text per M2a).
+  1279	
+  1280	### RawTab (`apps/frontend/src/features/sessions/RawTab.tsx`)
+  1281	
+  1282	37. RawTab fires the fetch ONLY when `row.storedSessionUid !== null`.
+  1283	    For source-only rows, it short-circuits to the "Not yet imported"
+  1284	    branch without firing.
+  1285	38. The "Not yet imported" copy is: "This session has not been
+  1286	    imported yet — only the source-side metadata is available. Click
+  1287	    Import in the action bar to fetch the raw payload." Quiet muted
+  1288	    prose, no border, no chrome.
+  1289	39. RawTab uses `consumeRawPreview` (from `rawPreview.ts`) unchanged.
+  1290	    Same 256 KB / 20-line caps, same caption strings, same Retry
+  1291	    semantics.
+  1292	40. AbortController is created on mount; the `useEffect` cleanup
+  1293	    aborts the in-flight fetch ONLY when the effect actually cleans
+  1294	    up. The four (and only four) cleanup triggers are:
+  1295	    1. **`selectedRowKey` change** — the outer `SessionView` is
+  1296	       re-mounted (its `key={selectedRowKey}` on the `<article>`
+  1297	       changes), which unmounts RawTab and fires its
+  1298	       AbortController.
+  1299	    2. **`row.storedSessionUid` change** — RawTab's `useEffect`
+  1300	       lists `storedSessionUid` in its dependency array, so a
+  1301	       row-data refresh that changes the uid runs the cleanup
+  1302	       (aborts the previous request) and then a fresh fetch.
+  1303	    3. **Retry button** — bumps the internal `attempt` counter
+  1304	       (item 45), which is a `useEffect` dependency; the cleanup
+  1305	       aborts whatever is in flight (e.g. a slow-failing request
+  1306	       the user no longer wants to wait for) and the effect
+  1307	       re-runs with a new AbortController.
+  1308	    4. **`SessionView` itself unmounts** (rare; e.g. full app
+  1309	       teardown / parent removes the pane) — RawTab unmounts and
+  1310	       its AbortController fires.
+  1311	
+  1312	    **Tab switches are NOT a cleanup trigger.** Per Resolved
+  1313	    Decision #12 and `phase-5.md:650-658` (lazy-on-first-activation +
+  1314	    keep-mounted-after), once Raw has been visited its
+  1315	    `<div role="tabpanel">` stays mounted for the rest of the
+  1316	    selection. Switching to another tab only toggles `hidden`,
+  1317	    `style.animation` (the cross-fade-IN trigger per item 28), and
+  1318	    `tabIndex` on the panel `<div>`. The React subtree is
+  1319	    **stable** — RawTab's `useEffect` does NOT re-run, the
+  1320	    AbortController is NOT aborted, and the in-flight fetch
+  1321	    survives. Coming back to the Raw tab finds the same
+  1322	    AbortController and the same response state already in
+  1323	    progress / completed; no refetch.
+  1324	41. Caption strings preserved EXACTLY:
+  1325	    - byte cap fired → `"Stopped at byte cap — full payload not downloaded."`
+  1326	    - line cap fired → ``Showing first ${N} lines of the raw payload.``
+  1327	    - neither → ``Showing first ${N} lines (full payload below the caps).``
+  1328	    - both caps → byte-cap caption wins.
+  1329	42. Non-JSON fallback lines render with the `(non-JSON line)` marker
+  1330	    inline (Phase 4 `RawPreviewLineRow` recipe preserved).
+  1331	43. Error state copy: ``Failed to load raw preview: ${message}`` +
+  1332	    Retry button.
+  1333	44. Non-2xx state copy: ``HTTP ${status}: ${bodySnippet}`` + Retry
+  1334	    button. `bodySnippet` truncated at 240 chars per Phase 4.
+  1335	45. Retry button bumps an internal `attempt` counter, triggering the
+  1336	    effect to re-run.
+  1337	
+  1338	### Skim + Transcript placeholders
+  1339	
+  1340	46. Both placeholders render an editorial centered block: 1 px dashed
+  1341	    `var(--color-border)` border, italic Fraunces label
+  1342	    (`--font-display --text-lg --color-ink-muted`), milestone copy
+  1343	    below (`--font-chrome --text-sm --color-ink-muted`). Text-align
+  1344	    center, `padding: var(--space-8) 0` (32 px vertical).
+  1345	    **Note**: `--space-12` does NOT exist in
+
+exec
+/bin/bash -lc "nl -ba working/phase-5/designs/m2b-shell/motion.md | sed -n '132,156p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   132	the `@keyframes` fires automatically:
+   133	
+   134	```css
+   135	.session-pane {
+   136	  animation: session-page-turn var(--motion-disclosure) var(--ease-out) both;
+   137	}
+   138	
+   139	@keyframes session-page-turn {
+   140	  from { opacity: 0; transform: translateX(4px); }
+   141	  to   { opacity: 1; transform: translateX(0); }
+   142	}
+   143	```
+   144	
+   145	The two surfaces (cross-fade + page-turn) fire on **separate DOM
+   146	nodes** — one is the `.session-pane` root, the other is the active
+   147	panel's own `<div role="tabpanel">` element (the same element that
+   148	carries `hidden`, `tabIndex`, and the inline `animation` style toggle
+   149	shown above; matches design.md §3.2 / §5.2 / §7.4 + prototype.html:567).
+   150	They never collide. When a selection change also lands on a different
+   151	default tab, both fire in parallel; the compositor handles them
+   152	independently without re-layout.
+   153	
+   154	## Reduced-motion fallback
+   155	
+   156	The global rule in `apps/frontend/src/styles/global.css` (landed at
+
+exec
+/bin/bash -lc "nl -ba working/phase-5/designs/m2b-shell/prototype.html | sed -n '1088,1100p'" in /home/huwei/ai_codings/distill-portal
+exec
+/bin/bash -lc "nl -ba working/phase-5/designs/m2b-shell/prototype.html | sed -n '548,578p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+  1088	        // browser registers the property-string change even when the
+  1089	        // previous activation was on the same element type.
+  1090	        p.style.animation = 'none';
+  1091	        // eslint-disable-next-line no-unused-expressions
+  1092	        p.offsetHeight; // reflow
+  1093	        p.style.animation = 'tab-fade-in var(--motion-base) var(--ease-out) both';
+  1094	        // Skim + Transcript + Raw active panels need tabIndex=0 so Tab
+  1095	        // from the active tab lands inside the panel. Skim + Transcript
+  1096	        // placeholders have no focusable child; Raw's success state has
+  1097	        // none either (the rendered <pre class="raw-pre"> is not
+  1098	        // focusable, and Retry only appears in error / non_2xx). Adding
+  1099	        // tabIndex=0 unconditionally on the active Raw panel covers the
+  1100	        // success state without conditional state-machine branching.
+
+ succeeded in 0ms:
+   548	 *  Tab panels — lazy mount + hidden-on-inactive-but-visited + cross-fade-IN.
+   549	 * =========================================================================== */
+   550	.tabpanels {
+   551	  position: relative;
+   552	  flex: 1;
+   553	  min-height: 0;
+   554	  overflow: hidden auto;
+   555	}
+   556	[role="tabpanel"] {
+   557	  /* outer shell — provides ARIA + a11y. Inactive-but-visited panels carry
+   558	   * the `hidden` HTML attribute (display:none + accessibility tree exclusion).
+   559	   * The browser handles hidden semantics — no extra CSS needed beyond
+   560	   * letting the default user-agent stylesheet apply. */
+   561	  padding: var(--space-6) var(--space-4);  /* --space-5 not in token scale; --space-4 (16 px) is the closest fit */
+   562	  max-inline-size: var(--measure);          /* 70ch reading measure */
+   563	  margin-inline: 0;
+   564	}
+   565	
+   566	/* Cross-fade-IN — driven by an inline `animation` style toggled on
+   567	 * the active tabpanel from `none` → `tab-fade-in 120ms var(--ease-out) both`.
+   568	 * The keep-mounted contract (Resolved Decision #12 / spec lines 650–658)
+   569	 * forbids remounting the panel content, so we use animation-name
+   570	 * re-trigger instead of React `key={activeTab}` remount. The browser
+   571	 * starts the keyframes whenever the inline animation property string
+   572	 * changes from `none` to a real value. */
+   573	@keyframes tab-fade-in {
+   574	  from { opacity: 0; }
+   575	  to   { opacity: 1; }
+   576	}
+   577	
+   578	/* ============================================================================
+
+exec
+/bin/bash -lc "nl -ba working/phase-5.md | sed -n '630,670p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   630	
+   631	### Tab strip
+   632	
+   633	Four tabs: **Transcript** / **Skim** / **Raw** / **Metadata** (left-to-right). Default active tab on first selection at Phase 5 close: **Transcript** — revised from the planner's initial "Skim" recommendation.
+   634	
+   635	**Per-milestone default-tab progression** (per Resolved Decision #11):
+   636	
+   637	- **M2 close** → default = **Metadata** (only fully-functional parsed-content-free tab; Skim + Transcript still placeholder)
+   638	- **M3 close** → default = **Metadata** (no UI consumer of parsers yet)
+   639	- **M4 close** → default shifts to **Transcript** (Transcript becomes functional)
+   640	- **M5 close** → default stays **Transcript** (Skim becomes functional but Transcript is the better landing surface until LLM summaries land in a future phase)
+   641	
+   642	The default-tab choice is a single constant `DEFAULT_TAB_ON_SELECTION` exported from `SessionView.tsx`; the M4 shift is a one-line edit + one test update.
+   643	
+   644	Rationale for not landing on Skim: Skim's `user_turn` blocks render the disabled-summary placeholder until LLM summaries land in a future phase; landing a user on a screen full of "Summary disabled — generation deferred" placeholders feels broken at first glance. Transcript shows real content immediately. Skim becomes the value-add when summaries generate.
+   645	
+   646	Tab state is component-local React state, NOT URL-synced (deferred decision #2). The active-tab value lives on `SessionView` and resets to the `DEFAULT_TAB_ON_SELECTION` constant on every `selectedRowKey` change. Per Resolved Decision #11, that constant is `"metadata"` until M4 ships Transcript, then `"transcript"` from M4 onward.
+   647	
+   648	Tab switching does NOT re-fetch raw bytes — the `useParsedSession` cache hit serves the Skim and Transcript tabs; Raw uses its own independent streaming consumer (`rawPreview.ts`); Metadata bypasses parser fetch entirely (it only reads the SessionRow already in `App.tsx` state).
+   649	
+   650	**Panel mounting strategy:** lazy-on-first-activation + keep-mounted-after.
+   651	
+   652	- `SessionView` tracks `visitedTabs: Set<TabId>` in component-local state, initialized to `new Set([defaultTab])` on every `selectedRowKey` change.
+   653	- A tab panel is rendered (React-mounted) only if it is the active tab OR has been visited before (i.e., `visitedTabs.has(tabId)`).
+   654	- When the user activates a tab for the first time, it is added to `visitedTabs` and remains mounted for the rest of the selection. Inactive-but-visited panels carry the `hidden` attribute (`display: none` semantics + accessibility-tree exclusion).
+   655	- This avoids the contradiction of mounting heavy parsed-content tabs (Skim, Transcript) before they're visited — their `useParsedSession` `useEffect` would otherwise fire and trigger the 5 MB full-document fetch even when the user lands on Metadata.
+   656	- On `selectedRowKey` change, `visitedTabs` resets and all panels unmount cleanly. The cache (in `useParsedSession`) persists across selection changes, so re-selecting the same session re-mounts a panel that finds a cache hit.
+   657	
+   658	This preserves transcript scroll position + skim disclosure expansion state across tab switches WITHIN a single selection, while ensuring Skim/Transcript do not preemptively fetch when the user only intends to see Metadata or Raw.
+   659	
+   660	The Tabs primitive at `apps/frontend/src/components/Tabs.tsx` implements ARIA `tablist` / `tab` / `tabpanel` with Left/Right keyboard nav, Home/End to first/last, automatic activation (selection follows focus per [WAI-ARIA Authoring Practices](https://www.w3.org/WAI/ARIA/apg/patterns/tabs/)), and `aria-controls` / `aria-labelledby` linkage.
+   661	
+   662	**Visual treatment (Archive-room):** the tab strip is a flush row of text labels separated by 12 px gaps. The active tab carries a 1 px `--color-accent` ink-stroke indicator beneath its label, animated with `transform: translateX` over `--motion-base` (`120ms ease-standard`) so the indicator slides between tabs rather than teleporting. Implementation: a single absolutely-positioned `<span class="indicator">` inside the `<div role="tablist">`, positioned via `transform` driven by an active-tab data attribute (CSS `:has()` selector OR a `data-active-tab` attribute on the tablist). Inactive tab labels use `--color-ink-muted`; active uses `--color-ink` and `font-weight: 600`. No background fills; no rounded pills. Reduced-motion zeroes the slide.
+   663	
+   664	### State handling for parsed-content tabs (Skim + Transcript)
+   665	
+   666	Both Skim and Transcript invoke `useParsedSession(row)` and switch on its state union. Each non-success state has a dedicated panel; the "success" / "truncated" states render the real content per the per-tab specs below.
+   667	
+   668	| State | Panel content |
+   669	|-------|---------------|
+   670	| `idle` | Not reachable — Skim/Transcript only mount after a row is selected. (If reached: render the empty-pane copy from §Inspection Surface Layout.) |
+
+exec
+/bin/bash -lc "rg -n \"Item 40|tabpanel-content|cleanup runs|tab switch|panel re-mount|re-mounts|AbortController|Resolved Decision #12|style\\.animation|tabIndex\" working/phase-5/designs/m2b-shell working/phase-5/codex-reviews/m2b-design-review-r3.txt" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:17:- NEW round-2 finding A (BLOCKING): Raw tab is exempted from `tabIndex={0}`, but Raw success state has no focusable child (`<pre class="raw-preview">` is non-focusable, no Retry button in success state) → keyboard user lands on active Raw tab → Tab key skips the entire panel. Same WAI-ARIA APG violation as the original Finding 5 had for Skim + Transcript.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:23:- **Finding 4-partial**: Rewrote prototype.html header comment lines 17-24 to describe the tab-panel cross-fade as "CSS `tab-fade-in` keyframe re-triggered via inline `style.animation` toggling" with React subtree staying stable across tab switches, citing Resolved Decision #12 / spec lines 650-658. Wording mirrors prototype.html line 567, design.md §3.2 / §5.2 / §7.4.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:24:- **Finding A**: Picked Option A — `tabIndex={0}` on active Raw panel unconditionally. Metadata stays the lone exception (Copy path button is always focusable). Files updated: prototype.html (header comment lines 17-24, JSX example line 53, panel-section comment 948-955, script-header bullet 987-992, `activate()` Raw branch 1094-1109); design.md §6.1 lines 716-747, checklist item 29a lines 1230-1245, test obligation 54 lines 1349-1361; motion.md line 106 JSX predicate. colors.md unchanged (no new color pairs introduced).
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:428:    20	5. Active tabpanels lack `tabIndex={0}` for placeholders without focusable children
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:437:    29	- Finding 4: Picked Option A (CSS animation re-trigger via inline `style.animation` toggle). Panel `<div role="tabpanel">` carries `style={{ animation: isActive ? "tab-fade-in 120ms var(--ease-out) both" : "none" }}`. React subtree STABLE across tab switches. design.md §3, §3.2, §4.5, §5.1, §5.2, §7.2, §7.4 + checklist items 27/28/29 rewritten. prototype.html `activate()` uses `dataset.populated` sentinel + `repopulatePanelContent()` helper instead of remount.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:438:    30	- Finding 5: design.md §6.1 explicit rule: Skim + Transcript panels carry `tabIndex={0}`; Metadata + Raw don't. Checklist item 29a captures rule. Test obligation 54 expanded. prototype.html `activate()` toggles `tabindex` for skim + transcript only.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:652:    18	 *      keyframe via an inline `style.animation` toggle on the panel's
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:654:    20	 *      tab switches — NOT keyed on activeTab — preserving the
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:655:    21	 *      keep-mounted contract per Resolved Decision #12 / spec
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:687:    53	 *          tabIndex={isActive && (id === "skim" || id === "transcript" || id === "raw") ? 0 : undefined}>
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:689:    55	 *           Cross-fade fires when style.animation changes from
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:691:    57	 *           Resolved Decision #12. */}
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:741:   944	         `style.animation` from `none` → `tab-fade-in 120ms var(--ease-out) both`
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:744:   947	         tabIndex={0} is added by the activate() function to the active
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:754:   957	        <div class="tabpanel-content"></div>
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:757:   960	        <div class="tabpanel-content"></div>
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:760:   963	        <div class="tabpanel-content"></div>
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:763:   966	        <div class="tabpanel-content"></div>
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:783:   986	 *       Resolved Decision #12 / spec lines 650-658 keep-mounted contract).
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:784:   987	 *     - tabIndex=0 on active Skim + Transcript + Raw panels (Skim and
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:857:  1060	    // contract (Resolved Decision #12 / spec lines 650–658).
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:867:  1070	        const content = p.querySelector('.tabpanel-content');
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:871:  1074	        p.style.animation = 'none';
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:877:  1080	      const content = p.querySelector('.tabpanel-content');
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:887:  1090	        p.style.animation = 'none';
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:890:  1093	        p.style.animation = 'tab-fade-in var(--motion-base) var(--ease-out) both';
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:891:  1094	        // Skim + Transcript + Raw active panels need tabIndex=0 so Tab
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:896:  1099	        // tabIndex=0 unconditionally on the active Raw panel covers the
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:899:  1102	        // always focusable, so the panel itself doesn't need tabIndex.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:909:  1112	        p.style.animation = 'none';
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1227:   656	- On `selectedRowKey` change, `visitedTabs` resets and all panels unmount cleanly. The cache (in `useParsedSession`) persists across selection changes, so re-selecting the same session re-mounts a panel that finds a cache hit.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1229:   658	This preserves transcript scroll position + skim disclosure expansion state across tab switches WITHIN a single selection, while ensuring Skim/Transcript do not preemptively fetch when the user only intends to see Metadata or Raw.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1264:/bin/bash -lc "rg -n \"Finding 4|Finding 5|key=|tabIndex|Round-1 Verification Trace|\\*\\*Verdict\\*\\*|\\*\\*Findings\\*\\*|Required Changes\" working/phase-5/codex-reviews/m2b-design-review.txt" in /home/huwei/ai_codings/distill-portal
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1271:834:42:   wrapper (`<div key={activeTab}>`) that re-mounts on every tab
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1272:901:204:      <div key="transcript" class="tabpanel-content">…placeholder…</div>
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1275:1043:768:`hidden` toggle; incoming panel re-mounts via `key={activeTab}` and
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1278:1142:1047:28. The inner `<div key={activeTab} class="tabpanel-content">` carries
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1286:1977:   204	      <div key="transcript" class="tabpanel-content">…placeholder…</div>
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1289:2043:   399	- Incoming panel: inner `<div key={activeTab}>` re-mounts → CSS
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1298:2283:  1047	28. The inner `<div key={activeTab} class="tabpanel-content">` carries
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1300:3330:42:   wrapper (`<div key={activeTab}>`) that re-mounts on every tab
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1301:3335:204:      <div key="transcript" class="tabpanel-content">…placeholder…</div>
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1303:3352:399:- Incoming panel: inner `<div key={activeTab}>` re-mounts → CSS
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1308:3368:768:`hidden` toggle; incoming panel re-mounts via `key={activeTab}` and
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1311:3384:1047:28. The inner `<div key={activeTab} class="tabpanel-content">` carries
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1312:3407:   768	`hidden` toggle; incoming panel re-mounts via `key={activeTab}` and
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1320:5254:  - **BLOCKING** `design.md:222-225,810-832,1047-1053`: `key={activeTab}` around panel content remounts content on tab switches. That breaks the frozen lazy-then-keep-mounted contract and state preservation in `working/phase-5.md:650-658`; it can also abort/refetch `RawTab` despite the keep-mounted intent.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1321:5255:  - **BLOCKING** `design.md:626-629,633-646`: active `tabpanel` lacks a `tabIndex=0` rule. WAI-ARIA APG Tabs says Tab from the tablist moves to the tabpanel unless the first meaningful panel content is focusable, and panels without focusable content should set `tabindex="0"`: https://www.w3.org/WAI/ARIA/apg/patterns/tabs/. M2b Skim/Transcript placeholders have no focusable children, so the design’s keyboard matrix is incomplete.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1324:5287:  - Add `tabIndex={0}` to active tabpanels, or at minimum to panels whose first meaningful content is not focusable, and add keyboard tests for Tab from tab into panel.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1327:5300:  - **BLOCKING** `design.md:222-225,810-832,1047-1053`: `key={activeTab}` around panel content remounts content on tab switches. That breaks the frozen lazy-then-keep-mounted contract and state preservation in `working/phase-5.md:650-658`; it can also abort/refetch `RawTab` despite the keep-mounted intent.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1328:5301:  - **BLOCKING** `design.md:626-629,633-646`: active `tabpanel` lacks a `tabIndex=0` rule. WAI-ARIA APG Tabs says Tab from the tablist moves to the tabpanel unless the first meaningful panel content is focusable, and panels without focusable content should set `tabindex="0"`: https://www.w3.org/WAI/ARIA/apg/patterns/tabs/. M2b Skim/Transcript placeholders have no focusable children, so the design’s keyboard matrix is incomplete.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1331:5333:  - Add `tabIndex={0}` to active tabpanels, or at minimum to panels whose first meaningful content is not focusable, and add keyboard tests for Tab from tab into panel.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1339:30:- Finding 5: design.md §6.1 explicit rule: Skim + Transcript panels carry `tabIndex={0}`; Metadata + Raw don't. Checklist item 29a captures rule. Test obligation 54 expanded. prototype.html `activate()` toggles `tabindex` for skim + transcript only.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1346:419:/bin/bash -lc "rg -n \"line\\.text|marker|color-warn|color-ink-muted|R03|RawTab|tabIndex|tabindex|tabpanel|animation|transition|activeTab|key=|space-5|space-10|space-12|space-4|space-8|dataset\\.populated|repopulatePanelContent|activate\\(\" working/phase-5/designs/m2b-shell/prototype.html" in /home/huwei/ai_codings/distill-portal
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1353:684:This preserves transcript scroll position + skim disclosure expansion state across tab switches WITHIN a single selection, while ensuring Skim/Transcript do not preemptively fetch when the user only intends to see Metadata or Raw.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1356:867:/bin/bash -lc "rg -n \"line\\.text|marker|color-warn|color-ink-muted|R03|RawTab|tabIndex|tabindex|tabpanel|animation|transition|activeTab|key=|space-5|space-10|space-12|space-4|space-8|keep|mounted|focusable|54|29a|5\\.1|6\\.1|3\\.4|4\\.5|7\\.2|7\\.4\" working/phase-5/designs/m2b-shell/design.md" in /home/huwei/ai_codings/distill-portal
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1367:963:622:  panels stay React-mounted across tab switches (so RawTab's
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1379:1072:1220:    entirely). Metadata and Raw tabpanels do NOT carry `tabIndex`
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1383:1087:1325:    `tabIndex={0}`; Metadata via the Copy path button; Raw via
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1398:2344:  1220	    entirely). Metadata and Raw tabpanels do NOT carry `tabIndex`
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1402:2413:  1325	    `tabIndex={0}`; Metadata via the Copy path button; Raw via
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1406:2475:   658	This preserves transcript scroll position + skim disclosure expansion state across tab switches WITHIN a single selection, while ensuring Skim/Transcript do not preemptively fetch when the user only intends to see Metadata or Raw.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1446:3314:/bin/bash -lc 'rg -n "RawPreview|raw-preview|raw-pre|tabIndex|pre|Retry|raw" apps/frontend/src/features/sessions/SessionDetail.tsx apps/frontend/src/features/sessions/SessionDetail.css' in /home/huwei/ai_codings/distill-portal
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1479:3641:  - BLOCKING — `working/phase-5/designs/m2b-shell/design.md:725`, spec section `design.md §6.1` / acceptance item 54: Raw is exempted from `tabIndex`, but Raw success renders a non-focusable `<pre>` in the artifact (`prototype.html:1376`) and no Retry button exists in success state. The promised “Raw via Retry / scrollable container” focus path is not actually specified unless the scrollable container gets `tabIndex={0}` or the Raw panel does when it has no focusable child.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1482:3653:  2. Resolve Raw focusability: either make the Raw success scroll container focusable with `tabIndex={0}`, or add `tabIndex={0}` to the active Raw panel whenever Raw has no focusable child. Update `design.md §6.1`, checklist item 29a, test obligation 54, and prototype comments/code accordingly.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1487:3668:  - BLOCKING — `working/phase-5/designs/m2b-shell/design.md:725`, spec section `design.md §6.1` / acceptance item 54: Raw is exempted from `tabIndex`, but Raw success renders a non-focusable `<pre>` in the artifact (`prototype.html:1376`) and no Retry button exists in success state. The promised “Raw via Retry / scrollable container” focus path is not actually specified unless the scrollable container gets `tabIndex={0}` or the Raw panel does when it has no focusable child.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1490:3680:  2. Resolve Raw focusability: either make the Raw success scroll container focusable with `tabIndex={0}`, or add `tabIndex={0}` to the active Raw panel whenever Raw has no focusable child. Update `design.md §6.1`, checklist item 29a, test obligation 54, and prototype comments/code accordingly.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1501:    86	**STABLE** across tab switches (Resolved Decision #12 / spec lines
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1521:   106	     tabIndex={isActive && (tabId === "skim" || tabId === "transcript" || tabId === "raw") ? 0 : undefined}
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1667:  1237	29a. Skim, Transcript, AND Raw tabpanels carry `tabIndex={0}` while
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1672:  1242	    `tabIndex={0}` on the active Raw panel, Tab from the active Raw
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1680:  1250	    panel itself does NOT carry `tabIndex`; the button serves as
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1681:  1251	    the first Tab stop inside the panel. The `tabIndex` toggles in
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1683:  1253	    `tabIndex={0}`.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1722:  1292	40. AbortController is created on mount, aborted on unmount. The
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1723:  1293	    cleanup runs on tab switch (when the panel re-mounts on first
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1784:  1354	    panel's own `tabIndex={0}` (verify the active panel carries
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1808:The two revised sections now show the intended mechanism in the visible line ranges: the header comment no longer says the tab fade is driven by a key remount, and the Raw panel rule is now grouped with Skim/Transcript for `tabIndex={0}`. I’m doing a consistency scan for stale contradictory text or new defects before deciding the verdict.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1810:/bin/bash -lc "rg -n \"key-bumping|cross-fade-IN-only via React key remount|key=\\{activeTab\\}|inner .*key|NO React key remount|React key remount|tabIndex=\\{0\\}|tabindex=\\\"0\\\"|Raw panel.*no "'`?tabindex|Metadata '"\\+ Raw.*do NOT carry|Retry button or scrollable|scrollable "'`<pre>`" working/phase-5/designs/m2b-shell/design.md working/phase-5/designs/m2b-shell/prototype.html working/phase-5/designs/m2b-shell/motion.md' in /home/huwei/ai_codings/distill-portal
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1864:    42	   is **STABLE across tab switches** (NOT remounted): the outer
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1873:    51	   per Resolved Decision #12). On `selectedRowKey` change the
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1881:    59	   Skim/Transcript — this directly violates Resolved Decision #12's
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:1909:    87	   AbortController-on-unmount. Plus the "Not yet imported" branch
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2044:   421	selection changes so re-selecting the same session re-mounts a panel
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2070:   447	consumer keeps its in-flight stream alive across tab switches and so
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2112:   621	- Spec lines 650–658 + Resolved Decision #12 mandate that visited
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2113:   622	  panels stay React-mounted across tab switches (so RawTab's
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2144:/bin/bash -lc "rg -n 'key-bumping|cross-fade-IN-only via React key remount|key=\\{activeTab\\}|React key remount|remount|re-mount|unmount|abort|tab switch|tab flips|RawTab' working/phase-5/designs/m2b-shell/design.md working/phase-5/designs/m2b-shell/prototype.html working/phase-5/designs/m2b-shell/motion.md" in /home/huwei/ai_codings/distill-portal
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2148:working/phase-5/designs/m2b-shell/motion.md:86:**STABLE** across tab switches (Resolved Decision #12 / spec lines
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2155:working/phase-5/designs/m2b-shell/prototype.html:20: *      tab switches — NOT keyed on activeTab — preserving the
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2170:working/phase-5/designs/m2b-shell/design.md:42:   is **STABLE across tab switches** (NOT remounted): the outer
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2178:working/phase-5/designs/m2b-shell/design.md:87:   AbortController-on-unmount. Plus the "Not yet imported" branch
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2190:working/phase-5/designs/m2b-shell/design.md:421:selection changes so re-selecting the same session re-mounts a panel
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2194:working/phase-5/designs/m2b-shell/design.md:447:consumer keeps its in-flight stream alive across tab switches and so
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2201:working/phase-5/designs/m2b-shell/design.md:622:  panels stay React-mounted across tab switches (so RawTab's
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2232:working/phase-5/designs/m2b-shell/design.md:1292:40. AbortController is created on mount, aborted on unmount. The
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2233:working/phase-5/designs/m2b-shell/design.md:1293:    cleanup runs on tab switch (when the panel re-mounts on first
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2306:  1292	40. AbortController is created on mount, aborted on unmount. The
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2307:  1293	    cleanup runs on tab switch (when the panel re-mounts on first
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2368:   421	selection changes so re-selecting the same session re-mounts a panel
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2375:/bin/bash -lc "rg -n 'Raw panel|Metadata \\+ Raw|Retry button|scrollable|tabIndex|tabindex|raw-pre|raw-preview|focusable|tabpanel' working/phase-5/designs/m2b-shell/design.md working/phase-5/designs/m2b-shell/prototype.html working/phase-5/designs/m2b-shell/motion.md" in /home/huwei/ai_codings/distill-portal
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2381:working/phase-5/designs/m2b-shell/motion.md:106:     tabIndex={isActive && (tabId === "skim" || tabId === "transcript" || tabId === "raw") ? 0 : undefined}
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2382:working/phase-5/designs/m2b-shell/motion.md:147:`.tabpanel-content`. They never collide. When a selection change
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2447:working/phase-5/designs/m2b-shell/design.md:1237:29a. Skim, Transcript, AND Raw tabpanels carry `tabIndex={0}` while
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2451:working/phase-5/designs/m2b-shell/design.md:1242:    `tabIndex={0}` on the active Raw panel, Tab from the active Raw
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2453:working/phase-5/designs/m2b-shell/design.md:1250:    panel itself does NOT carry `tabIndex`; the button serves as
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2454:working/phase-5/designs/m2b-shell/design.md:1251:    the first Tab stop inside the panel. The `tabIndex` toggles in
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2455:working/phase-5/designs/m2b-shell/design.md:1253:    `tabIndex={0}`.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2458:working/phase-5/designs/m2b-shell/design.md:1354:    panel's own `tabIndex={0}` (verify the active panel carries
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2466:working/phase-5/designs/m2b-shell/prototype.html:53: *          tabIndex={isActive && (id === "skim" || id === "transcript" || id === "raw") ? 0 : undefined}>
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2481:working/phase-5/designs/m2b-shell/prototype.html:947:         tabIndex={0} is added by the activate() function to the active
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2488:working/phase-5/designs/m2b-shell/prototype.html:957:        <div class="tabpanel-content"></div>
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2490:working/phase-5/designs/m2b-shell/prototype.html:960:        <div class="tabpanel-content"></div>
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2492:working/phase-5/designs/m2b-shell/prototype.html:963:        <div class="tabpanel-content"></div>
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2494:working/phase-5/designs/m2b-shell/prototype.html:966:        <div class="tabpanel-content"></div>
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2495:working/phase-5/designs/m2b-shell/prototype.html:987: *     - tabIndex=0 on active Skim + Transcript + Raw panels (Skim and
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2503:working/phase-5/designs/m2b-shell/prototype.html:1070:        const content = p.querySelector('.tabpanel-content');
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2504:working/phase-5/designs/m2b-shell/prototype.html:1080:      const content = p.querySelector('.tabpanel-content');
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2505:working/phase-5/designs/m2b-shell/prototype.html:1094:        // Skim + Transcript + Raw active panels need tabIndex=0 so Tab
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2509:working/phase-5/designs/m2b-shell/prototype.html:1099:        // tabIndex=0 unconditionally on the active Raw panel covers the
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2510:working/phase-5/designs/m2b-shell/prototype.html:1102:        // always focusable, so the panel itself doesn't need tabIndex.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2517:working/phase-5/designs/m2b-shell/prototype.html:1163:    const content = panel.querySelector('.tabpanel-content');
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2535:   326	- One `useEffect` per `sessionUid` change: creates an `AbortController`,
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2657:   250	  content** — that would defeat Resolved Decision #12.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2706:  1195	    violates Resolved Decision #12's keep-mounted contract. Required
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2739:   306	    const controller = new AbortController();
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2875:  1163	    const content = panel.querySelector('.tabpanel-content');
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2957:   936	the panel content (Resolved Decision #12 / spec lines 650–658
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2966:   945	  `style.animation` that toggles between `"none"` (when inactive)
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:2984:   963	  defeats Resolved Decision #12's keep-mounted contract. The
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:3089:   568	 * The keep-mounted contract (Resolved Decision #12 / spec lines 650–658)
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:3138:   147	`.tabpanel-content`. They never collide. When a selection change
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:3183:  - BLOCKING — `working/phase-5/designs/m2b-shell/design.md:1292`, spec `working/phase-5.md:650-658`: RawTab acceptance item 40 still says cleanup runs on tab switch and the previous in-flight fetch is aborted when the panel re-mounts. That contradicts the keep-mounted-after-visit contract and the artifact’s corrected stable subtree mechanism.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:3188:  - Rewrite `design.md` item 40 to say RawTab abort cleanup runs only when the effect actually cleans up: selected row/session uid change, Retry starts a new attempt, or outer `SessionView` unmounts on selection change. Tab switches must not unmount RawTab, abort its stream, or refetch; they only toggle `hidden`, `style.animation`, and `tabIndex`.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:3190:- **Notes**: `motion.md:145-147` still calls the cross-fade node `.tabpanel-content`; the chosen mechanism elsewhere is the `<div role="tabpanel">`. Worth aligning while fixing item 40.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:3200:  - BLOCKING — `working/phase-5/designs/m2b-shell/design.md:1292`, spec `working/phase-5.md:650-658`: RawTab acceptance item 40 still says cleanup runs on tab switch and the previous in-flight fetch is aborted when the panel re-mounts. That contradicts the keep-mounted-after-visit contract and the artifact’s corrected stable subtree mechanism.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:3205:  - Rewrite `design.md` item 40 to say RawTab abort cleanup runs only when the effect actually cleans up: selected row/session uid change, Retry starts a new attempt, or outer `SessionView` unmounts on selection change. Tab switches must not unmount RawTab, abort its stream, or refetch; they only toggle `hidden`, `style.animation`, and `tabIndex`.
+working/phase-5/codex-reviews/m2b-design-review-r3.txt:3207:- **Notes**: `motion.md:145-147` still calls the cross-fade node `.tabpanel-content`; the chosen mechanism elsewhere is the `<div role="tabpanel">`. Worth aligning while fixing item 40.
+working/phase-5/designs/m2b-shell/prototype.html:18: *      keyframe via an inline `style.animation` toggle on the panel's
+working/phase-5/designs/m2b-shell/prototype.html:20: *      tab switches — NOT keyed on activeTab — preserving the
+working/phase-5/designs/m2b-shell/prototype.html:21: *      keep-mounted contract per Resolved Decision #12 / spec
+working/phase-5/designs/m2b-shell/prototype.html:53: *          tabIndex={isActive && (id === "skim" || id === "transcript" || id === "raw") ? 0 : undefined}>
+working/phase-5/designs/m2b-shell/prototype.html:55: *           Cross-fade fires when style.animation changes from
+working/phase-5/designs/m2b-shell/prototype.html:57: *           Resolved Decision #12. */}
+working/phase-5/designs/m2b-shell/prototype.html:568: * The keep-mounted contract (Resolved Decision #12 / spec lines 650–658)
+working/phase-5/designs/m2b-shell/prototype.html:944:         `style.animation` from `none` → `tab-fade-in 120ms var(--ease-out) both`
+working/phase-5/designs/m2b-shell/prototype.html:947:         tabIndex={0} is added by the activate() function to the active
+working/phase-5/designs/m2b-shell/prototype.html:957:        <div class="tabpanel-content"></div>
+working/phase-5/designs/m2b-shell/prototype.html:960:        <div class="tabpanel-content"></div>
+working/phase-5/designs/m2b-shell/prototype.html:963:        <div class="tabpanel-content"></div>
+working/phase-5/designs/m2b-shell/prototype.html:966:        <div class="tabpanel-content"></div>
+working/phase-5/designs/m2b-shell/prototype.html:986: *       Resolved Decision #12 / spec lines 650-658 keep-mounted contract).
+working/phase-5/designs/m2b-shell/prototype.html:987: *     - tabIndex=0 on active Skim + Transcript + Raw panels (Skim and
+working/phase-5/designs/m2b-shell/prototype.html:1060:    // contract (Resolved Decision #12 / spec lines 650–658).
+working/phase-5/designs/m2b-shell/prototype.html:1070:        const content = p.querySelector('.tabpanel-content');
+working/phase-5/designs/m2b-shell/prototype.html:1074:        p.style.animation = 'none';
+working/phase-5/designs/m2b-shell/prototype.html:1080:      const content = p.querySelector('.tabpanel-content');
+working/phase-5/designs/m2b-shell/prototype.html:1090:        p.style.animation = 'none';
+working/phase-5/designs/m2b-shell/prototype.html:1093:        p.style.animation = 'tab-fade-in var(--motion-base) var(--ease-out) both';
+working/phase-5/designs/m2b-shell/prototype.html:1094:        // Skim + Transcript + Raw active panels need tabIndex=0 so Tab
+working/phase-5/designs/m2b-shell/prototype.html:1099:        // tabIndex=0 unconditionally on the active Raw panel covers the
+working/phase-5/designs/m2b-shell/prototype.html:1102:        // always focusable, so the panel itself doesn't need tabIndex.
+working/phase-5/designs/m2b-shell/prototype.html:1112:        p.style.animation = 'none';
+working/phase-5/designs/m2b-shell/prototype.html:1163:    const content = panel.querySelector('.tabpanel-content');
+working/phase-5/designs/m2b-shell/design.md:42:   is **STABLE across tab switches** (NOT remounted): the outer
+working/phase-5/designs/m2b-shell/design.md:51:   per Resolved Decision #12). On `selectedRowKey` change the
+working/phase-5/designs/m2b-shell/design.md:59:   Skim/Transcript — this directly violates Resolved Decision #12's
+working/phase-5/designs/m2b-shell/design.md:87:   AbortController-on-unmount. Plus the "Not yet imported" branch
+working/phase-5/designs/m2b-shell/design.md:250:  content** — that would defeat Resolved Decision #12.
+working/phase-5/designs/m2b-shell/design.md:326:- One `useEffect` per `sessionUid` change: creates an `AbortController`,
+working/phase-5/designs/m2b-shell/design.md:421:selection changes so re-selecting the same session re-mounts a panel
+working/phase-5/designs/m2b-shell/design.md:447:consumer keeps its in-flight stream alive across tab switches and so
+working/phase-5/designs/m2b-shell/design.md:621:- Spec lines 650–658 + Resolved Decision #12 mandate that visited
+working/phase-5/designs/m2b-shell/design.md:622:  panels stay React-mounted across tab switches (so RawTab's
+working/phase-5/designs/m2b-shell/design.md:884:- Resolved Decision #12 mandates lazy-on-first-activation, which
+working/phase-5/designs/m2b-shell/design.md:889:its inline `style.animation` from `"none"` to `"tab-fade-in 120ms
+working/phase-5/designs/m2b-shell/design.md:936:the panel content (Resolved Decision #12 / spec lines 650–658
+working/phase-5/designs/m2b-shell/design.md:945:  `style.animation` that toggles between `"none"` (when inactive)
+working/phase-5/designs/m2b-shell/design.md:963:  defeats Resolved Decision #12's keep-mounted contract. The
+working/phase-5/designs/m2b-shell/design.md:977:which writes the new `style.animation` string. Active → active
+working/phase-5/designs/m2b-shell/design.md:1195:    violates Resolved Decision #12's keep-mounted contract. Required
+working/phase-5/designs/m2b-shell/design.md:1237:29a. Skim, Transcript, AND Raw tabpanels carry `tabIndex={0}` while
+working/phase-5/designs/m2b-shell/design.md:1242:    `tabIndex={0}` on the active Raw panel, Tab from the active Raw
+working/phase-5/designs/m2b-shell/design.md:1250:    panel itself does NOT carry `tabIndex`; the button serves as
+working/phase-5/designs/m2b-shell/design.md:1251:    the first Tab stop inside the panel. The `tabIndex` toggles in
+working/phase-5/designs/m2b-shell/design.md:1253:    `tabIndex={0}`.
+working/phase-5/designs/m2b-shell/design.md:1292:40. AbortController is created on mount; the `useEffect` cleanup
+working/phase-5/designs/m2b-shell/design.md:1298:       AbortController.
+working/phase-5/designs/m2b-shell/design.md:1307:       re-runs with a new AbortController.
+working/phase-5/designs/m2b-shell/design.md:1310:       its AbortController fires.
+working/phase-5/designs/m2b-shell/design.md:1317:    `style.animation` (the cross-fade-IN trigger per item 28), and
+working/phase-5/designs/m2b-shell/design.md:1318:    `tabIndex` on the panel `<div>`. The React subtree is
+working/phase-5/designs/m2b-shell/design.md:1320:    AbortController is NOT aborted, and the in-flight fetch
+working/phase-5/designs/m2b-shell/design.md:1322:    AbortController and the same response state already in
+working/phase-5/designs/m2b-shell/design.md:1383:    panel's own `tabIndex={0}` (verify the active panel carries
+working/phase-5/designs/m2b-shell/motion.md:86:**STABLE** across tab switches (Resolved Decision #12 / spec lines
+working/phase-5/designs/m2b-shell/motion.md:106:     tabIndex={isActive && (tabId === "skim" || tabId === "transcript" || tabId === "raw") ? 0 : undefined}
+working/phase-5/designs/m2b-shell/motion.md:148:carries `hidden`, `tabIndex`, and the inline `animation` style toggle
+
+codex
+The direct checks show item 40 now names the effect cleanup cases and explicitly excludes tab switches, and motion.md now points at the `role="tabpanel"` element. I’m doing one more artifact-only scan for stale leftover language in the design and motion docs.
+exec
+/bin/bash -lc "rg -n \"cleanup runs|panel re-mounts on first|re-mounts on tab|remounts on tab|tab switch.*abort|abort.*tab switch|RawTab.*re-run|refetch|key=\\{activeTab\\}|\\.tabpanel-content|tabpanel-content|React key remount|key remount|keyed on activeTab\" working/phase-5/designs/m2b-shell/design.md working/phase-5/designs/m2b-shell/motion.md" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+working/phase-5/designs/m2b-shell/motion.md:21:| 2   | **Tab panel cross-fade-IN**              | `opacity: 0 → 1`    | `--motion-base` (120 ms) | `--ease-out`             | active-tab change (CSS `animation-name` toggle on `<div role="tabpanel">` from `none` → `tab-fade-in`) | CSS `@keyframes tab-fade-in` + animation-name re-trigger (NO React key remount) |
+working/phase-5/designs/m2b-shell/motion.md:22:| 3   | **Page-turn fade** *(signature #2)*      | `opacity: 0 → 1` + `transform: translateX(4px → 0)` | `--motion-disclosure` (200 ms) | `--ease-out`        | `selectedRowKey` change (mount of `<SessionView key={...}>`) | CSS `@keyframes session-page-turn` + React key remount on the OUTER session-pane element |
+working/phase-5/designs/m2b-shell/motion.md:121:**Do NOT use a React `key={activeTab}` on the panel content** —
+working/phase-5/designs/m2b-shell/motion.md:125:`key={activeTab}`; the corrected mechanism above does NOT touch the
+working/phase-5/designs/m2b-shell/design.md:55:   **Do NOT use a React `key={activeTab}` on the panel content
+working/phase-5/designs/m2b-shell/design.md:249:  survives intact. **Do NOT add `key={activeTab}` to the panel
+working/phase-5/designs/m2b-shell/design.md:444:**Why animation-name re-trigger and NOT a `key={activeTab}` remount:**
+working/phase-5/designs/m2b-shell/design.md:448:M3+ `useParsedSession` results aren't recomputed. A `key={activeTab}`
+working/phase-5/designs/m2b-shell/design.md:643:  {/* STABLE React subtree — NOT keyed on activeTab.
+working/phase-5/designs/m2b-shell/design.md:679:different document). The inner `key={activeTab}` remount on tab
+working/phase-5/designs/m2b-shell/design.md:682:page-turn uses React key remount. The two animations fire on
+working/phase-5/designs/m2b-shell/design.md:959:- **(C) ~~React `key={activeTab}` remount~~** — REJECTED. Remounting
+working/phase-5/designs/m2b-shell/design.md:961:  in-flight stream consumer and causes refetch-on-every-switch; for
+working/phase-5/designs/m2b-shell/design.md:1191:    inner `key={activeTab}` (or any other key that flips on tab
+working/phase-5/designs/m2b-shell/design.md:1214:    `key={index}` from `.map((_, i) => …)` and NEVER `key={activeTab}`
+working/phase-5/designs/m2b-shell/design.md:1217:    activated for the first time. `key={activeTab}` on the inner
+working/phase-5/designs/m2b-shell/design.md:1232:    **Do NOT use a React `key={activeTab}` (or any per-activation
+working/phase-5/designs/m2b-shell/design.md:1319:    **stable** — RawTab's `useEffect` does NOT re-run, the
+working/phase-5/designs/m2b-shell/design.md:1323:    progress / completed; no refetch.
+
+exec
+/bin/bash -lc "nl -ba working/phase-5/designs/m2b-shell/design.md | sed -n '410,452p'" in /home/huwei/ai_codings/distill-portal
+exec
+/bin/bash -lc "nl -ba working/phase-5/designs/m2b-shell/design.md | sed -n '34,94p'" in /home/huwei/ai_codings/distill-portal
+exec
+/bin/bash -lc "nl -ba working/phase-5/designs/m2b-shell/design.md | sed -n '928,982p'" in /home/huwei/ai_codings/distill-portal
+exec
+/bin/bash -lc "nl -ba working/phase-5/designs/m2b-shell/design.md | sed -n '610,626p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   410	
+   411	### 4.4 Tab panel mounting matrix
+   412	
+   413	| State                    | DOM         | `hidden` | a11y tree | content rendered |
+   414	|--------------------------|-------------|----------|-----------|------------------|
+   415	| not-yet-visited          | not present | n/a      | n/a       | no               |
+   416	| visited-but-inactive     | present     | true     | excluded  | yes (cached)     |
+   417	| active                   | present     | false    | included  | yes              |
+   418	
+   419	On `selectedRowKey` change: `visitedTabs` resets, all four panels
+   420	unmount cleanly. Cache (in `useParsedSession`, M3) persists across
+   421	selection changes so re-selecting the same session re-mounts a panel
+   422	that finds a cache hit — but the M2b panels (Metadata, Raw) don't
+   423	use that cache anyway (Metadata reads SessionRow only; Raw uses its
+   424	own `consumeRawPreview` consumer).
+   425	
+   426	### 4.5 Tab panel cross-fade direction
+   427	
+   428	Cross-fade is **fade-IN-only** (per spec line 87 + planner refinement):
+   429	
+   430	- Outgoing panel: hidden via `hidden` HTML attribute → `display: none`
+   431	  immediately. NO fade-out animation.
+   432	- Incoming panel: CSS `animation-name` toggles from `none` →
+   433	  `tab-fade-in` on the panel's `<div role="tabpanel">` element. The
+   434	  browser starts the keyframes (opacity 0 → 1 over 120 ms
+   435	  `--ease-out`) on the property change. The panel's React subtree is
+   436	  STABLE — NOT remounted.
+   437	
+   438	The asymmetry is intentional: a true cross-fade (out + in
+   439	overlapping) would require two panels rendered simultaneously, which
+   440	fights both the `hidden` attribute (display:none can't transition)
+   441	AND the lazy-mount discipline. Fade-in-only matches spec intent and
+   442	keeps the panel mounting story simple.
+   443	
+   444	**Why animation-name re-trigger and NOT a `key={activeTab}` remount:**
+   445	the spec mandates that visited panels stay React-mounted (Resolved
+   446	Decision #12 / spec lines 650–658) so RawTab's `consumeRawPreview`
+   447	consumer keeps its in-flight stream alive across tab switches and so
+   448	M3+ `useParsedSession` results aren't recomputed. A `key={activeTab}`
+   449	on the panel content would unmount and remount the subtree on every
+   450	tab change, aborting in-flight work and breaking the keep-mounted
+   451	contract. The CSS animation-name toggle achieves the same fade-IN
+   452	visual without touching the React tree.
+
+ succeeded in 0ms:
+   610	
+   611	Reduced-motion is therefore a no-op for these surfaces (there's
+   612	nothing to zero out); the global `prefers-reduced-motion: reduce`
+   613	rule from M1a still zeroes the three listed animations above.
+   614	
+   615	### 5.2 The two-layer animation pattern (load-bearing for the chunk)
+   616	
+   617	The spec creates a tension between two requirements:
+   618	- Spec line 654 mandates `hidden` for inactive-but-visited panels
+   619	  (display: none + accessibility-tree exclusion).
+   620	- Spec line 87 mandates a 120 ms opacity cross-fade on tab change.
+   621	- Spec lines 650–658 + Resolved Decision #12 mandate that visited
+   622	  panels stay React-mounted across tab switches (so RawTab's
+   623	  in-flight `consumeRawPreview` consumer keeps streaming, and so
+   624	  M3+ `useParsedSession` results are not recomputed on every tab
+   625	  flip).
+   626	
+
+ succeeded in 0ms:
+   928	The `working/phase-5.md` spec at line 623 lists subagent badge as a
+   929	header surface; the brief acknowledges this and explicitly defers
+   930	the header version to M4. This design.md captures the decision
+   931	explicitly so the M4 planner sees it and reads the brief.
+   932	
+   933	### 7.4 CSS animation-name re-trigger — chosen mechanism for tab cross-fade
+   934	
+   935	Cross-fade-IN must re-fire on every tab change WITHOUT remounting
+   936	the panel content (Resolved Decision #12 / spec lines 650–658
+   937	require visited panels to stay React-mounted so RawTab's in-flight
+   938	`consumeRawPreview` consumer keeps streaming, and so M3+
+   939	`useParsedSession` results are not recomputed every tab flip).
+   940	
+   941	Mechanisms considered:
+   942	
+   943	- **(A) CSS animation-name re-trigger via inline style** — chosen.
+   944	  The panel's `<div role="tabpanel">` carries an inline
+   945	  `style.animation` that toggles between `"none"` (when inactive)
+   946	  and `"tab-fade-in 120ms var(--ease-out) both"` (when active). The
+   947	  browser starts the keyframe each time the property string
+   948	  transitions from `none` to a real animation. The panel's React
+   949	  subtree is **stable** — never remounted. Reduced-motion is
+   950	  handled by the global rule (`animation-duration: 0.01ms !important`)
+   951	  established in M1a, so no per-panel branching is needed.
+   952	- **(B) Web Animations API in a `useEffect`** — works equivalently:
+   953	  `useEffect(() => { if (isActive) ref.current.animate([{opacity: 0},
+   954	  {opacity: 1}], {duration: 120, easing: 'cubic-bezier(0,0,0.2,1)'})
+   955	  }, [isActive, tabId])`. Adds a `useEffect` per panel that's
+   956	  imperative DOM manipulation; reduced-motion needs an explicit
+   957	  `window.matchMedia('(prefers-reduced-motion: reduce)')` guard.
+   958	  Functional, but more surface area.
+   959	- **(C) ~~React `key={activeTab}` remount~~** — REJECTED. Remounting
+   960	  the panel content tree on every tab change aborts RawTab's
+   961	  in-flight stream consumer and causes refetch-on-every-switch; for
+   962	  M3+ Skim/Transcript it would re-trigger `useParsedSession`. This
+   963	  defeats Resolved Decision #12's keep-mounted contract. The
+   964	  previous round of this artifact mistakenly chose this option;
+   965	  codex (round 3) caught the violation.
+   966	
+   967	Why (A) over (B): the existing `--ease-out` token is consumed
+   968	directly via the CSS variable in the inline style; the global
+   969	reduced-motion rule from M1a already handles the zero-out (no JS
+   970	branching needed); there's no imperative DOM manipulation; the
+   971	mechanism is fully declarative.
+   972	
+   973	The only subtlety: React must re-render the panel with the new
+   974	inline style on every `activeTab` change. This is automatic — the
+   975	panel is a child of the tab-container component that owns
+   976	`activeTab` state, so its `isActive` prop changes drive a re-render,
+   977	which writes the new `style.animation` string. Active → active
+   978	re-renders don't re-fire (the property string is unchanged); only
+   979	inactive → active transitions do. Verified by tracing the React
+   980	reconciler: identical `style` props produce no DOM mutation.
+   981	
+   982	### 7.5 The "Open raw" anchor on Metadata tab
+
+ succeeded in 0ms:
+    34	2. **Session-pane minimal header** — title (Fraunces italic at
+    35	   `--text-xl`) + tool badge + status pill + conflict badge.
+    36	   `Copy path`, header-side subagent badge, sourcePathIsStale hint,
+    37	   "Open raw" anchor all defer to M4. Narrow viewports (< 900 px)
+    38	   render an additional "← Back to list" quiet text-button row above.
+    39	
+    40	3. **Tab panels (active + inactive states)** — active panel renders
+    41	   inside the M1a tab-shell scaffolding. Each panel's React subtree
+    42	   is **STABLE across tab switches** (NOT remounted): the outer
+    43	   `<div role="tabpanel" hidden={!isActive}>` toggles the `hidden`
+    44	   attribute on activation, and a 120 ms opacity-only cross-fade-IN
+    45	   is driven by **CSS `animation-name` re-trigger** (set
+    46	   `animation: tab-fade-in 120ms var(--ease-out) both` when
+    47	   `isActive=true`; set `animation: none` when `isActive=false`).
+    48	   Inactive-but-visited panels carry the `hidden` HTML attribute
+    49	   (display:none + accessibility-tree exclusion). Inactive-and-
+    50	   unvisited panels are not rendered at all (lazy-on-first-activation
+    51	   per Resolved Decision #12). On `selectedRowKey` change the
+    52	   `visitedTabs` set resets to `new Set([defaultTab])` and the
+    53	   unvisited panels drop their content entirely.
+    54	
+    55	   **Do NOT use a React `key={activeTab}` on the panel content
+    56	   wrapper.** Remounting the panel content on every tab change would
+    57	   abort RawTab's in-flight `consumeRawPreview` consumer and refire
+    58	   the fetch, AND in M3+ would re-trigger `useParsedSession` for
+    59	   Skim/Transcript — this directly violates Resolved Decision #12's
+    60	   keep-mounted contract (spec lines 650–658). The cross-fade is
+    61	   driven by CSS animation re-trigger (above), NOT by React key
+    62	   remount. The page-turn fade at the OUTER `<SessionView
+    63	   key={selectedRowKey}>` layer DOES still remount (because a
+    64	   selection change SHOULD reset parser state); only the inner
+    65	   tab-panel cross-fade is non-remounting.
+    66	
+    67	4. **Page-turn fade** — outer `<SessionView key={selectedRowKey}>`
+    68	   fades opacity 0→1 + translates `4px → 0` over 200 ms `--ease-out`
+    69	   on every selection change. Implemented as a CSS `@keyframes
+    70	   session-page-turn` on the `.session-pane` element; the React key
+    71	   remount fires the animation. This is signature detail #2 from
+    72	   §Design Language; M2b is the chunk that lands it.
+    73	
+    74	5. **Metadata tab body** — `SessionMetadata.tsx` extracted from
+    75	   `SessionDetail.tsx` lines 160–256 verbatim. Same 18 fields, same
+    76	   labels, same `mono` class, same `<dt>` / `<dd>` layout. Plus the
+    77	   subagent sidecar badge (NEW for M2b per Resolved Decision #8 —
+    78	   header version defers to M4; Metadata version ships now), plus
+    79	   the sourcePathIsStale label swap, plus the statusConflict-derived
+    80	   "(disagreed during load)" muted note, plus the Copy path button,
+    81	   plus the "Open raw" anchor (rendered only when
+    82	   `row.storedSessionUid !== null`).
+    83	
+    84	6. **Raw tab body** — `RawTab.tsx` extracted from `SessionDetail.tsx`'s
+    85	   `RawPreviewBlock`. Byte-equivalent to Phase 4. Same caption
+    86	   strings, same 256 KB / 20-line caps, same Retry semantics, same
+    87	   AbortController-on-unmount. Plus the "Not yet imported" branch
+    88	   when `row.storedSessionUid === null` per Resolved Decision #18.
+    89	
+    90	7. **Skim tab placeholder** — `<SkimView>` not yet implemented; the
+    91	   tab renders an editorial "Coming in Milestone 5" muted line
+    92	   (small-font, italic Fraunces label + chrome-font subline). Subtle.
+    93	   NOT a chunky empty-state illustration.
+    94	
+
+exec
+/bin/bash -lc "nl -ba working/phase-5/designs/m2b-shell/design.md | sed -n '1188,1255p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+  1188	    so that skipping an unvisited mid-sequence panel never causes
+  1189	    React to re-key the remaining panels by position. **Once a panel
+  1190	    has mounted, its content tree is STABLE — it MUST NOT carry an
+  1191	    inner `key={activeTab}` (or any other key that flips on tab
+  1192	    change).** Remounting the panel content on every tab change
+  1193	    aborts RawTab's in-flight `consumeRawPreview` consumer and (in
+  1194	    M3+) re-triggers `useParsedSession` for Skim/Transcript — that
+  1195	    violates Resolved Decision #12's keep-mounted contract. Required
+  1196	    pattern (or strictly equivalent):
+  1197	
+  1198	    ```jsx
+  1199	    {(Object.entries({
+  1200	       transcript: <TranscriptPanel />,
+  1201	       skim:       <SkimPanel />,
+  1202	       raw:        <RawTab row={row} />,
+  1203	       metadata:   <SessionMetadata row={row} />,
+  1204	     }) as Array<[TabId, ReactNode]>)
+  1205	       .filter(([id]) => visitedTabs.has(id))
+  1206	       .map(([id, content]) => (
+  1207	         <TabPanel key={id} id={id} isActive={id === activeTab}>
+  1208	           {content}
+  1209	         </TabPanel>
+  1210	       ))}
+  1211	    ```
+  1212	
+  1213	    `key={id}` on the OUTER `<TabPanel>` (the tab id string), NEVER
+  1214	    `key={index}` from `.map((_, i) => …)` and NEVER `key={activeTab}`
+  1215	    on the inner content. Index-keying would cause the wrong panel to
+  1216	    remount when a previously-unvisited mid-sequence tab is
+  1217	    activated for the first time. `key={activeTab}` on the inner
+  1218	    content would defeat the keep-mounted contract per the warning
+  1219	    above.
+  1220	28. The cross-fade-IN runs on the panel's own `<div role="tabpanel">`
+  1221	    element via a CSS `animation-name` toggle: when `isActive=true`,
+  1222	    the panel carries `style={{ animation: "tab-fade-in 120ms
+  1223	    var(--ease-out) both" }}`; when `isActive=false`, it carries
+  1224	    `style={{ animation: "none" }}`. The browser fires the keyframe
+  1225	    each time the property string transitions from `"none"` to a
+  1226	    real animation. The keyframe is defined ONCE at module scope:
+  1227	    `@keyframes tab-fade-in { from { opacity: 0 } to { opacity: 1 } }`.
+  1228	    Active → active re-renders DO NOT re-fire (the property string
+  1229	    is unchanged); only inactive → active does. The panel's React
+  1230	    subtree is **stable** — NOT remounted on tab change. Suppressed
+  1231	    under `prefers-reduced-motion: reduce` via the M1a global rule.
+  1232	    **Do NOT use a React `key={activeTab}` (or any per-activation
+  1233	    key) on the panel content** — that would defeat the keep-mounted
+  1234	    contract; see item 27.
+  1235	29. Cross-fade is fade-IN-only — outgoing panel hides instantly via
+  1236	    the `hidden` attribute (display: none); no fade-out animation.
+  1237	29a. Skim, Transcript, AND Raw tabpanels carry `tabIndex={0}` while
+  1238	    active. Skim + Transcript placeholders have no focusable child;
+  1239	    Raw's success state also has no focusable child (the `<pre
+  1240	    class="raw-pre">` is not focusable, the caption is a `<p>`, and
+  1241	    Retry only renders in `error` / `non_2xx`). Without
+  1242	    `tabIndex={0}` on the active Raw panel, Tab from the active Raw
+  1243	    tab in `success` / `idle` / `loading` / `not_imported` would
+  1244	    skip past the panel entirely. The Raw rule is **Option A
+  1245	    (unconditional on isActive)**, NOT conditional on the state
+  1246	    machine — simpler and never wrong; in `error` / `non_2xx` the
+  1247	    panel becomes the first Tab stop and Retry is reached on the
+  1248	    next Tab press. **Metadata is the lone exception** — its Copy
+  1249	    path button is always rendered and always focusable, so the
+  1250	    panel itself does NOT carry `tabIndex`; the button serves as
+  1251	    the first Tab stop inside the panel. The `tabIndex` toggles in
+  1252	    lockstep with `hidden`: inactive panels MUST NOT carry
+  1253	    `tabIndex={0}`.
+  1254	
+  1255	### SessionMetadata (`apps/frontend/src/features/sessions/SessionMetadata.tsx`)
+
+exec
+/bin/bash -lc "nl -ba working/phase-5/designs/m2b-shell/motion.md | sed -n '1,130p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+     1	# M2b motion timing reference
+     2	
+     3	This is a single-screen lookup for the developer landing M2b. It
+     4	re-tabulates the spec §Motion budget rows that M2b activates, names
+     5	each surface, and pins the implementation idiom. Reduced-motion
+     6	fallback behavior is documented per surface.
+     7	
+     8	## M2b's three new motion surfaces
+     9	
+    10	The chunk activates three motion surfaces from the spec's §Motion
+    11	budget at `working/phase-5.md:84-95`. Two of them are signature
+    12	details (#5 and #2 from §Design Language). **No other M2b surface
+    13	animates.** The frozen motion budget permits animation only on
+    14	`transform`, `opacity`, and `background-color` AND only on the
+    15	specific surfaces listed in the spec table; M2b activates exactly
+    16	the three rows below and nothing more.
+    17	
+    18	| #   | Surface                                  | Property            | Duration             | Easing                    | Trigger                            | Idiom                          |
+    19	|-----|------------------------------------------|---------------------|----------------------|---------------------------|------------------------------------|--------------------------------|
+    20	| 1   | **Tab indicator slide** *(signature #5)* | `transform: translateX` + `scaleX` | `--motion-base` (120 ms) | `--ease-standard` | active-tab change                  | CSS `transition: transform`    |
+    21	| 2   | **Tab panel cross-fade-IN**              | `opacity: 0 → 1`    | `--motion-base` (120 ms) | `--ease-out`             | active-tab change (CSS `animation-name` toggle on `<div role="tabpanel">` from `none` → `tab-fade-in`) | CSS `@keyframes tab-fade-in` + animation-name re-trigger (NO React key remount) |
+    22	| 3   | **Page-turn fade** *(signature #2)*      | `opacity: 0 → 1` + `transform: translateX(4px → 0)` | `--motion-disclosure` (200 ms) | `--ease-out`        | `selectedRowKey` change (mount of `<SessionView key={...}>`) | CSS `@keyframes session-page-turn` + React key remount on the OUTER session-pane element |
+    23	
+    24	## M2b's INSTANT (non-animated) surfaces
+    25	
+    26	These M2b surfaces undergo state changes with NO animation /
+    27	transition. The change applies on the next paint without
+    28	interpolation:
+    29	
+    30	| #   | Surface                                  | State change              | Trigger                  |
+    31	|-----|------------------------------------------|---------------------------|--------------------------|
+    32	| 4   | Tab text color (active ↔ inactive shift) | `--color-ink-muted` → `--color-ink` (bold) | active-tab change |
+    33	| 5   | Tab text color (hover, inactive only)    | shifts via `color-mix`    | pointer enter            |
+    34	| 6   | Copy path button hover                   | background tint           | pointer enter            |
+    35	| 7   | Retry button hover                       | background tint           | pointer enter            |
+    36	| 8   | "Open raw" anchor hover underline        | border-bottom color       | pointer enter            |
+    37	| 9   | Tab focus-visible outline                | outline appears           | focus arrives            |
+    38	
+    39	Why instant rather than animated: `color`, `border-color`, and
+    40	hover `background-color` on these surfaces are **NOT** in the
+    41	spec's frozen motion budget at `working/phase-5.md:84-95`. The
+    42	budget is load-bearing per spec line 1100; adding animations on
+    43	unlisted surfaces requires a coordinator waiver, which M2b does not
+    44	seek. Instant state changes still feel responsive at 60 Hz; the
+    45	animated surfaces (#1, #2, #3) carry the chunk's animation budget.
+    46	
+    47	## Idiom details
+    48	
+    49	### Surface 1 — Tab indicator slide
+    50	
+    51	Single absolutely-positioned `<span class="indicator">` inside the
+    52	tablist. Its `transform: translateX(...) scaleX(...)` is computed from
+    53	the active tab's `getBoundingClientRect()` and applied imperatively
+    54	on activation. The transition only animates `transform` (compositor-
+    55	cheap; no layout reflow):
+    56	
+    57	```css
+    58	.tabs .indicator {
+    59	  position: absolute;
+    60	  bottom: -1px;
+    61	  left: 0;
+    62	  width: 1px;                /* base extent — load-bearing, see below */
+    63	  height: 1px;
+    64	  background: var(--color-accent);
+    65	  transform-origin: left;
+    66	  transform: translateX(0) scaleX(0);
+    67	  transition: transform var(--motion-base) var(--ease-standard);
+    68	  pointer-events: none;
+    69	}
+    70	```
+    71	
+    72	The `width: 1px` is load-bearing: an empty absolutely-positioned
+    73	`<span>` resolves to `width: auto` (= 0), and `scaleX(N) × 0 = 0`
+    74	would render an invisible indicator. With the 1 px base, the JS-
+    75	written `transform: translateX(${x}px) scaleX(${tabRect.width})`
+    76	grows the indicator to the active tab's measured pixel width.
+    77	
+    78	On initial mount the indicator settles via `requestAnimationFrame`
+    79	so font-swap metrics shifts (Fraunces fallback per M2a §4) don't
+    80	strand the indicator off-target.
+    81	
+    82	### Surface 2 — Tab panel cross-fade-IN
+    83	
+    84	CSS animation-name re-trigger on the panel's own
+    85	`<div role="tabpanel">` element. The panel's React subtree is
+    86	**STABLE** across tab switches (Resolved Decision #12 / spec lines
+    87	650–658 require visited panels to stay React-mounted so RawTab's
+    88	`consumeRawPreview` consumer keeps streaming and so M3+
+    89	`useParsedSession` results are not recomputed on every flip). The
+    90	keyframe is defined once at module scope:
+    91	
+    92	```css
+    93	@keyframes tab-fade-in {
+    94	  from { opacity: 0; }
+    95	  to   { opacity: 1; }
+    96	}
+    97	```
+    98	
+    99	The panel toggles its inline `animation` style based on `isActive`:
+   100	
+   101	```jsx
+   102	<div role="tabpanel"
+   103	     hidden={!isActive}
+   104	     id={`panel-${tabId}`}
+   105	     aria-labelledby={`tab-${tabId}`}
+   106	     tabIndex={isActive && (tabId === "skim" || tabId === "transcript" || tabId === "raw") ? 0 : undefined}
+   107	     style={{ animation: isActive
+   108	                          ? "tab-fade-in 120ms var(--ease-out) both"
+   109	                          : "none" }}>
+   110	  {/* STABLE content — never remounted on tab change */}
+   111	</div>
+   112	```
+   113	
+   114	The browser fires the keyframe each time the inline `animation`
+   115	property string changes from `"none"` to a real animation. Active →
+   116	active re-renders DON'T re-fire (the property string is unchanged).
+   117	`animation-fill-mode: both` ensures opacity stays at 1 after the
+   118	animation completes. Outgoing panel hides instantly via the `hidden`
+   119	attribute (display: none) — no fade-out.
+   120	
+   121	**Do NOT use a React `key={activeTab}` on the panel content** —
+   122	that would unmount + remount the subtree on every tab change,
+   123	aborting in-flight work and breaking the keep-mounted contract.
+   124	Codex round 3 caught the previous artifact draft regressing to
+   125	`key={activeTab}`; the corrected mechanism above does NOT touch the
+   126	React tree on tab change.
+   127	
+   128	### Surface 3 — Page-turn fade
+   129	
+   130	CSS keyframes on `.session-pane`. React's `key={selectedRowKey}` on
+
+exec
+/bin/bash -lc "nl -ba working/phase-5/designs/m2b-shell/design.md | sed -n '632,690p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   632	
+   633	**Inner cross-fade — non-remount, CSS animation-name re-trigger:**
+   634	
+   635	```jsx
+   636	<div role="tabpanel"
+   637	     hidden={!isActive}
+   638	     id={`panel-${tabId}`}
+   639	     aria-labelledby={`tab-${tabId}`}
+   640	     style={{ animation: isActive
+   641	                          ? "tab-fade-in 120ms var(--ease-out) both"
+   642	                          : "none" }}>
+   643	  {/* STABLE React subtree — NOT keyed on activeTab.
+   644	      RawTab's in-flight stream survives tab flips. */}
+   645	  {content}
+   646	</div>
+   647	```
+   648	
+   649	The browser starts the keyframes whenever the `animation` property
+   650	string changes from `"none"` to `"tab-fade-in 120ms …"`. Active →
+   651	active re-renders don't re-fire (the property string is unchanged);
+   652	inactive → active does (the string transitions from `"none"`). The
+   653	keyframe is defined once:
+   654	
+   655	```css
+   656	@keyframes tab-fade-in {
+   657	  from { opacity: 0; }
+   658	  to   { opacity: 1; }
+   659	}
+   660	```
+   661	
+   662	**Outer page-turn fade — React `key` remount IS correct here:**
+   663	
+   664	```jsx
+   665	<article class="session-pane" key={selectedRowKey}>
+   666	  {/* React remounts this on every selectedRowKey change.
+   667	      Selection change SHOULD reset parser state + visitedTabs +
+   668	      activeTab — that's the intent of the page-turn gesture. */}
+   669	</article>
+   670	```
+   671	
+   672	The `.session-pane` element's CSS animation runs once per mount via
+   673	`animation: session-page-turn var(--motion-disclosure) var(--ease-out) both`.
+   674	React's `key={selectedRowKey}` change fires a fresh mount → the
+   675	keyframe runs.
+   676	
+   677	**Do NOT conflate the two layers.** The outer remount on
+   678	`selectedRowKey` change is correct (a different selection IS a
+   679	different document). The inner `key={activeTab}` remount on tab
+   680	change is forbidden (a different tab WITHIN the same selection must
+   681	preserve panel state). Cross-fade uses CSS animation-name re-trigger;
+   682	page-turn uses React key remount. The two animations fire on
+   683	different DOM nodes and never collide.
+   684	
+   685	### 5.3 Reduced-motion behavior
+   686	
+   687	Under `prefers-reduced-motion: reduce` (or the prototype's
+   688	`data-motion="reduce"` toggle):
+   689	
+   690	- `--motion-base` and `--motion-disclosure` durations are zeroed by
+
+exec
+/bin/bash -lc "nl -ba working/phase-5/designs/m2b-shell/prototype.html | sed -n '1088,1118p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+  1088	        // browser registers the property-string change even when the
+  1089	        // previous activation was on the same element type.
+  1090	        p.style.animation = 'none';
+  1091	        // eslint-disable-next-line no-unused-expressions
+  1092	        p.offsetHeight; // reflow
+  1093	        p.style.animation = 'tab-fade-in var(--motion-base) var(--ease-out) both';
+  1094	        // Skim + Transcript + Raw active panels need tabIndex=0 so Tab
+  1095	        // from the active tab lands inside the panel. Skim + Transcript
+  1096	        // placeholders have no focusable child; Raw's success state has
+  1097	        // none either (the rendered <pre class="raw-pre"> is not
+  1098	        // focusable, and Retry only appears in error / non_2xx). Adding
+  1099	        // tabIndex=0 unconditionally on the active Raw panel covers the
+  1100	        // success state without conditional state-machine branching.
+  1101	        // Metadata is the lone exception — its Copy path button is
+  1102	        // always focusable, so the panel itself doesn't need tabIndex.
+  1103	        // WAI-ARIA APG explicitly permits tabindex="0" on a tabpanel
+  1104	        // even when it has focusable children; the panel just becomes
+  1105	        // the first stop, then focus moves into its descendants.
+  1106	        if (pid === 'skim' || pid === 'transcript' || pid === 'raw') {
+  1107	          p.setAttribute('tabindex', '0');
+  1108	        } else {
+  1109	          p.removeAttribute('tabindex');
+  1110	        }
+  1111	      } else {
+  1112	        p.style.animation = 'none';
+  1113	        p.removeAttribute('tabindex');
+  1114	      }
+  1115	    });
+  1116	
+  1117	    placeIndicator(id);
+  1118	    if (focus) focusTab(id);
+
+exec
+/bin/bash -lc "rg -n \"cleanup|AbortController|abort|re-fetch|refetch|tab switch|tab flips|key=\\{activeTab\\}|tabpanel-content|role=\\\"tabpanel\\\"|animation\" working/phase-5/designs/m2b-shell/design.md working/phase-5/designs/m2b-shell/motion.md working/phase-5/designs/m2b-shell/prototype.html" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+working/phase-5/designs/m2b-shell/prototype.html:18: *      keyframe via an inline `style.animation` toggle on the panel's
+working/phase-5/designs/m2b-shell/prototype.html:19: *      own `<div role="tabpanel">`. The React subtree is STABLE across
+working/phase-5/designs/m2b-shell/prototype.html:20: *      tab switches — NOT keyed on activeTab — preserving the
+working/phase-5/designs/m2b-shell/prototype.html:37: * page-turn fade are the three M2b-active animations and they all zero
+working/phase-5/designs/m2b-shell/prototype.html:41: * The two-layer animation pattern documented in design.md §5:
+working/phase-5/designs/m2b-shell/prototype.html:49: *     <div role="tabpanel" hidden={!isActive}
+working/phase-5/designs/m2b-shell/prototype.html:50: *          style={{ animation: isActive
+working/phase-5/designs/m2b-shell/prototype.html:55: *           Cross-fade fires when style.animation changes from
+working/phase-5/designs/m2b-shell/prototype.html:159: * animation/transition. The prototype mirrors it via a manual override
+working/phase-5/designs/m2b-shell/prototype.html:164:  animation-duration: 0.01ms !important;
+working/phase-5/designs/m2b-shell/prototype.html:165:  animation-iteration-count: 1 !important;
+working/phase-5/designs/m2b-shell/prototype.html:171:    animation-duration: 0.01ms !important;
+working/phase-5/designs/m2b-shell/prototype.html:172:    animation-iteration-count: 1 !important;
+working/phase-5/designs/m2b-shell/prototype.html:350:  animation: session-page-turn var(--motion-disclosure) var(--ease-out) both;
+working/phase-5/designs/m2b-shell/prototype.html:556:[role="tabpanel"] {
+working/phase-5/designs/m2b-shell/prototype.html:566:/* Cross-fade-IN — driven by an inline `animation` style toggled on
+working/phase-5/designs/m2b-shell/prototype.html:569: * forbids remounting the panel content, so we use animation-name
+working/phase-5/designs/m2b-shell/prototype.html:570: * re-trigger instead of React `key={activeTab}` remount. The browser
+working/phase-5/designs/m2b-shell/prototype.html:571: * starts the keyframes whenever the inline animation property string
+working/phase-5/designs/m2b-shell/prototype.html:694:   * animation is not on the spec's motion budget at
+working/phase-5/designs/m2b-shell/prototype.html:923:      <span class="badge conflict" title="Source ↔ stored disagreed during load — refresh to re-fetch.">Conflict</span>
+working/phase-5/designs/m2b-shell/prototype.html:944:         `style.animation` from `none` → `tab-fade-in 120ms var(--ease-out) both`
+working/phase-5/designs/m2b-shell/prototype.html:945:         on the `<div role="tabpanel">` itself. See activate() below.
+working/phase-5/designs/m2b-shell/prototype.html:956:      <div id="panel-transcript" role="tabpanel" aria-labelledby="tab-transcript" hidden>
+working/phase-5/designs/m2b-shell/prototype.html:957:        <div class="tabpanel-content"></div>
+working/phase-5/designs/m2b-shell/prototype.html:959:      <div id="panel-skim" role="tabpanel" aria-labelledby="tab-skim" hidden>
+working/phase-5/designs/m2b-shell/prototype.html:960:        <div class="tabpanel-content"></div>
+working/phase-5/designs/m2b-shell/prototype.html:962:      <div id="panel-raw" role="tabpanel" aria-labelledby="tab-raw" hidden>
+working/phase-5/designs/m2b-shell/prototype.html:963:        <div class="tabpanel-content"></div>
+working/phase-5/designs/m2b-shell/prototype.html:965:      <div id="panel-metadata" role="tabpanel" aria-labelledby="tab-metadata">
+working/phase-5/designs/m2b-shell/prototype.html:966:        <div class="tabpanel-content"></div>
+working/phase-5/designs/m2b-shell/prototype.html:984: *     - Cross-fade re-fire on activation via animation-name re-trigger
+working/phase-5/designs/m2b-shell/prototype.html:1054:    // Panel hidden + lazy mount + cross-fade re-fire via animation-name toggle.
+working/phase-5/designs/m2b-shell/prototype.html:1057:    // then toggling the panel's inline `animation` style between `none` and
+working/phase-5/designs/m2b-shell/prototype.html:1070:        const content = p.querySelector('.tabpanel-content');
+working/phase-5/designs/m2b-shell/prototype.html:1072:        // animation must be `none` while inactive so the next activation
+working/phase-5/designs/m2b-shell/prototype.html:1074:        p.style.animation = 'none';
+working/phase-5/designs/m2b-shell/prototype.html:1080:      const content = p.querySelector('.tabpanel-content');
+working/phase-5/designs/m2b-shell/prototype.html:1086:        // Toggle animation-name to re-fire the cross-fade keyframe.
+working/phase-5/designs/m2b-shell/prototype.html:1087:        // Force a reflow between `none` and the real animation so the
+working/phase-5/designs/m2b-shell/prototype.html:1090:        p.style.animation = 'none';
+working/phase-5/designs/m2b-shell/prototype.html:1093:        p.style.animation = 'tab-fade-in var(--motion-base) var(--ease-out) both';
+working/phase-5/designs/m2b-shell/prototype.html:1112:        p.style.animation = 'none';
+working/phase-5/designs/m2b-shell/prototype.html:1163:    const content = panel.querySelector('.tabpanel-content');
+working/phase-5/designs/m2b-shell/motion.md:13:animates.** The frozen motion budget permits animation only on
+working/phase-5/designs/m2b-shell/motion.md:21:| 2   | **Tab panel cross-fade-IN**              | `opacity: 0 → 1`    | `--motion-base` (120 ms) | `--ease-out`             | active-tab change (CSS `animation-name` toggle on `<div role="tabpanel">` from `none` → `tab-fade-in`) | CSS `@keyframes tab-fade-in` + animation-name re-trigger (NO React key remount) |
+working/phase-5/designs/m2b-shell/motion.md:26:These M2b surfaces undergo state changes with NO animation /
+working/phase-5/designs/m2b-shell/motion.md:42:budget is load-bearing per spec line 1100; adding animations on
+working/phase-5/designs/m2b-shell/motion.md:45:animated surfaces (#1, #2, #3) carry the chunk's animation budget.
+working/phase-5/designs/m2b-shell/motion.md:84:CSS animation-name re-trigger on the panel's own
+working/phase-5/designs/m2b-shell/motion.md:85:`<div role="tabpanel">` element. The panel's React subtree is
+working/phase-5/designs/m2b-shell/motion.md:86:**STABLE** across tab switches (Resolved Decision #12 / spec lines
+working/phase-5/designs/m2b-shell/motion.md:99:The panel toggles its inline `animation` style based on `isActive`:
+working/phase-5/designs/m2b-shell/motion.md:102:<div role="tabpanel"
+working/phase-5/designs/m2b-shell/motion.md:107:     style={{ animation: isActive
+working/phase-5/designs/m2b-shell/motion.md:114:The browser fires the keyframe each time the inline `animation`
+working/phase-5/designs/m2b-shell/motion.md:115:property string changes from `"none"` to a real animation. Active →
+working/phase-5/designs/m2b-shell/motion.md:117:`animation-fill-mode: both` ensures opacity stays at 1 after the
+working/phase-5/designs/m2b-shell/motion.md:118:animation completes. Outgoing panel hides instantly via the `hidden`
+working/phase-5/designs/m2b-shell/motion.md:121:**Do NOT use a React `key={activeTab}` on the panel content** —
+working/phase-5/designs/m2b-shell/motion.md:123:aborting in-flight work and breaking the keep-mounted contract.
+working/phase-5/designs/m2b-shell/motion.md:125:`key={activeTab}`; the corrected mechanism above does NOT touch the
+working/phase-5/designs/m2b-shell/motion.md:136:  animation: session-page-turn var(--motion-disclosure) var(--ease-out) both;
+working/phase-5/designs/m2b-shell/motion.md:147:panel's own `<div role="tabpanel">` element (the same element that
+working/phase-5/designs/m2b-shell/motion.md:148:carries `hidden`, `tabIndex`, and the inline `animation` style toggle
+working/phase-5/designs/m2b-shell/motion.md:162:    animation-duration: 0.01ms !important;
+working/phase-5/designs/m2b-shell/motion.md:163:    animation-iteration-count: 1 !important;
+working/phase-5/designs/m2b-shell/motion.md:174:- **Tab cross-fade-IN**: zeroed animation duration → panel snaps to
+working/phase-5/designs/m2b-shell/motion.md:176:- **Page-turn fade**: zeroed animation duration → new SessionView
+working/phase-5/designs/m2b-shell/motion.md:196:- §Reduced-motion (lines 97–112): all three M2b animations zero out
+working/phase-5/designs/m2b-shell/design.md:42:   is **STABLE across tab switches** (NOT remounted): the outer
+working/phase-5/designs/m2b-shell/design.md:43:   `<div role="tabpanel" hidden={!isActive}>` toggles the `hidden`
+working/phase-5/designs/m2b-shell/design.md:45:   is driven by **CSS `animation-name` re-trigger** (set
+working/phase-5/designs/m2b-shell/design.md:46:   `animation: tab-fade-in 120ms var(--ease-out) both` when
+working/phase-5/designs/m2b-shell/design.md:47:   `isActive=true`; set `animation: none` when `isActive=false`).
+working/phase-5/designs/m2b-shell/design.md:55:   **Do NOT use a React `key={activeTab}` on the panel content
+working/phase-5/designs/m2b-shell/design.md:57:   abort RawTab's in-flight `consumeRawPreview` consumer and refire
+working/phase-5/designs/m2b-shell/design.md:61:   driven by CSS animation re-trigger (above), NOT by React key
+working/phase-5/designs/m2b-shell/design.md:71:   remount fires the animation. This is signature detail #2 from
+working/phase-5/designs/m2b-shell/design.md:87:   AbortController-on-unmount. Plus the "Not yet imported" branch
+working/phase-5/designs/m2b-shell/design.md:132:  over 120 ms (no transform). The two animations are distinct in
+working/phase-5/designs/m2b-shell/design.md:239:  role="tabpanel" hidden={!isActive}>` only when `isVisited`; renders
+working/phase-5/designs/m2b-shell/design.md:241:  `animation-name` toggle on the SAME `<div role="tabpanel">`
+working/phase-5/designs/m2b-shell/design.md:242:  element: when `isActive=true`, an inline `style={{ animation:
+working/phase-5/designs/m2b-shell/design.md:244:  `isActive=false`, `style={{ animation: "none" }}` is applied. The
+working/phase-5/designs/m2b-shell/design.md:245:  browser restarts the animation each time the `animation` property
+working/phase-5/designs/m2b-shell/design.md:249:  survives intact. **Do NOT add `key={activeTab}` to the panel
+working/phase-5/designs/m2b-shell/design.md:326:- One `useEffect` per `sessionUid` change: creates an `AbortController`,
+working/phase-5/designs/m2b-shell/design.md:328:  cleanup that aborts the controller.
+working/phase-5/designs/m2b-shell/design.md:431:  immediately. NO fade-out animation.
+working/phase-5/designs/m2b-shell/design.md:432:- Incoming panel: CSS `animation-name` toggles from `none` →
+working/phase-5/designs/m2b-shell/design.md:433:  `tab-fade-in` on the panel's `<div role="tabpanel">` element. The
+working/phase-5/designs/m2b-shell/design.md:444:**Why animation-name re-trigger and NOT a `key={activeTab}` remount:**
+working/phase-5/designs/m2b-shell/design.md:447:consumer keeps its in-flight stream alive across tab switches and so
+working/phase-5/designs/m2b-shell/design.md:448:M3+ `useParsedSession` results aren't recomputed. A `key={activeTab}`
+working/phase-5/designs/m2b-shell/design.md:450:tab change, aborting in-flight work and breaking the keep-mounted
+working/phase-5/designs/m2b-shell/design.md:451:contract. The CSS animation-name toggle achieves the same fade-IN
+working/phase-5/designs/m2b-shell/design.md:465:  `key={selectedRowKey}` is unchanged → no remount → no animation.
+working/phase-5/designs/m2b-shell/design.md:481:    animation-duration: 0.01ms !important;
+working/phase-5/designs/m2b-shell/design.md:482:    animation-iteration-count: 1 !important;
+working/phase-5/designs/m2b-shell/design.md:489:Effect on M2b's animations:
+working/phase-5/designs/m2b-shell/design.md:587:animation ONLY on `transform`, `opacity`, and `background-color`,
+working/phase-5/designs/m2b-shell/design.md:595:| Tab panel cross-fade-IN  | `opacity` (0 → 1)                                     | `--motion-base` (120 ms)       | `--ease-out`                 | active-tab change (CSS `animation-name` toggle on `<div role="tabpanel">` from `none` → `tab-fade-in`) |
+working/phase-5/designs/m2b-shell/design.md:604:no `animation`. Hover/active state changes apply on the next paint
+working/phase-5/designs/m2b-shell/design.md:607:animations not on the table requires a coordinator waiver. None of
+working/phase-5/designs/m2b-shell/design.md:613:rule from M1a still zeroes the three listed animations above.
+working/phase-5/designs/m2b-shell/design.md:615:### 5.2 The two-layer animation pattern (load-bearing for the chunk)
+working/phase-5/designs/m2b-shell/design.md:622:  panels stay React-mounted across tab switches (so RawTab's
+working/phase-5/designs/m2b-shell/design.md:629:`animation-name` toggle on the SAME `<div role="tabpanel">` element
+working/phase-5/designs/m2b-shell/design.md:633:**Inner cross-fade — non-remount, CSS animation-name re-trigger:**
+working/phase-5/designs/m2b-shell/design.md:636:<div role="tabpanel"
+working/phase-5/designs/m2b-shell/design.md:640:     style={{ animation: isActive
+working/phase-5/designs/m2b-shell/design.md:644:      RawTab's in-flight stream survives tab flips. */}
+working/phase-5/designs/m2b-shell/design.md:649:The browser starts the keyframes whenever the `animation` property
+working/phase-5/designs/m2b-shell/design.md:672:The `.session-pane` element's CSS animation runs once per mount via
+working/phase-5/designs/m2b-shell/design.md:673:`animation: session-page-turn var(--motion-disclosure) var(--ease-out) both`.
+working/phase-5/designs/m2b-shell/design.md:679:different document). The inner `key={activeTab}` remount on tab
+working/phase-5/designs/m2b-shell/design.md:681:preserve panel state). Cross-fade uses CSS animation-name re-trigger;
+working/phase-5/designs/m2b-shell/design.md:682:page-turn uses React key remount. The two animations fire on
+working/phase-5/designs/m2b-shell/design.md:693:  1 + translateX(0)" without any visible animation.
+working/phase-5/designs/m2b-shell/design.md:710:- `<div role="tabpanel" aria-labelledby={tabId} hidden={!isActive}>`
+working/phase-5/designs/m2b-shell/design.md:888:`hidden` toggle; incoming panel's `<div role="tabpanel">` toggles
+working/phase-5/designs/m2b-shell/design.md:889:its inline `style.animation` from `"none"` to `"tab-fade-in 120ms
+working/phase-5/designs/m2b-shell/design.md:894:animation sense; it mandates the entrance animation. M2b's
+working/phase-5/designs/m2b-shell/design.md:900:entrance animation; this resolution preserves spec intent because
+working/phase-5/designs/m2b-shell/design.md:933:### 7.4 CSS animation-name re-trigger — chosen mechanism for tab cross-fade
+working/phase-5/designs/m2b-shell/design.md:943:- **(A) CSS animation-name re-trigger via inline style** — chosen.
+working/phase-5/designs/m2b-shell/design.md:944:  The panel's `<div role="tabpanel">` carries an inline
+working/phase-5/designs/m2b-shell/design.md:945:  `style.animation` that toggles between `"none"` (when inactive)
+working/phase-5/designs/m2b-shell/design.md:948:  transitions from `none` to a real animation. The panel's React
+working/phase-5/designs/m2b-shell/design.md:950:  handled by the global rule (`animation-duration: 0.01ms !important`)
+working/phase-5/designs/m2b-shell/design.md:959:- **(C) ~~React `key={activeTab}` remount~~** — REJECTED. Remounting
+working/phase-5/designs/m2b-shell/design.md:960:  the panel content tree on every tab change aborts RawTab's
+working/phase-5/designs/m2b-shell/design.md:961:  in-flight stream consumer and causes refetch-on-every-switch; for
+working/phase-5/designs/m2b-shell/design.md:977:which writes the new `style.animation` string. Active → active
+working/phase-5/designs/m2b-shell/design.md:1152:    `animation-fill-mode: both`. The `to` state explicitly sets
+working/phase-5/designs/m2b-shell/design.md:1184:27. Each `<div role="tabpanel" id="panel-{id}" aria-labelledby="tab-{id}"
+working/phase-5/designs/m2b-shell/design.md:1191:    inner `key={activeTab}` (or any other key that flips on tab
+working/phase-5/designs/m2b-shell/design.md:1193:    aborts RawTab's in-flight `consumeRawPreview` consumer and (in
+working/phase-5/designs/m2b-shell/design.md:1214:    `key={index}` from `.map((_, i) => …)` and NEVER `key={activeTab}`
+working/phase-5/designs/m2b-shell/design.md:1217:    activated for the first time. `key={activeTab}` on the inner
+working/phase-5/designs/m2b-shell/design.md:1220:28. The cross-fade-IN runs on the panel's own `<div role="tabpanel">`
+working/phase-5/designs/m2b-shell/design.md:1221:    element via a CSS `animation-name` toggle: when `isActive=true`,
+working/phase-5/designs/m2b-shell/design.md:1222:    the panel carries `style={{ animation: "tab-fade-in 120ms
+working/phase-5/designs/m2b-shell/design.md:1224:    `style={{ animation: "none" }}`. The browser fires the keyframe
+working/phase-5/designs/m2b-shell/design.md:1226:    real animation. The keyframe is defined ONCE at module scope:
+working/phase-5/designs/m2b-shell/design.md:1232:    **Do NOT use a React `key={activeTab}` (or any per-activation
+working/phase-5/designs/m2b-shell/design.md:1236:    the `hidden` attribute (display: none); no fade-out animation.
+working/phase-5/designs/m2b-shell/design.md:1292:40. AbortController is created on mount; the `useEffect` cleanup
+working/phase-5/designs/m2b-shell/design.md:1293:    aborts the in-flight fetch ONLY when the effect actually cleans
+working/phase-5/designs/m2b-shell/design.md:1294:    up. The four (and only four) cleanup triggers are:
+working/phase-5/designs/m2b-shell/design.md:1298:       AbortController.
+working/phase-5/designs/m2b-shell/design.md:1301:       row-data refresh that changes the uid runs the cleanup
+working/phase-5/designs/m2b-shell/design.md:1302:       (aborts the previous request) and then a fresh fetch.
+working/phase-5/designs/m2b-shell/design.md:1304:       (item 45), which is a `useEffect` dependency; the cleanup
+working/phase-5/designs/m2b-shell/design.md:1305:       aborts whatever is in flight (e.g. a slow-failing request
+working/phase-5/designs/m2b-shell/design.md:1307:       re-runs with a new AbortController.
+working/phase-5/designs/m2b-shell/design.md:1310:       its AbortController fires.
+working/phase-5/designs/m2b-shell/design.md:1312:    **Tab switches are NOT a cleanup trigger.** Per Resolved
+working/phase-5/designs/m2b-shell/design.md:1315:    `<div role="tabpanel">` stays mounted for the rest of the
+working/phase-5/designs/m2b-shell/design.md:1317:    `style.animation` (the cross-fade-IN trigger per item 28), and
+working/phase-5/designs/m2b-shell/design.md:1320:    AbortController is NOT aborted, and the in-flight fetch
+working/phase-5/designs/m2b-shell/design.md:1322:    AbortController and the same response state already in
+working/phase-5/designs/m2b-shell/design.md:1323:    progress / completed; no refetch.
+working/phase-5/designs/m2b-shell/design.md:1392:    fade animation presence (test for `animation-name` CSS via
+
+codex
+- **Verdict**: approved
+- **Round-3 Verification Trace**:
+  1. (item 40 BLOCKING) verified fixed at `working/phase-5/designs/m2b-shell/design.md:1292`. The cleanup triggers are now enumerated, and tab switches are explicitly excluded per `working/phase-5.md:650-658`.
+  2. (motion.md:145-147 NIT) verified fixed at `working/phase-5/designs/m2b-shell/motion.md:145`. The cross-fade node is now the active `<div role="tabpanel">`, not `.tabpanel-content`.
+- **Findings**: none
+- **Missing Evidence**: none
+- **Required Changes**: none
+- **Notes**: none
+tokens used
+53,552
+- **Verdict**: approved
+- **Round-3 Verification Trace**:
+  1. (item 40 BLOCKING) verified fixed at `working/phase-5/designs/m2b-shell/design.md:1292`. The cleanup triggers are now enumerated, and tab switches are explicitly excluded per `working/phase-5.md:650-658`.
+  2. (motion.md:145-147 NIT) verified fixed at `working/phase-5/designs/m2b-shell/motion.md:145`. The cross-fade node is now the active `<div role="tabpanel">`, not `.tabpanel-content`.
+- **Findings**: none
+- **Missing Evidence**: none
+- **Required Changes**: none
+- **Notes**: none

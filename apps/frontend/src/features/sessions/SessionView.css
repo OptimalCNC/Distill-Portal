@@ -1,65 +1,86 @@
 /*
- * Feature-local CSS for the Phase-5 right-pane placeholder.
+ * Feature-local CSS for the Phase-5 right-pane shell.
  *
- * Imported by `SessionView.tsx` (sibling-import convention; see
- * `SessionsTable.css` header for rationale).
+ * Imported by `SessionView.tsx` (sibling-import convention).
  *
  * Selectors owned here:
- *   - `.session-pane`        → wrapping <article>; padding + min size
- *   - `.session-state`       → readable measure for the state copy
- *   - `.empty-mark`          → centered text glyph above the empty
- *                              preface (typographic ornament)
- *   - `.empty-prose-1` /
- *     `.empty-prose-2`       → two-paragraph empty preface
- *   - `.loading-line`        → quiet "Reading session…" line
- *   - `.placeholder-line`    → quiet "Session view coming…" line
- *   - `.open-detail`         → M1b vestigial "Open detail" text-link
- *                              button (parallel to `.back-to-list`).
- *                              Renders only in `ready-placeholder` state.
- *   - `.not-found-heading` /
- *     `.not-found-hint` /
- *     `.not-found-actions` /
- *     `.quiet-button`        → session_not_found state surface
- *   - `.back-to-list`        → quiet text-link button (narrow only)
+ *   - `.session-pane`              → wrapping <article>; padding +
+ *                                    page-turn fade animation +
+ *                                    reading-wash overlay (M2a).
+ *   - `.session-state`             → readable measure for the empty /
+ *                                    loading / session_not_found copy.
+ *   - `.empty-mark`,
+ *     `.empty-prose-1`,
+ *     `.empty-prose-2`             → empty-state preface (M2a).
+ *   - `.loading-line`              → quiet "Reading session…" line.
+ *   - `.not-found-heading`,
+ *     `.not-found-hint`,
+ *     `.not-found-actions`,
+ *     `.quiet-button`              → session_not_found surface.
+ *   - `.back-to-list`              → quiet text-link button (narrow only).
+ *   - `.session-pane-header`       → minimal header (title + tool + status
+ *                                    + conflict badges).
+ *   - `.session-title`,
+ *     `.session-tool-badge`,
+ *     `.session-conflict-badge`    → header pieces.
+ *   - `.session-pane-tabs`         → wrapper around the four tab panels.
+ *   - `.tab-placeholder`           → editorial placeholder for Skim +
+ *                                    Transcript at M2b.
  *
- * Narrow-viewport visibility rules for `.list-pane` / `.session-pane`
- * + the split-pane <main> Grid recipe live in `styles/global.css`
- * because they govern the page-level layout, not this component's
- * internal arrangement.
+ * Motion (per motion.md):
+ *   - `@keyframes session-page-turn` → page-turn fade (signature
+ *     detail #2), 200 ms `--ease-out`. Fires on every mount of
+ *     `<article class="session-pane">` (parent's
+ *     `key={selectedRowKey}` drives the remount).
+ *   - `@keyframes tab-fade-in`       → tab panel cross-fade-IN
+ *     (120 ms `--ease-out`). Triggered via inline
+ *     `style={{ animation: "tab-fade-in 120ms var(--ease-out) both" }}`
+ *     on the active panel's `<div role="tabpanel">`.
  *
- * Structural literals introduced by this file (M1a) are listed in
- * the M1 row of `working/phase-5.md` §Structural literals (lines
- * 926–946). All values that are NOT M1 structural literals are
- * token-driven (`var(--…)`).
+ * Narrow-viewport `.back-to-list` visibility @media override lives
+ * in `styles/global.css` (M1a fix-up #1 location — DO NOT MOVE).
  */
 
 .session-pane {
-  /* Generous, editorial padding. Spec §Spatial rhythm — reading
-   * content gets a comfortable inset; chrome stays denser. M2 may
-   * promote min-block-size: 60vh once tabs ship. */
+  /* Generous, editorial padding — Spec §Spatial rhythm. */
   padding: var(--space-8) var(--space-6);
   min-inline-size: 0;
-  /* Wide-viewport gutter is `border-right` on `.list-pane` (set in
-   * global.css). The session pane carries no border — the hairline
-   * gutter is the single visual separator. */
-
-  /* M2a / signature detail #6: reading-wash texture. A 1-px
-   * `feTurbulence` SVG at 3% alpha tiled across the right pane —
-   * invisible at a glance, but reads as paper grain rather than
-   * default browser white. Suppressed in dark mode (the deep warm
-   * surface already carries the editorial mood without texture) and
-   * under `prefers-reduced-motion: reduce` (the wash is decorative;
-   * users who opt out of motion typically also dislike incidental
-   * surface treatment per WCAG WAI guidance). The token is
-   * `--noise-overlay-light` declared in `tokens.css`.
-   *
-   * Note: the M1a global reduced-motion zero-out in `global.css`
-   * targets `animation-duration` / `transition-duration` /
-   * `scroll-behavior` only — `background-image` is NOT in that
-   * property list, so the dedicated suppression rules below are
-   * additive, not redundant. */
+  /* M2a / signature detail #6: reading-wash texture (suppressed in
+   * dark mode + reduced-motion via the rules below). */
   background-image: var(--noise-overlay-light);
   background-repeat: repeat;
+  /* Page-turn fade: signature detail #2. The animation runs once
+   * per mount; the parent's `key={selectedRowKey}` makes every
+   * selection change a fresh mount → keyframe fires. The `to`
+   * state explicitly sets `translateX(0)` (NOT `transform: none`)
+   * so the property remains declared and does not interact poorly
+   * with later inline `transform` writes during the same paint. */
+  animation: session-page-turn var(--motion-disclosure) var(--ease-out) both;
+}
+
+@keyframes session-page-turn {
+  from {
+    opacity: 0;
+    transform: translateX(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Tab panel cross-fade-IN-only. Triggered via inline
+ * `style.animation` on each panel's `<div role="tabpanel">`. The
+ * outgoing panel hides instantly via `hidden` (display: none); only
+ * the incoming panel runs this keyframe. Reduced-motion zero-out
+ * lives in `styles/global.css`. */
+@keyframes tab-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -82,16 +103,7 @@
   margin-top: var(--space-3);
 }
 
-/* Empty preface. M2a promotes the empty-pane preface to the
- * Archive-room display layer: the mark glyph + first paragraph render
- * in Fraunces italic per spec line 36 (Display stack: empty-pane
- * preface). The glyph also bumps from `--text-xl` to `--text-2xl` so
- * the editorial moment carries the spec's "centered small
- * illustration" intent (spec line 595; designer §9.2). The second
- * paragraph stays in the chrome stack so the visual rhythm is
- * "italic display heading + grounding chrome body" rather than two
- * stacked italic blocks. `aria-hidden="true"` on the glyph in JSX
- * (decorative). */
+/* Empty preface (carried over from M2a). */
 .empty-mark {
   display: block;
   text-align: center;
@@ -119,50 +131,13 @@
   margin: 0;
 }
 
-/* Loading + ready-placeholder copies — both quiet single lines. */
 .loading-line {
   font-size: var(--text-sm);
   color: var(--color-text-muted);
   font-style: italic;
   margin: 0;
 }
-.placeholder-line {
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  margin: 0;
-}
 
-/* M1b vestigial "Open detail" text-link button. Visual recipe parallel
- * to `.back-to-list` (transparent bg, no border, muted resting color,
- * underline on hover/focus, sienna focus ring with 2 px offset). The
- * button is intentionally low-anchor — M2 will delete it when the
- * Tabs primitive ships. Spec line 977 + design.md §3.5. */
-.open-detail {
-  display: inline-block;
-  appearance: none;
-  background: transparent;
-  border: 0;
-  padding: var(--space-1) var(--space-2);
-  margin: 0 0 0 calc(-1 * var(--space-2));
-  color: var(--color-text-muted);
-  font: inherit;
-  font-size: var(--text-sm);
-  cursor: pointer;
-}
-.open-detail:hover,
-.open-detail:focus-visible {
-  color: var(--color-text);
-  text-decoration: underline;
-}
-.open-detail:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-.open-detail:active {
-  color: var(--color-accent-hover);
-}
-
-/* session_not_found state. */
 .not-found-heading {
   font-size: var(--text-lg);
   color: var(--color-text);
@@ -178,9 +153,6 @@
   gap: var(--space-2);
 }
 
-/* Quiet button: hairline border, transparent fill, token-driven
- * focus ring. Used for both `Clear selection` / `Try Rescan` in the
- * session_not_found state. */
 .quiet-button {
   appearance: none;
   cursor: pointer;
@@ -200,15 +172,6 @@
   outline-offset: 2px;
 }
 
-/* "← Back to list" quiet text link. Visible only on stacked-narrow
- * viewports when narrowMode === "session" — the `display: none`
- * default here is re-enabled by the @media (max-width: 899.98px)
- * override in `styles/global.css` (matched against
- * `main.split-pane[data-narrow-mode="session"] .back-to-list`). Per
- * Resolved Decision #17, this gesture sets narrowMode = "list" ONLY
- * (preserves selectedRowKey + URL + scroll + tab state — the lighter
- * "step back without losing the session" gesture; Esc is the heavier
- * "fully clear selection" gesture). */
 .back-to-list {
   display: none;
   appearance: none;
@@ -229,4 +192,92 @@
 .back-to-list:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+
+/*
+ * Minimal header (M2b). NO border, NO shadow — the tab strip's
+ * hairline border-bottom is the visual anchor below it. The header
+ * itself is editorial, not navigational.
+ */
+.session-pane-header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-4);
+}
+
+.session-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: var(--text-xl);
+  color: var(--color-ink);
+  font-weight: 500;
+  /* Long titles wrap rather than overflow horizontally. */
+  min-inline-size: 0;
+}
+
+/* Tool badge — hairline-bordered transparent ground (mirrors the
+ * SessionsTable `.title-cell-tool` recipe). NOT the filled
+ * `.badge.{variant}` recipe (status is the row's dedicated pill;
+ * tool is a quieter contextual signal). */
+.session-tool-badge {
+  display: inline-block;
+  padding: 0 var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.02em;
+}
+
+/* Conflict pill in the header. Uses the warn color recipe per
+ * Phase-5 spec line 622 + design.md checklist item 24 + colors.md
+ * H09 — `statusConflict` is an attention signal (the row's run mode
+ * disagrees with its terminal status), NOT a stop-the-line error,
+ * so the warn semantic is correct. Phase-4's `.drawer-conflict-badge`
+ * used the error recipe; the M2b minimal-header conflict badge is a
+ * structurally new element, not a byte-equivalent extraction, so the
+ * spec redirect to warn applies here. */
+.session-conflict-badge {
+  background: color-mix(in srgb, var(--color-warn) 15%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-warn) 70%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
+}
+
+/* Wrapper around the four <TabPanel> elements. */
+.session-pane-tabs {
+  /* No padding — each panel body owns its own inset. */
+}
+
+/* Skim + Transcript editorial placeholder (M2b). Centered dashed
+ * box with italic Fraunces label + chrome subline. Per design.md
+ * §3.5 + acceptance #46. */
+.tab-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: var(--space-6) 0;
+  padding: var(--space-8) var(--space-6);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.tab-placeholder strong {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: var(--text-lg);
+  color: var(--color-ink-muted);
+}
+
+.tab-placeholder span {
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
 }

@@ -1,3 +1,16 @@
+/**
+ * DEAD-BUT-TESTED through Phase 5 M5; deleted in M6 per
+ * `working/phase-5.md` Resolved Decision #6 + spec line 231. Do NOT
+ * delete in earlier chunks.
+ *
+ * As of Phase 5 M2b this module is no longer reachable from the
+ * running app — the modal drawer entry-point was retired alongside
+ * the four-tab right-pane shell landing. The `Drawer.test.tsx`
+ * suite still passes via direct `import { Drawer } from "./Drawer"`,
+ * and the `focus-trap-react` dependency stays live through M5.
+ * M6 deletes this file + Drawer.css + Drawer.test.tsx + the
+ * focus-trap-react dependency.
+ */
 // Generic shell that wraps the native HTML `<dialog>` element.
 //
 // Why native `<dialog>` instead of a hand-rolled modal:

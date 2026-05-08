@@ -264,8 +264,8 @@ test("mounted App fetches all three panels and renders the unified table", async
 
   // (5) M1b dropped the Stored Copy column from the table — the
   //     `View Raw` / metadata anchors no longer surface here. They
-  //     remain reachable via the still-mounted Phase-4 `<Drawer>`
-  //     (M2's Metadata tab will eventually replace that surface).
+  //     are now reachable via the M2b Metadata tab in the right
+  //     pane (assertions don't change here).
   //     Sanity: confirm the raw anchor is NOT in the inline DOM.
   const rawAnchor = container.querySelector(
     'a[href="/api/v1/sessions/abc-uid-123/raw"]',
@@ -714,7 +714,7 @@ test("per-panel error isolation: source 500 leaves stored rows rendered in the u
   });
 
   // M1b dropped the Stored Copy column from the table; the stored
-  // UID surfaces only via the still-mounted Phase-4 `<Drawer>`.
+  // UID surfaces via the M2b Metadata tab.
   // Confirm the stored row IS in the merged set by its synthesized
   // `stored:` rowKey (rendered inside the Title cell's stacked
   // rowKey line — see SessionsTable's `.title-cell-rowkey`).
@@ -1171,13 +1171,13 @@ test("statusConflict: a both-row with disagreeing source/stored statuses renders
   );
 });
 
-test("stored_only + source_missing: M1b dropped the Source Path column — the row still renders, the hover-hint signal is now reachable via the still-mounted Drawer only", async () => {
+test("stored_only + source_missing: M1b dropped the Source Path column — the row still renders, the hover-hint signal is now reachable via the Metadata tab only", async () => {
   // Per spec §Compact list rows (lines 520–531) the Source Path column
   // is gone in M1b. The staleness signal (`row.sourcePathIsStale`) no
-  // longer surfaces in the inline DOM; it remains accessible via the
-  // still-mounted Phase-4 `<Drawer>` until M2's Metadata tab takes
-  // over. This test confirms (a) the row still renders and (b) the
-  // last-known source path no longer leaks into the inline table DOM.
+  // longer surfaces in the inline DOM; it is accessible via the
+  // M2b Metadata tab in the right pane. This test confirms (a) the
+  // row still renders and (b) the last-known source path no longer
+  // leaks into the inline table DOM.
   const STORED_ONLY: StoredSessionView[] = [
     {
       status: "source_missing",
@@ -2895,10 +2895,12 @@ test("M1a: URL-on-mount with ?session=<rowKey> pre-selects + matched row carries
   // data-deep-link is the M1a pulse attribute. Click-driven
   // selection NEVER carries it; URL-driven mount does.
   expect(matched?.getAttribute("data-deep-link")).toBe("true");
-  // Right pane state is "ready-placeholder" once the row merged in.
+  // M2b: right pane state is "ready" once the row merged in
+  // (M1a "ready-placeholder" was retired in M2b alongside the
+  // four-tab shell landing).
   await waitFor(() => {
     const article = container.querySelector("article.session-pane");
-    expect(article?.getAttribute("data-state")).toBe("ready-placeholder");
+    expect(article?.getAttribute("data-state")).toBe("ready");
   });
 });
 
@@ -3241,7 +3243,7 @@ test("M1a: popstate round trip — dispatching popstate after URL change syncs s
   });
   await waitFor(() => {
     article = container.querySelector("article.session-pane");
-    expect(article?.getAttribute("data-state")).toBe("ready-placeholder");
+    expect(article?.getAttribute("data-state")).toBe("ready");
   });
   // The selected row is m1a-2 (the new URL value).
   const selected = container.querySelector(
@@ -3254,12 +3256,12 @@ test("M1a: popstate round trip — dispatching popstate after URL change syncs s
 });
 
 // =============================================================
-// Phase 5 / M1b: row click does NOT auto-mount the dialog;
-// vestigial "Open detail" button is the new drawer entry point;
-// only one ActionBar instance in the DOM (sticky-footer relocation).
+// Phase 5 / M2b: row click mounts the SessionView with default
+// tab = Metadata; popstate snaps active tab back to default;
+// no <dialog> element renders inside the App.
 // =============================================================
 
-test("M1b: row click does NOT mount the dialog (no auto-open)", async () => {
+test("M2b: row click → SessionView mounts → default tab = Metadata → Metadata <dl> carries the row's session_key text", async () => {
   resetUrl();
   globalThis.fetch =
     makeM1aFetchMock() as unknown as typeof globalThis.fetch;
@@ -3274,27 +3276,31 @@ test("M1b: row click does NOT mount the dialog (no auto-open)", async () => {
   await act(async () => {
     titleCell.click();
   });
-  // The row is selected (aria-current="true"), but the drawer is NOT
-  // open. M1b retired the Phase-4 row-click → drawer auto-mount in
-  // favour of the vestigial "Open detail" button.
-  const selected = container.querySelector(
-    'tbody tr[aria-current="true"]',
-  );
-  expect(selected).not.toBeNull();
-  const dialog = container.querySelector(
-    "dialog.drawer",
-  ) as HTMLDialogElement | null;
-  expect(dialog).not.toBeNull();
-  expect(dialog!.open).toBe(false);
+  // The right pane is now in "ready" state (M2b — replaces M1a
+  // "ready-placeholder"). The Metadata tab is active by default
+  // (Resolved Decision #11 — DEFAULT_TAB_ON_SELECTION = "metadata").
+  const article = container.querySelector("article.session-pane");
+  await waitFor(() => {
+    expect(article?.getAttribute("data-state")).toBe("ready");
+  });
+  const metadataTab = container.querySelector("#tab-metadata");
+  expect(metadataTab?.getAttribute("aria-selected")).toBe("true");
+  // The Metadata <dl> renders the row's session_key text
+  // (the value of `row_key`).
+  const selectedRowKey =
+    container.querySelector('tbody tr[aria-current="true"]')
+      ?.querySelector(".title-cell-rowkey")?.textContent ?? "";
+  expect(selectedRowKey.startsWith("claude_code:m1a-")).toBe(true);
+  const metadataPanel = container.querySelector("#panel-metadata");
+  expect(metadataPanel?.textContent).toContain(selectedRowKey);
 });
 
-test("M1b: row click followed by 'Open detail' click mounts the dialog with the matched row", async () => {
+test("M2b: row click does NOT mount any <dialog> element (the modal drawer is gone)", async () => {
   resetUrl();
   globalThis.fetch =
     makeM1aFetchMock() as unknown as typeof globalThis.fetch;
   const { container } = render(<App />);
   await screen.findByText("claude_code:m1a-1");
-  // Step 1: click a row to select it (URL-synced).
   const tr = container.querySelector(
     "tbody tr",
   ) as HTMLTableRowElement | null;
@@ -3303,42 +3309,66 @@ test("M1b: row click followed by 'Open detail' click mounts the dialog with the 
   await act(async () => {
     titleCell.click();
   });
-  // Step 2: the right pane is now in `ready-placeholder`; the
-  // vestigial "Open detail" button is rendered there.
+  // No <dialog> in the DOM — the modal drawer was unmounted in M2b.
+  expect(container.querySelector("dialog")).toBeNull();
+  expect(container.querySelector("dialog.drawer")).toBeNull();
+});
+
+test("M2b: popstate to a different row resets the active tab to the default (Metadata)", async () => {
+  resetUrl();
+  globalThis.fetch =
+    makeM1aFetchMock() as unknown as typeof globalThis.fetch;
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:m1a-1");
+  // Click a row → URL-syncs to that row + activeTab = metadata.
+  const tr = container.querySelector(
+    "tbody tr",
+  ) as HTMLTableRowElement | null;
+  expect(tr).not.toBeNull();
+  const titleCell = tr!.querySelector(".title-cell") as HTMLElement;
+  await act(async () => {
+    titleCell.click();
+  });
+  // Wait for the SessionView to mount in "ready" state with the
+  // default Metadata tab active.
   const article = container.querySelector("article.session-pane");
   await waitFor(() => {
-    expect(article?.getAttribute("data-state")).toBe("ready-placeholder");
+    expect(article?.getAttribute("data-state")).toBe("ready");
   });
-  const openDetail = Array.from(
-    article!.querySelectorAll("button"),
-  ).find((b) => b.textContent === "Open detail") as
-    | HTMLButtonElement
-    | undefined;
-  expect(openDetail).not.toBeUndefined();
-  // Capture which row the user actually selected so we can match the
-  // drawer body against THAT row's identity (default sort may put
-  // either fixture row first depending on tie-breaking).
-  const selectedRowKey =
-    container.querySelector('tbody tr[aria-current="true"]')
-      ?.querySelector(".title-cell-rowkey")?.textContent ?? "";
-  expect(selectedRowKey.startsWith("claude_code:m1a-")).toBe(true);
-  // Step 3: click Open detail → drawer mounts.
+  // Switch to a non-default tab so we can assert the popstate
+  // reset.
+  const skimTab = container.querySelector(
+    "#tab-skim",
+  ) as HTMLButtonElement | null;
+  expect(skimTab).not.toBeNull();
   await act(async () => {
-    openDetail!.click();
+    skimTab!.click();
   });
-  const dialog = container.querySelector(
-    "dialog.drawer",
-  ) as HTMLDialogElement | null;
-  expect(dialog).not.toBeNull();
-  await waitFor(() => {
-    expect(dialog!.open).toBe(true);
-  });
-  // The drawer body shows the matched row's session_key (Phase-4
-  // SessionDetail body preserved through M5). The session-key string
-  // is part of the SessionDetail metadata <dl> render.
-  await waitFor(() => {
-    expect(dialog!.textContent?.includes(selectedRowKey)).toBe(true);
-  });
+  expect(skimTab!.getAttribute("aria-selected")).toBe("true");
+  // Now drive popstate to another row. The window URL is mirrored
+  // by `useSelectedSession`'s `selectRow`; flip it via the same
+  // hook by clicking the other row.
+  const allRows = Array.from(
+    container.querySelectorAll("tbody tr"),
+  ) as HTMLTableRowElement[];
+  // Find a different row from the currently selected.
+  const otherRow = allRows.find(
+    (r) => r.getAttribute("aria-current") !== "true",
+  );
+  if (otherRow !== undefined) {
+    const otherTitle = otherRow.querySelector(".title-cell") as HTMLElement;
+    await act(async () => {
+      otherTitle.click();
+    });
+    // The new SessionView mounts (key changes) → activeTab snaps
+    // back to default (Metadata).
+    await waitFor(() => {
+      const meta = container.querySelector(
+        "#tab-metadata",
+      ) as HTMLButtonElement | null;
+      expect(meta?.getAttribute("aria-selected")).toBe("true");
+    });
+  }
 });
 
 test("M1b: <ActionBar> renders exactly once in the DOM (inside the sticky footer)", async () => {

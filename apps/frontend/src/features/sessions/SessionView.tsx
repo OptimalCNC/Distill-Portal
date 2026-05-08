@@ -1,71 +1,75 @@
-// Right-pane placeholder for the Phase-5 split-pane master-detail
-// layout. M1a shipped the SHELL only; M1b adds the vestigial
-// "Open detail" text-link button in the `ready-placeholder` state
-// (still backed by the Phase-4 `<Drawer>` until M6 retires it).
-// The four-tab Tabs primitive (Transcript / Skim / Raw / Metadata)
-// lands in M2.
+// Right-pane shell for the Phase-5 split-pane master-detail layout.
 //
-// State machine driven by a `data-state` attribute on the wrapping
-// `<article>` (chosen over conditional className per design.md
-// §7.6): Playwright tests can assert
-// `expect(...).toHaveAttribute("data-state", "session_not_found")`
-// directly, and the CSS reads via attribute selectors so each
-// state's visual treatment is colocated with the state name.
+// M2b rewires from the M1a four-state placeholder to a four-tab shell.
+// The state machine is preserved verbatim from M1a, with one
+// substitution: the M1a `ready-placeholder` state is REPLACED by
+// `ready` (the tab shell mounts inside it). Empty / loading /
+// session_not_found are unchanged from M1a.
 //
-//   - "empty"               → no `selectedRowKey`. Two-paragraph
-//                             preface (verbatim spec lines 591–593)
-//                             plus a centered text glyph (·) at
-//                             `var(--text-xl)` weight 200. NO icon
-//                             library, no SVG asset — typographic
-//                             ornament only (designer §7.1).
-//   - "loading"             → `selectedRowKey` set AND the row is
-//                             not yet in the merged set AND any of
-//                             the source/stored/scan-errors fetches
-//                             is still in flight. Single quiet
-//                             "Reading session…" line in
-//                             `var(--color-text-muted)`.
-//   - "ready-placeholder"   → row IS selected and merged in. Renders
-//                             the placeholder line + the M1b
-//                             vestigial "Open detail" text-link
-//                             button. The button mirrors the M1a
-//                             `.back-to-list` recipe (transparent
-//                             bg, no border, muted resting color,
-//                             underline on hover/focus, sienna
-//                             focus ring with 2 px offset). Clicking
-//                             it opens the still-mounted Phase-4
-//                             `<Drawer>` via the parent's
-//                             `onOpenDetail` callback. M2 will
-//                             delete this button when the Tabs
-//                             primitive ships — the surface is
-//                             intentionally low-anchor.
-//   - "session_not_found"   → the URL `?session=<key>` has no
-//                             matching row AFTER all three GETs
-//                             have settled. Two-line message +
-//                             two quiet buttons:
-//                               · "Clear selection" → selectRow(null)
-//                               · "Try Rescan"      → refetchAll()
-//                             Per spec line 572–574 the URL is NOT
-//                             auto-cleared — user pressing
-//                             "Clear selection" is the explicit
-//                             gesture.
+// Tab shell (per design.md §3.2):
+//   - Minimal header: title (Fraunces italic at --text-xl) + tool
+//     badge + status pill + optional conflict badge. Copy path,
+//     subagent badge, sourcePathIsStale hint, and "Open raw" header
+//     anchor all defer to M4.
+//   - Tabs primitive (Transcript / Skim / Raw / Metadata) below.
+//     Default tab AT M2b = "metadata" (Resolved Decision #11; M4
+//     shifts to "transcript").
+//   - Lazy panel mounting (Resolved Decision #12 + spec lines
+//     650–658): a panel renders ONLY if `tabId === activeTab` OR
+//     `visitedTabs.has(tabId)`. Once activated, the panel stays
+//     React-mounted for the rest of the selection — preserves
+//     RawTab's in-flight stream + future TranscriptView /
+//     SkimView state.
+//   - Cross-fade-IN-only animation: the panel's own
+//     `<div role="tabpanel">` toggles its inline `style.animation`
+//     between "tab-fade-in 120ms var(--ease-out) both" (active) and
+//     "none" (inactive). The browser fires the keyframe each time
+//     the property string transitions from "none" to a real
+//     animation. The panel's React subtree is STABLE — never
+//     remounted on tab change.
+//   - Page-turn fade: the outer `<article class="session-pane">`
+//     carries `key={selectedRowKey}` so every selection change is a
+//     fresh React mount; the `@keyframes session-page-turn` rule in
+//     SessionView.css fires automatically on mount.
 //
-// Stacked-narrow viewports (< 900 px) when narrowMode === "session"
-// also render the "← Back to list" quiet text-link button at the
-// top. Per Resolved Decision #17 (spec line 1162) "Back to list"
-// only sets narrowMode = "list" and PRESERVES selectedRowKey + URL
-// (so re-opening the same row brings the session pane back exactly
-// where the user left it). Esc is a different gesture: fully clears
-// selection. The handler for Esc lives globally in App.tsx.
+// tabIndex matrix (design.md §6.1 + acceptance item 29a — Option A):
+//   - Skim, Transcript, AND Raw active panels carry `tabIndex={0}`
+//     (none of them have an unconditional focusable child, so the
+//     panel itself must be the first Tab stop).
+//   - Metadata does NOT carry `tabIndex` — its Copy path button is
+//     always rendered and always focusable.
+//   - Inactive panels (`hidden=true`) MUST NOT carry `tabIndex`.
+//
+// Esc / "Back to list" / selection ownership are unchanged from
+// M1a (App.tsx still owns selectRow / narrowMode).
+import { useEffect, useState, type ReactNode } from "react";
+import { Tabs } from "../../components/Tabs";
+import { SessionMetadata } from "./SessionMetadata";
+import { RawTab } from "./RawTab";
+import type { SessionRow } from "./types";
 import "./SessionView.css";
 
 export type SessionViewState =
   | "empty"
   | "loading"
-  | "ready-placeholder"
+  | "ready"
   | "session_not_found";
+
+export type TabId = "transcript" | "skim" | "raw" | "metadata";
+
+/**
+ * Default active tab when a selection arrives. M2b ships with
+ * Metadata; M4 will shift this to "transcript" alongside the
+ * TranscriptView landing (single-line edit + one test update).
+ */
+export const DEFAULT_TAB_ON_SELECTION: TabId = "metadata";
 
 export type SessionViewProps = {
   state: SessionViewState;
+  /** Pinned-`now` ISO string used by the Metadata tab for relative-time labelling. Required when state === "ready". */
+  now?: string;
+  /** The merged row to render in the tab shell. Required when state === "ready". */
+  row?: SessionRow;
   /** When true (narrow viewport + narrowMode === "session"), render the "← Back to list" affordance. */
   showBackToList: boolean;
   /** Called when the user clicks "← Back to list". Sets narrowMode = "list" only. */
@@ -74,29 +78,24 @@ export type SessionViewProps = {
   onClearSelection: () => void;
   /** Called when the user clicks "Try Rescan" in the session_not_found state. */
   onTryRescan: () => void;
-  /** M1b: called when the user clicks the vestigial "Open detail"
-   *  button in the `ready-placeholder` state. The trigger element
-   *  (the button itself) is forwarded so the parent can stash it
-   *  in a ref and restore focus on close. Optional — when omitted,
-   *  the click is a no-op (defensive default for tests / future
-   *  M2 deletion path). */
-  onOpenDetail?: (triggerEl: HTMLElement | null) => void;
 };
 
-export function SessionView({
-  state,
-  showBackToList,
-  onBackToList,
-  onClearSelection,
-  onTryRescan,
-  onOpenDetail,
-}: SessionViewProps) {
+export function SessionView(props: SessionViewProps) {
+  const {
+    state,
+    showBackToList,
+    onBackToList,
+    onClearSelection,
+    onTryRescan,
+  } = props;
+
   return (
     <article
       className="session-pane"
       data-state={state}
       aria-busy={state === "loading"}
       aria-live="polite"
+      aria-label="Session view"
     >
       {showBackToList ? (
         <button
@@ -107,33 +106,31 @@ export function SessionView({
           ← Back to list
         </button>
       ) : null}
-      <div className="session-state">
-        {state === "empty" ? <EmptyPaneCopy /> : null}
-        {state === "loading" ? <LoadingCopy /> : null}
-        {state === "ready-placeholder" ? (
-          <ReadyPlaceholderCopy onOpenDetail={onOpenDetail} />
-        ) : null}
-        {state === "session_not_found" ? (
+      {state === "empty" ? (
+        <div className="session-state">
+          <EmptyPaneCopy />
+        </div>
+      ) : null}
+      {state === "loading" ? (
+        <div className="session-state">
+          <LoadingCopy />
+        </div>
+      ) : null}
+      {state === "session_not_found" ? (
+        <div className="session-state">
           <SessionNotFoundCopy
             onClearSelection={onClearSelection}
             onTryRescan={onTryRescan}
           />
-        ) : null}
-      </div>
+        </div>
+      ) : null}
+      {state === "ready" && props.row !== undefined && props.now !== undefined ? (
+        <ReadyTabShell row={props.row} now={props.now} />
+      ) : null}
     </article>
   );
 }
 
-/**
- * Empty preface — verbatim spec lines 591–593. The mark glyph is a
- * typographic ornament (a centered middle-dot) at `var(--text-xl)`
- * — designer §7.1 picked text-only over an SVG illustration to
- * match the Archive-room "ink-on-paper" mood AND avoid a new asset
- * dependency. NB: the spec's narrative once mentioned `--text-2xl`
- * but that is an M2 typography token; M1a uses `--text-xl` (Phase-4
- * baseline) and the round-1 UI/UX reviewer pinned this as a
- * blocking finding in the design loop.
- */
 function EmptyPaneCopy() {
   return (
     <>
@@ -154,36 +151,6 @@ function EmptyPaneCopy() {
 
 function LoadingCopy() {
   return <p className="loading-line">Reading session…</p>;
-}
-
-function ReadyPlaceholderCopy({
-  onOpenDetail,
-}: {
-  onOpenDetail?: (triggerEl: HTMLElement | null) => void;
-}) {
-  return (
-    <>
-      <p className="placeholder-line">
-        Session view coming in Milestone 2.
-      </p>
-      {/* M1b vestigial "Open detail" text-link button. Renders ONLY
-       * in the `ready-placeholder` state (not in empty / loading /
-       * session_not_found). The Phase-4 `<Drawer>` + `<SessionDetail>`
-       * remain mounted; clicking this button is the M1b drawer
-       * entry point (row click no longer auto-mounts the drawer).
-       * The button is intentionally low-anchor; M2's Tabs primitive
-       * will replace it. */}
-      <button
-        type="button"
-        className="open-detail"
-        onClick={(event) => {
-          if (onOpenDetail) onOpenDetail(event.currentTarget);
-        }}
-      >
-        Open detail
-      </button>
-    </>
-  );
 }
 
 function SessionNotFoundCopy({
@@ -217,5 +184,174 @@ function SessionNotFoundCopy({
         </button>
       </div>
     </>
+  );
+}
+
+/**
+ * The four-tab shell that renders inside `state === "ready"`.
+ *
+ * Owns:
+ *   - `activeTab` state (controlled value passed to <Tabs>).
+ *   - `visitedTabs` Set (lazy-mount discipline).
+ *   - The minimal header (title / tool badge / status pill / optional
+ *     conflict badge).
+ *   - The four `<TabPanel>` wrappers with the cross-fade-IN-only
+ *     animation toggle.
+ *
+ * Reset on selection change is automatic — the parent
+ * `<SessionView key={selectedRowKey}>` (set in App.tsx) remounts
+ * this whole subtree, so `useState` re-initializes activeTab to
+ * `DEFAULT_TAB_ON_SELECTION` and visitedTabs to
+ * `new Set([DEFAULT_TAB_ON_SELECTION])`.
+ */
+function ReadyTabShell({
+  row,
+  now,
+}: {
+  row: SessionRow;
+  now: string;
+}) {
+  const [activeTab, setActiveTab] = useState<TabId>(DEFAULT_TAB_ON_SELECTION);
+  const [visitedTabs, setVisitedTabs] = useState<Set<TabId>>(
+    () => new Set<TabId>([DEFAULT_TAB_ON_SELECTION]),
+  );
+
+  // Defensive reset: if `row.rowKey` changes WITHOUT a parent-level
+  // remount (shouldn't happen given the App.tsx `key={selectedRowKey}`
+  // contract, but kept as a safety belt), snap activeTab back to the
+  // default and reset visitedTabs.
+  useEffect(() => {
+    setActiveTab(DEFAULT_TAB_ON_SELECTION);
+    setVisitedTabs(new Set<TabId>([DEFAULT_TAB_ON_SELECTION]));
+  }, [row.rowKey]);
+
+  const handleActivate = (next: TabId) => {
+    setActiveTab(next);
+    setVisitedTabs((prev) => {
+      if (prev.has(next)) return prev;
+      const nextSet = new Set(prev);
+      nextSet.add(next);
+      return nextSet;
+    });
+  };
+
+  // Object-keyed panel content — NEVER index-keyed (so an unvisited
+  // mid-sequence panel never causes React to re-key remaining panels
+  // by position). The OUTER `key={id}` on `<TabPanel>` is required;
+  // the INNER content tree must NOT carry any per-activation key
+  // (acceptance #27).
+  const panelContent: Record<TabId, ReactNode> = {
+    transcript: <TranscriptPlaceholder />,
+    skim: <SkimPlaceholder />,
+    raw: <RawTab row={row} />,
+    metadata: <SessionMetadata row={row} now={now} />,
+  };
+
+  const tabs = [
+    { id: "transcript" as const, label: "Transcript", panel: null },
+    { id: "skim" as const, label: "Skim", panel: null },
+    { id: "raw" as const, label: "Raw", panel: null },
+    { id: "metadata" as const, label: "Metadata", panel: null },
+  ];
+
+  return (
+    <>
+      <SessionPaneHeader row={row} />
+      <Tabs<TabId>
+        ariaLabel="Session content tabs"
+        value={activeTab}
+        onValueChange={handleActivate}
+        tabs={tabs}
+      />
+      <div className="session-pane-tabs">
+        {(Object.entries(panelContent) as Array<[TabId, ReactNode]>)
+          .filter(([id]) => visitedTabs.has(id))
+          .map(([id, content]) => (
+            <TabPanel key={id} id={id} isActive={id === activeTab}>
+              {content}
+            </TabPanel>
+          ))}
+      </div>
+    </>
+  );
+}
+
+function SessionPaneHeader({ row }: { row: SessionRow }) {
+  return (
+    <header className="session-pane-header">
+      <h2 className="session-title">{row.title ?? "(untitled)"}</h2>
+      <span className="session-tool-badge">{row.tool}</span>
+      <span className={`badge ${row.status.replace(/_/g, "-")}`}>
+        {row.status.replace(/_/g, " ")}
+      </span>
+      {row.statusConflict ? (
+        <span
+          className="badge session-conflict-badge"
+          title="Source and stored status disagreed during load — refresh to re-fetch."
+        >
+          Conflict
+        </span>
+      ) : null}
+    </header>
+  );
+}
+
+/**
+ * One tab panel. Renders its `<div role="tabpanel">` always; the
+ * `hidden` HTML attribute toggles visibility. The panel's React
+ * subtree is STABLE — never remounted on tab change (Resolved
+ * Decision #12). The cross-fade-IN-only animation is driven by the
+ * inline `style.animation` toggle.
+ *
+ * tabIndex matrix (design.md §6.1 acceptance item 29a):
+ *   - Skim, Transcript, Raw → tabIndex=0 when active.
+ *   - Metadata              → no tabIndex (Copy path button is always
+ *                             focusable).
+ *   - Inactive (hidden)     → no tabIndex.
+ */
+function TabPanel({
+  id,
+  isActive,
+  children,
+}: {
+  id: TabId;
+  isActive: boolean;
+  children: ReactNode;
+}) {
+  const wantsTabIndex =
+    isActive && (id === "skim" || id === "transcript" || id === "raw");
+  return (
+    <div
+      role="tabpanel"
+      id={`panel-${id}`}
+      aria-labelledby={`tab-${id}`}
+      hidden={!isActive}
+      tabIndex={wantsTabIndex ? 0 : undefined}
+      style={{
+        animation: isActive
+          ? "tab-fade-in 120ms var(--ease-out) both"
+          : "none",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function TranscriptPlaceholder() {
+  return (
+    <div className="tab-placeholder">
+      <strong>Transcript</strong>
+      <span>Coming in Milestone 4</span>
+    </div>
+  );
+}
+
+function SkimPlaceholder() {
+  return (
+    <div className="tab-placeholder">
+      <strong>Skim</strong>
+      <span>Coming in Milestone 5</span>
+    </div>
   );
 }

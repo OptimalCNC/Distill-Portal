@@ -63,7 +63,6 @@ import { Toast } from "./components/Toast";
 import {
   SessionsView,
   type PanelState,
-  type SessionsViewHandle,
 } from "./features/sessions/SessionsView";
 import { mergeSessions } from "./features/sessions/mergeSessions";
 import { isImportable } from "./features/sessions/types";
@@ -76,10 +75,7 @@ import { applyPagination, type PageSize } from "./features/sessions/applyPaginat
 import { useSessionFilters } from "./features/sessions/useSessionFilters";
 import { useToastQueue } from "./features/sessions/useToastQueue";
 import { readLastRescan, writeLastRescan } from "./features/sessions/lastRescan";
-import {
-  useSelectedSession,
-  buildUrl,
-} from "./features/sessions/useSelectedSession";
+import { useSelectedSession } from "./features/sessions/useSelectedSession";
 import { SessionView } from "./features/sessions/SessionView";
 
 export function App() {
@@ -652,25 +648,6 @@ export function App() {
     void refetchAll();
   }, [refetchAll]);
 
-  // M1b: ref handle into SessionsView's drawer-trigger flow. The
-  // vestigial "Open detail" button in `SessionView` invokes
-  // `handleOpenDetailFromSessionView` below; that callback resolves
-  // the current `selectedRowKey` against the merged set and
-  // delegates to `SessionsView.openDetail`. Drawer state stays
-  // encapsulated in `SessionsView` (Phase 4 pattern preserved per
-  // the planner's recommendation; minimizes diff vs lifting it
-  // entirely into App.tsx).
-  const sessionsViewRef = useRef<SessionsViewHandle | null>(null);
-  const handleOpenDetailFromSessionView = useCallback(
-    (triggerEl: HTMLElement | null) => {
-      if (selectedRowKey === null) return;
-      const handle = sessionsViewRef.current;
-      if (handle === null) return;
-      handle.openDetail(selectedRowKey, triggerEl);
-    },
-    [selectedRowKey],
-  );
-
   // M1a: Clear selection from the session_not_found state.
   // Identical to Esc's effect on the URL: clears selectedRowKey
   // and removes the `?session=` query param. Does NOT clear
@@ -769,35 +746,36 @@ export function App() {
     };
   }, [selectRow]);
 
-  // M1a: derive the right-pane state. The four-state machine
-  // (per design.md §4.1) maps the (selectedRowKey, mergedRows,
+  // M2b: derive the right-pane state. The four-state machine
+  // (per design.md §4.8) maps the (selectedRowKey, mergedRows,
   // panel-state) tuple to one of:
   //   - empty               → no selection
   //   - loading             → selection set; row not yet merged;
   //                           any GET still in flight
-  //   - ready-placeholder   → selection set; row IS in merged set
-  //                           (M1a placeholder until M2's tabs)
+  //   - ready               → selection set; row IS in merged set.
+  //                           SessionView mounts the four-tab shell
+  //                           (M1a `ready-placeholder` retired in M2b).
   //   - session_not_found   → selection set; row NOT in merged set;
   //                           ALL three GETs settled (per spec line
   //                           572 — the "all three settled" gate is
   //                           load-bearing because resolving "missing
   //                           row" too early would flash spurious
   //                           copy while fetches are still in flight)
-  // Note: `buildUrl` is referenced just to keep it in the import
-  // graph for future call sites (Esc + selectRow already use it via
-  // the hook).
-  void buildUrl; // see comment above
   let sessionViewState:
     | "empty"
     | "loading"
-    | "ready-placeholder"
+    | "ready"
     | "session_not_found";
+  let matchedRowForReady = null as
+    | import("./features/sessions/types").SessionRow
+    | null;
   if (selectedRowKey === null) {
     sessionViewState = "empty";
   } else {
     const matchedRow = mergedRows.find((r) => r.rowKey === selectedRowKey);
     if (matchedRow !== undefined) {
-      sessionViewState = "ready-placeholder";
+      sessionViewState = "ready";
+      matchedRowForReady = matchedRow;
     } else if (
       sourceState.kind === "loading" ||
       storedState.kind === "loading" ||
@@ -869,7 +847,6 @@ export function App() {
           <section className="panel">
             <h2>Sessions</h2>
             <SessionsView
-              ref={sessionsViewRef}
               sourceState={sourceState}
               storedState={storedState}
               mergedRows={mergedRows}
@@ -920,16 +897,20 @@ export function App() {
           </section>
         </aside>
         {/* Session pane: <article> per spec line 1121 / design §3.4.
-            M1a renders only the placeholder state machine; M2 will
-            mount the four-tab Tabs primitive inside this same
-            element. */}
+            M2b mounts the four-tab Tabs primitive when state="ready".
+            `key={selectedRowKey ?? "__empty__"}` makes every selection
+            change a fresh React mount so the page-turn @keyframes in
+            SessionView.css fires; the sentinel keeps non-selected
+            states stably mounted. */}
         <SessionView
+          key={selectedRowKey ?? "__empty__"}
           state={sessionViewState}
+          row={matchedRowForReady ?? undefined}
+          now={now}
           showBackToList={showBackToList}
           onBackToList={handleBackToList}
           onClearSelection={handleClearSelectionFromNotFound}
           onTryRescan={handleTryRescan}
-          onOpenDetail={handleOpenDetailFromSessionView}
         />
       </main>
       {/* Toast queue lives outside <main> for DOM placement (it's a

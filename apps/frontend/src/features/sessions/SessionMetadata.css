@@ -1,0 +1,114 @@
+/*
+ * Feature-local CSS for the Phase-5 Metadata tab body.
+ *
+ * Imported by `SessionMetadata.tsx` (sibling-import convention).
+ * The Phase-4 drawer-body sheet (`SessionDetail.css`) remains on
+ * disk through M5 per Resolved Decision #6 and is no longer
+ * reachable from the running app — these rules are a NEW extraction
+ * with tab-panel-body chrome (NOT drawer chrome).
+ *
+ * Selectors owned here:
+ *   - `.session-metadata`                → tab-body wrapper
+ *   - `.metadata-meta`,
+ *     `.metadata-meta dt`,
+ *     `.metadata-meta dd`                → 18-field <dl> grid
+ *   - `.metadata-source-path`            → wrapping span on the path text
+ *   - `.metadata-copy-btn` /
+ *     `.metadata-copy-btn:hover`         → Copy path button
+ *   - `.metadata-copy-hint`              → "Copied" / fallback hint
+ *   - `.metadata-raw-link-row`           → "View raw" anchor row
+ *   - `.metadata-subagent-badge`         → dashed-hairline informational chip
+ *
+ * The `.badge` shell + variant recipes (`.up-to-date`, `.not-stored`,
+ * `.outdated`, `.source-missing`) live in `SessionsTable.css`; the
+ * status pill rendered inside the `<dd>` reuses that shell verbatim.
+ *
+ * Token-driven: every value is `var(--…)` except the structural
+ * literals introduced for tab-body chrome (16rem max-height clamps,
+ * etc. land in RawTab.css; this file's only structural literals are
+ * inherited from the Phase-4 grid).
+ */
+
+.session-metadata {
+  /* Tab-body wrapper: comfortable reading inset within the panel.
+   * The Tabs primitive's bottom hairline anchors the panel; the
+   * body itself carries no border. */
+  padding: var(--space-6) 0;
+}
+
+.metadata-meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+
+.metadata-meta dt {
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  font-size: var(--text-sm);
+  font-family: var(--font-chrome);
+}
+
+.metadata-meta dd {
+  margin: 0;
+  word-break: break-all;
+  font-size: var(--text-sm);
+}
+
+.metadata-source-path {
+  display: inline;
+}
+
+.metadata-copy-btn {
+  font: inherit;
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.metadata-copy-btn:hover {
+  border-color: var(--color-ink-muted);
+}
+
+.metadata-copy-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.metadata-copy-hint {
+  font-size: var(--text-xs);
+}
+
+.metadata-raw-link-row {
+  margin: var(--space-4) 0 0;
+}
+
+.metadata-raw-link-row .raw-link {
+  color: var(--color-accent);
+}
+
+.metadata-raw-link-row .raw-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Subagent sidecar informational chip. Dashed hairline — reads as
+ * a footnote on the field rather than a warning at the top. Per
+ * design.md §3.3 + §6.5: --color-ink-muted text on
+ * --color-border-strong dashed border passes WCAG AA on both
+ * surfaces (M2a-measured ratios; no new pair). */
+.metadata-subagent-badge {
+  display: inline-block;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-2);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+}
