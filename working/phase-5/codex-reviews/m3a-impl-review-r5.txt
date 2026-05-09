@@ -1,0 +1,1881 @@
+Reading prompt from stdin...
+OpenAI Codex v0.130.0
+--------
+workdir: /home/huwei/ai_codings/distill-portal/apps/frontend
+model: gpt-5.5
+provider: OpenAI
+approval: never
+sandbox: workspace-write [workdir, /tmp, /home/huwei/.codex/memories]
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019e0b32-02e7-7b92-9bd4-a4fe373e7dd4
+--------
+user
+You are an external non-Claude reviewer for `phase-5` M3a, ROUND 5.
+
+## Round history (compact)
+
+- r1: false positive (coordinator transcription error)
+- r2: 2 genuine BLOCKING (function_call spec-literal + totality gaps) — fixed
+- r3: 2 genuine BLOCKING (exec_command spec-literal + JSON.stringify(undefined) bug) — fixed
+- r4: 1 genuine BLOCKING — exec_command_output was over-stringified. Spec line 779 reads `text: JSON.stringify(payload.command) / payload.output` — the "/" separator means exec_command stringifies (left), exec_command_output is raw passthrough (right). I misread the spec.
+
+## Round-5 fix (just landed)
+
+`apps/frontend/src/features/sessions/parsers/codex.ts case "exec_command_output"`:
+
+```typescript
+case "exec_command_output": {
+  const rawOutput = payload ? payload["output"] : null;
+  if (rawOutput === null || rawOutput === undefined) {
+    warnings.push({
+      lineOrdinal,
+      reason: "event_msg.exec_command_output missing payload.output",
+    });
+  }
+  // Spec line 779: `text: ... / payload.output` — for exec_command_output the raw
+  // string passes through (no JSON.stringify wrapper, unlike exec_command). Non-string
+  // outputs (array/object/missing) get JSON.stringify-with-null-normalization to keep
+  // Message.text: string. JSON.stringify(undefined) === undefined, so normalize to null first.
+  const text =
+    typeof rawOutput === "string"
+      ? rawOutput
+      : JSON.stringify(rawOutput ?? null);
+  ...
+}
+```
+
+Note `case "exec_command"` is unchanged from r4 — still uses `JSON.stringify(rawCommand ?? null)` which is correct per spec.
+
+## Updated tests in codex.test.ts
+
+Updated test "event_msg.exec_command_output with string output...": now asserts `text === "total 0\nfoo\n"` (raw passthrough, NO JSON.stringify quote-wrapping).
+
+Added test "event_msg.exec_command_output with non-string output JSON.stringify-wraps for type safety": asserts `text === '{"exit":0,"stdout":"ok"}'` for object input.
+
+Existing test "missing payload.output warns AND emits text='null'" unchanged — for non-string non-string paths, JSON.stringify(null) = "null" string, satisfying the type contract.
+
+## Verification
+
+| Command | r4 | r5 |
+|---|---|---|
+| `bun run test` | 414/0/1476/27 | 415/0/1477/27 (+1 test net: +1 non-string test, -0 removed; +1 expect) |
+| `bunx tsc --noEmit` | clean | clean |
+| `bun run build` | CSS 21.34 / JS 239.78 | unchanged |
+
+## Files inspectable
+
+- `/home/huwei/ai_codings/distill-portal/apps/frontend/src/features/sessions/parsers/codex.ts`
+- `/home/huwei/ai_codings/distill-portal/apps/frontend/src/features/sessions/parsers/codex.test.ts`
+- `/home/huwei/ai_codings/distill-portal/working/phase-5.md` (spec)
+
+## Output exactly this structure
+
+- **Verdict**: one of `approved`, `approved with nits`, `needs changes`, `needs more evidence`
+- **Findings**: concise finding bullets, or `none`
+- **Missing Evidence**: exact missing evidence required, or `none`
+- **Required Changes**: exact prompt or code changes required before approval, or `none`
+- **Notes**: optional improvements, or `none`
+
+# Begin review now.
+
+codex
+I’ll review this as a code-review pass: first the repo guidance the local AGENTS file points at, then the parser, tests, and the cited spec line so the verdict is grounded in the actual files.
+exec
+/bin/bash -lc "pwd && rg --files -g 'README.md' -g 'docs/README.md' -g 'docs/dependency-rules.md' -g 'docs/dev-commands.md' -g 'src/features/sessions/parsers/codex.ts' -g 'src/features/sessions/parsers/codex.test.ts' -g 'working/phase-5.md' /home/huwei/ai_codings/distill-portal" in /home/huwei/ai_codings/distill-portal/apps/frontend
+ succeeded in 0ms:
+/home/huwei/ai_codings/distill-portal/apps/frontend
+/home/huwei/ai_codings/distill-portal/components/ui-api-contracts/README.md
+/home/huwei/ai_codings/distill-portal/working/README.md
+/home/huwei/ai_codings/distill-portal/components/ingest-service/README.md
+/home/huwei/ai_codings/distill-portal/components/configuration/README.md
+/home/huwei/ai_codings/distill-portal/components/observability/README.md
+/home/huwei/ai_codings/distill-portal/docs/README.md
+/home/huwei/ai_codings/distill-portal/components/collector-runtime/README.md
+/home/huwei/ai_codings/distill-portal/README.md
+/home/huwei/ai_codings/distill-portal/progress/README.md
+/home/huwei/ai_codings/distill-portal/components/raw-session-store/README.md
+/home/huwei/ai_codings/distill-portal/apps/backend/README.md
+/home/huwei/ai_codings/distill-portal/apps/frontend/README.md
+/home/huwei/ai_codings/distill-portal/apps/frontend/src/features/sessions/parsers/codex.test.ts
+/home/huwei/ai_codings/distill-portal/apps/frontend/src/features/sessions/parsers/codex.ts
+
+exec
+/bin/bash -lc 'git status --short' in /home/huwei/ai_codings/distill-portal/apps/frontend
+ succeeded in 0ms:
+?? ../../.claude/
+?? src/features/sessions/parsers/
+?? ../../working/phase-5/codex-reviews/m3a-impl-review-r1.txt
+?? ../../working/phase-5/codex-reviews/m3a-impl-review-r2.txt
+?? ../../working/phase-5/codex-reviews/m3a-impl-review-r3.txt
+?? ../../working/phase-5/codex-reviews/m3a-impl-review-r4.txt
+?? ../../working/phase-5/codex-reviews/m3a-impl-review-r5.txt
+
+codex
+The parser directory is currently untracked in Git from this workspace’s view, so I’ll treat the supplied files as the review surface and avoid inferring commit history from Git. Next I’m checking the project rules and the exact spec clause around line 779.
+exec
+/bin/bash -lc "sed -n '1,220p' /home/huwei/ai_codings/distill-portal/README.md" in /home/huwei/ai_codings/distill-portal/apps/frontend
+ succeeded in 0ms:
+# Distill Portal
+
+Distill Portal is a local-first portal for collecting, storing, and analyzing coding sessions produced by AI coding tools.
+
+Read [PRD.md](PRD.md) for the product summary and functional requirements.
+
+For developers, please read [docs/README.md](docs/README.md) for documentation on the repository structure, component ownership, features, and development commands.
+
+## Contributing
+
+- Read [PRD.md](PRD.md) for the product summary and functional requirements.
+- Read [ARCHITECTURE.md](ARCHITECTURE.md) for the architecture.
+- Read [docs/README.md](docs/README.md) for the repository structure, component ownership, features, and development commands.
+
+### Hard Rules
+
+- Backend owns machine-consumable HTTP routes; do not reintroduce backend-owned end-user HTML.
+- Frontend talks to the backend only over HTTP and only consumes generated contract types from `components/ui-api-contracts/bindings/*.ts`.
+- `apps/frontend` must not import from `components/collector-runtime`, `components/ingest-service`, or `components/raw-session-store`.
+- HTTP payload changes must update `components/ui-api-contracts`, the Rust and TS sides of both apps, and relevant tests together.
+- Keep docs aligned with any layout, command, dependency, or payload-shape change.
+
+### Quick Checks
+
+Fast checks to run before committing:
+
+```bash
+cargo check --workspace
+cargo test --workspace
+```
+
+From `apps/frontend/`:
+
+```bash
+bun run test
+```
+
+See [docs/dev-commands.md](docs/dev-commands.md) for the full reference, including targeted Rust suites, the TypeScript contract-drift check, and the browser e2e suite.
+
+## Quick Start
+
+Run the backend:
+
+```bash
+cargo run -p distill-portal-backend
+```
+
+Run the frontend (from `apps/frontend/`):
+
+```bash
+bun install
+bun run dev
+```
+
+Then open the frontend address. By default:
+
+- backend: `http://127.0.0.1:4000`
+- frontend (Vite dev server): `http://127.0.0.1:4100`
+
+See `docs/dev-commands.md` for the full list of frontend and test commands.
+
+exec
+/bin/bash -lc "sed -n '1,260p' /home/huwei/ai_codings/distill-portal/docs/dependency-rules.md" in /home/huwei/ai_codings/distill-portal/apps/frontend
+exec
+/bin/bash -lc "sed -n '1,260p' /home/huwei/ai_codings/distill-portal/docs/dev-commands.md" in /home/huwei/ai_codings/distill-portal/apps/frontend
+ succeeded in 0ms:
+# Dev Commands
+
+## Run The Backend
+
+```bash
+cargo run -p distill-portal-backend
+```
+
+Useful backend env vars:
+
+- `DISTILL_PORTAL_BACKEND_BIND` or `DISTILL_PORTAL_BIND`
+- `DISTILL_PORTAL_DATA_DIR`
+- `DISTILL_PORTAL_POLL_INTERVAL_SECS`
+- `DISTILL_PORTAL_CLAUDE_ROOTS`
+- `DISTILL_PORTAL_CODEX_ROOTS`
+
+## Run The Frontend
+
+The frontend lives under `apps/frontend/` as a Bun-managed package (`package.json`, `bun.lock`, `vite.config.ts`, `index.html`, `src/*.tsx`).
+
+Commands (run from `apps/frontend/`):
+
+```bash
+bun install
+bun run dev
+bun run build
+bun run test
+```
+
+- `bun run dev` starts the Vite dev server on `http://127.0.0.1:4100` with `strictPort: true` so a port collision fails fast.
+- `bun run build` writes static assets to `apps/frontend/dist/`.
+- `bun run test` runs `bun test src` (the unit suite; browser e2e is `bun run test:e2e`, documented below). After Phase 4 the unit suite is 231 tests / 891 expect calls across 17 files covering the unified session list, the session detail drawer, pagination, the toast queue, and the shared React primitives:
+  - **Mounted-`App` integration** — `apps/frontend/src/App.test.tsx`: the read-only unified-list render against three `Promise.allSettled` GETs, the rescan and import mutation flows (including an explicit race-window reproducer for the stale-selection bug), per-panel independent-error behavior, the four documented empty-state branches, the click-time intersection rule under filter and pagination races, the toast queue replacing the old inline `lastReport`, and the cross-page bulk-select / retry-after-intervening-rescan invariants.
+  - **Unified session feature** — `apps/frontend/src/features/sessions/`: `SessionsTable.test.tsx`, `SessionFilters.test.tsx`, `SessionDetail.test.tsx` (component-level integration), and pure helpers `mergeSessions.test.ts`, `filterSessions.test.ts`, `applyPagination.test.ts`, `relativeTime.test.ts`, `useSessionFilters.test.ts` (incl. 12+ corrupt-input fallbacks), `useToastQueue.test.ts`, `lastRescan.test.ts`, and the streaming `rawPreview.test.ts` (line-cap + byte-cap + abort + non-JSON fallback).
+  - **Shared React primitives** — `apps/frontend/src/components/`: `ActionBar.test.tsx` (idle zero/non-zero selection, pending rescan/import disabled states, sticky modifier, last-rescan caption, hidden-by-filter caption + clear affordances), `Drawer.test.tsx` (native `<dialog>` shell, focus restoration, Esc-close, backdrop close), `Pagination.test.tsx` (page-size selector + Prev/Next + caption + clamp), `Toast.test.tsx` (kind variants + Retry + Dismiss roles), `ScanErrorsCallout.test.tsx` (renders nothing when empty).
+  - The variant-matrix `StatusBadge.test.tsx` from M2 was retired in M6 (Chunk G); the four-variant DOM-shape contract is preserved by a dedicated test in `SessionsTable.test.tsx` (`SessionsTable: inlined status badge renders all 4 variants ...`) that iterates over `up_to_date / not_stored / outdated / source_missing` and asserts the inlined `<span class="badge {variant}">{label}</span>` markup byte-for-byte for each variant. `App.test.tsx` continues to assert the `up-to-date` variant at the integration level.
+
+## Dev Topology
+
+```
+browser
+   |
+   v
+http://127.0.0.1:4100  <-- Vite dev server (bun run dev)
+   |
+   |  /api/v1/**  and  /health   proxied by Vite
+   v
+http://127.0.0.1:4000  <-- Rust backend (cargo run -p distill-portal-backend)
+```
+
+- Backend: `127.0.0.1:4000` (Rust, `cargo run -p distill-portal-backend`).
+- Frontend dev server: `127.0.0.1:4100` (Bun + Vite, `bun run dev` under `apps/frontend/`).
+- Vite proxies `/api/v1/**` and `/health` to the backend so browser code can use same-origin paths without ad hoc CORS setup. Dev-time proxy config lives in `apps/frontend/vite.config.ts`, not in application code.
+
+## Run Both Together
+
+Terminal 1:
+
+```bash
+cargo run -p distill-portal-backend
+```
+
+Terminal 2 (from `apps/frontend/`):
+
+```bash
+bun run dev
+```
+
+Then open `http://127.0.0.1:4100/` in the browser. The Rust backend must be running for `/health` and `/api/v1/**` to resolve through the Vite proxy.
+
+## Browser E2E (Playwright)
+
+The inspection-surface browser e2e lives under `apps/frontend/e2e/` and
+drives Chromium against the Bun + Vite dev server, which proxies to a
+real Rust backend spawned inside the harness (`e2e/harness/backend.ts`).
+The harness uses `Bun.spawn` per the Bun-first rule, so the suite must
+be run with Bun as the runtime (`bun --bun x playwright test`, wired
+into the `test:e2e` script below).
+
+Commands (run from `apps/frontend/`):
+
+```bash
+bun run test:e2e:install   # one-time: install Chromium via Playwright
+bun run test:e2e           # spawns the backend, starts Vite, runs Chromium
+```
+
+The harness binds the backend to `127.0.0.1:4000` because
+`vite.config.ts` proxies `/api/v1/**` and `/health` to that address;
+tests run serially (`workers: 1`) so the port is never double-bound.
+See `playwright.config.ts` for the full configuration.
+
+## Targeted Tests
+
+```bash
+cargo test -p distill-portal-collector-runtime --test parsers
+cargo test -p distill-portal-backend --test http_api
+cargo test -p distill-portal-e2e --test inspection_surface
+```
+
+## TypeScript Contract Bindings
+
+The Rust contract types in `components/ui-api-contracts/src/lib.rs` are the source of truth. TypeScript declarations under `components/ui-api-contracts/bindings/` are generated from them via the `ts-bindings` cargo feature (off by default) and must be regenerated whenever the Rust contract changes.
+
+Verify the checked-in TS files match the current Rust source (fails on drift):
+
+```bash
+cargo test -p distill-portal-ui-api-contracts --features ts-bindings
+```
+
+Regenerate the checked-in TS files after a contract change:
+
+```bash
+cargo test -p distill-portal-ui-api-contracts --features ts-bindings -- --ignored regenerate_ts_bindings
+```
+
+See `components/ui-api-contracts/README.md` for the tool-choice rationale and the full list of generated files.
+
+## Workspace Verification
+
+```bash
+cargo check --workspace
+cargo test --workspace
+```
+
+ succeeded in 0ms:
+# Dependency Rules
+
+## Allowed Directions
+
+- `apps/backend` may depend on:
+  - `components/collector-runtime`
+  - `components/configuration`
+  - `components/ingest-service`
+  - `components/observability`
+  - `components/raw-session-store`
+  - `components/ui-api-contracts`
+- `apps/frontend` (Bun + Vite + React + TypeScript) may depend on:
+  - `components/ui-api-contracts/bindings/*.ts` (generated TypeScript types; one-way import only)
+  - external npm packages managed via Bun for UI, HTTP fetch, and test tooling. Phase 4 adopted a strict 2-package escape-hatch budget for browser-only concerns native APIs cannot meet; one slot is consumed (`focus-trap-react@^11`, fixing a native `<dialog>` Tab-cycling gap), one slot remains reserved (`@tanstack/react-virtual`, gated on documented evidence that pagination plus `useMemo` cannot keep render time bounded). Adding a third escape-hatch package requires a fresh planning round.
+  - all backend communication is over HTTP to `apps/backend`
+- `components/ingest-service` may depend on:
+  - `components/collector-runtime`
+  - `components/raw-session-store`
+- `components/raw-session-store` may depend on:
+  - `components/ui-api-contracts`
+- `components/collector-runtime` may depend on:
+  - `components/ui-api-contracts`
+- `components/configuration`, `components/observability`, and `components/ui-api-contracts` should not depend on app crates
+
+## Forbidden Directions
+
+- `apps/frontend` must not depend on:
+  - `components/collector-runtime`
+  - `components/ingest-service`
+  - `components/raw-session-store`
+- No component crate may depend on `apps/backend` or `apps/frontend`
+- `apps/backend` must not render end-user HTML
+- `apps/frontend` must not reach into storage or ingest internals directly
+
+## Contract Handling
+
+- Shared page and JSON payloads live in `components/ui-api-contracts`
+- `components/ui-api-contracts/src/lib.rs` is the single source of truth for the contract. The TypeScript declarations under `components/ui-api-contracts/bindings/` are checked-in generated artifacts derived from `src/lib.rs` by the `ts-bindings` cargo feature — they are the canonical downstream output and must stay in sync with the Rust source: regenerate and commit them together with any Rust contract change, never hand-edited
+- The Bun frontend consumes contract types via one-way TypeScript imports from `components/ui-api-contracts/bindings/*.ts`, using the `@contracts/*` path alias wired in `apps/frontend/tsconfig.json` (or a direct relative path). The frontend MUST NOT re-declare contract types by hand; the thin barrel at `apps/frontend/src/lib/contracts.ts` re-exports the generated types for internal consumption
+- If a backend JSON shape changes, update:
+  - `components/ui-api-contracts/src/lib.rs`
+  - `components/ui-api-contracts/bindings/*.ts` (regenerate via `cargo test -p distill-portal-ui-api-contracts --features ts-bindings -- --ignored regenerate_ts_bindings`; see `docs/dev-commands.md`)
+  - `apps/backend/src/http_api.rs`
+  - the typed API layer in `apps/frontend/src/lib/` (`api.ts`, `contracts.ts`)
+  - any impacted frontend rendering under `apps/frontend/src/App.tsx`, the unified session feature at `apps/frontend/src/features/sessions/`, or the shared React primitives under `apps/frontend/src/components/`
+  - the relevant tests in `apps/backend/tests/http_api.rs`, `apps/frontend/src/App.test.tsx`, `apps/frontend/e2e/inspection.spec.ts`, and `tests/e2e/tests/inspection_surface.rs`
+
+## Layer Ownership
+
+- Storage writes and reads belong to `components/raw-session-store`
+- Replace-on-sync ingest rules belong to `components/ingest-service`
+- Source discovery and parsing belong to `components/collector-runtime`
+- Environment variable mapping belongs to `components/configuration`
+- HTTP routes belong to the app crates only
+
+## Frontend Dev-Time Topology
+
+- `apps/frontend/` is a Bun-managed package (`package.json`, `bun.lock`, `vite.config.ts`, `index.html`, `src/*.tsx`).
+- Frontend dev-time proxying of `/api/v1/**` and `/health` to the backend belongs in `apps/frontend/vite.config.ts`, not in any application code path.
+- The Bun app must continue to honor the frontend-boundary rules above: no direct dependency on `components/collector-runtime`, `components/ingest-service`, or `components/raw-session-store`; all backend communication goes over HTTP to the Rust backend.
+
+### Phase 5 M2a notes — Fraunces self-hosted as static asset
+
+Phase 5 introduces a single self-hosted variable serif (Fraunces) for the Archive-room display layer (empty-pane preface, future M5 chapter-break labels, future app title). The font ships as two `.woff2` files at `apps/frontend/public/fonts/Fraunces-subset.woff2` (Roman) and `apps/frontend/public/fonts/Fraunces-Italic-subset.woff2` (Italic), referenced by two `@font-face` blocks in `apps/frontend/src/styles/tokens.css`. Per Phase 5 §Resolved Decision #15, **a self-hosted font file is a static asset, not a runtime dependency** — the 2-package escape-hatch budget (currently 1/2 consumed by `focus-trap-react@^11`) is **not affected**. No bundler plugin, font-loading library, or JS dep is involved; Vite serves the woff2 files directly from `public/`. To regenerate (only when upstream Fraunces revs, ~yearly per Google Fonts cadence): download both variable fonts from `https://github.com/undercasetype/Fraunces` (`fonts/variable/Fraunces[SOFT,WONK,opsz,wght].ttf` + the Italic counterpart), run `fonttools varLib.instancer <input.ttf> SOFT=50 WONK=0 -o <pinned.ttf>` to drop the design-time-only SOFT and WONK axes (saves ~70 KB per file), then `pyftsubset <pinned.ttf> --output-file=apps/frontend/public/fonts/Fraunces-subset.woff2 --unicodes='U+0020-007E,U+00A0-00FF,U+2010-2027,U+2030-2052' --layout-features='kern,liga,smcp,onum' --flavor=woff2 --desubroutinize`. Target file size: ~80 KB per file. Reversibility: deleting both `@font-face` blocks AND both woff2 files yields a still-cohesive system-serif aesthetic (Charter / Iowan Old Style / Georgia at ~99% of Fraunces's visual size via the `size-adjust` override, no broken layout).
+
+exec
+/bin/bash -lc "sed -n '1,220p' /home/huwei/ai_codings/distill-portal/docs/README.md" in /home/huwei/ai_codings/distill-portal/apps/frontend
+exec
+/bin/bash -lc "nl -ba /home/huwei/ai_codings/distill-portal/working/phase-5.md | sed -n '730,805p'" in /home/huwei/ai_codings/distill-portal/apps/frontend
+ succeeded in 0ms:
+# Distill Portal Docs
+
+Start here when you need to orient yourself in the Distill Portal workspace. The backend is Rust under `apps/backend`; the frontend is Bun + Vite + React + TypeScript under `apps/frontend`.
+
+This file is both the docs entry point and the repo map.
+
+## Start With Your Task
+
+| I want to... | Start here |
+| --- | --- |
+| Modify the inspection UI | [`playbooks/modify-frontend-page.md`](playbooks/modify-frontend-page.md), [`../apps/frontend/README.md`](../apps/frontend/README.md) |
+| Change a backend API or JSON payload | [`playbooks/modify-backend-api.md`](playbooks/modify-backend-api.md), [`dependency-rules.md`](dependency-rules.md) |
+| Change session storage behavior | [`playbooks/modify-session-store.md`](playbooks/modify-session-store.md) |
+| Run or test locally | [`dev-commands.md`](dev-commands.md) |
+| Check dependency boundaries | [`dependency-rules.md`](dependency-rules.md) |
+| Understand a feature | [`features/inspection-surface.md`](features/inspection-surface.md), [`features/session-store.md`](features/session-store.md) |
+| Understand product + architecture intent | [`../PRD.md`](../PRD.md), [`../ARCHITECTURE.md`](../ARCHITECTURE.md) |
+| Audit historical planning or delivery | [`../working/README.md`](../working/README.md), [`../progress/README.md`](../progress/README.md) |
+
+## Apps
+
+- `apps/backend` — Rust backend binary: runtime wiring, scan/ingest/store orchestration, machine-consumable HTTP routes. See [`../apps/backend/README.md`](../apps/backend/README.md).
+- `apps/frontend` — Bun + Vite + React + TypeScript inspection UI. The unified session list (table, filters, view, drawer body, merge / filter / sort / paginate / persistence helpers) lives under `apps/frontend/src/features/sessions/`; shared React primitives (action bar, scan-errors callout, native-`<dialog>`-backed drawer shell, pagination strip, toast) live under `apps/frontend/src/components/`. CSS is co-located: each `.tsx`/`.ts` imports its sibling `.css` (no CSS Modules, no CSS-in-JS, no Tailwind); `src/styles/` carries only the three global sheets `reset.css`, `tokens.css`, `global.css`. See [`../apps/frontend/README.md`](../apps/frontend/README.md).
+
+## Components
+
+Reusable, app-independent crates. Each owns its own README:
+
+- [`collector-runtime`](../components/collector-runtime/README.md) — source discovery, safe JSONL reads, tool-specific parsers (Claude Code, Codex)
+- [`configuration`](../components/configuration/README.md) — backend runtime config loading
+- [`ingest-service`](../components/ingest-service/README.md) — content-addressed ingest decisions, replace-on-sync
+- [`observability`](../components/observability/README.md) — tracing subscriber bootstrap
+- [`raw-session-store`](../components/raw-session-store/README.md) — SQLite metadata + blob-store persistence
+- [`ui-api-contracts`](../components/ui-api-contracts/README.md) — shared HTTP payload types; source of truth for the Rust → TS bindings
+
+## Feature Guides
+
+- [`features/inspection-surface.md`](features/inspection-surface.md) — page ownership, API touchpoints, and tests for the inspection workflow
+- [`features/session-store.md`](features/session-store.md) — storage ownership, backend touchpoints, and tests for persisted session behavior
+
+## Playbooks
+
+Short recipes for common changes:
+
+- [`playbooks/modify-frontend-page.md`](playbooks/modify-frontend-page.md) — shortest safe path for UI changes
+- [`playbooks/modify-backend-api.md`](playbooks/modify-backend-api.md) — shortest safe path for backend API changes
+- [`playbooks/modify-session-store.md`](playbooks/modify-session-store.md) — shortest safe path for storage changes
+
+## Verification Map
+
+| Surface | Command |
+| --- | --- |
+| Workspace compile | `cargo check --workspace` |
+| Full Rust test suite | `cargo test --workspace` |
+| Backend HTTP API | `cargo test -p distill-portal-backend --test http_api` |
+| Collector parsers | `cargo test -p distill-portal-collector-runtime --test parsers` |
+| Typed Rust-client HTTP smoke | `cargo test -p distill-portal-e2e --test inspection_surface` |
+| TypeScript contract bindings freshness | `cargo test -p distill-portal-ui-api-contracts --features ts-bindings` |
+| Frontend unit tests | `bun run test` (from `apps/frontend/`) |
+| Browser e2e (Playwright) | `bun run test:e2e` (from `apps/frontend/`) |
+
+## Repo Map
+
+- `apps/backend` — backend binary and its tests
+- `apps/frontend` — Bun/React frontend
+- `components/*` — reusable implementation crates
+- `docs/` — this tree (dependency rules, commands, features, playbooks)
+- `tests/e2e` — real HTTP-boundary Rust integration tests
+- `tests/fixtures` — sample Claude Code and Codex sessions used by parser and backend tests
+- `working/` — historical planning specs for completed phases (see [`../working/README.md`](../working/README.md))
+- `progress/` — historical delivery logs for completed phases (see [`../progress/README.md`](../progress/README.md))
+
+## Historical Material
+
+- [`../working/`](../working/) — frozen planning specs. Not current-state instructions. See [`working/README.md`](../working/README.md).
+- [`../progress/`](../progress/) — frozen delivery logs. Not current-state instructions. See [`progress/README.md`](../progress/README.md).
+
+ succeeded in 0ms:
+   730	
+   731	## Per-tool Message Parsers (Detail)
+   732	
+   733	### File layout
+   734	
+   735	```text
+   736	apps/frontend/src/features/sessions/parsers/
+   737	├── types.ts          # Message / MessageKind / SkimBlock / BlockKind / ParserOutput / ParsedSession / StreamMeta / ParseWarning
+   738	├── claude_code.ts    # parseClaudeCode (returns ParserOutput)
+   739	├── codex.ts          # parseCodex (returns ParserOutput)
+   740	├── buildSkim.ts      # Message[] → SkimBlock[] (separate from per-tool parsing) + USER_MSG_OVERSIZE_THRESHOLD constant
+   741	└── index.ts          # PARSERS registry + dispatchParser(tool, rawText, streamMeta) → ParsedSession
+   742	```
+   743	
+   744	Tests sit alongside as `claude_code.test.ts`, `codex.test.ts`, `buildSkim.test.ts`.
+   745	
+   746	### Claude Code field paths (parser uses these; the Rust adapter at `components/collector-runtime/src/adapters/claude_code.rs` reads the same top-level shape for metadata extraction; see `tests/fixtures/claude_code/sample_session.jsonl` for canonical examples)
+   747	
+   748	The Claude Code JSONL has a **top-level `"type"`** field tagging each line (`"user"` / `"assistant"` / `"summary"` / `"custom-title"` / `"permission-mode"` / etc.). The Rust adapter discriminates via `string_field(record, "type")` (claude_code.rs:151, 161).
+   749	
+   750	| Top-level `type` | Parser action |
+   751	|------------------|---------------|
+   752	| `"user"` | Walk `/message/content`. If string → emit one `Message` of kind `"user"` with `text` = the string. If array → emit one `Message` per item: items with `{type: "text", text}` → `MessageKind = "user"` with `text`; items with `{type: "tool_result", tool_use_id, content}` → `MessageKind = "tool_result"` with `text` = the content (string or `JSON.stringify(content)`). All split-content emissions share the same `lineOrdinal` but get sequential `messageIndex` values. |
+   753	| `"assistant"` | Walk `/message/content`. If string → emit one `Message` of kind `"assistant"`. If array → emit one `Message` per item: `{type: "text", text}` → `MessageKind = "assistant"`; `{type: "tool_use", name, input, id}` → `MessageKind = "tool_use"` with `toolName: name` and `text: JSON.stringify(input, null, 2)`. |
+   754	| `"summary"` | `MessageKind = "system"` with `text: leafUuid + ": " + summary` (matches Phase 4 adapter handling). |
+   755	| `"system"` | `MessageKind = "system"` with `text: /content` or short tag if absent. |
+   756	| `"custom-title"` / `"permission-mode"` | No message emitted (these are session-level metadata; carried by the Rust adapter for indexing, not part of the message timeline). |
+   757	| (any other top-level `type`) | `MessageKind = "unknown"` with `text: JSON.stringify(record).slice(0, 240)` and a `warnings[]` entry. |
+   758	
+   759	Top-level `/timestamp` → `Message.timestamp` (RFC3339; `null` if missing or unparseable). Top-level `/message/role` is consulted as a sanity check against top-level `type` (mismatch → `warnings[]` entry, but the parser still emits using top-level `type` as authoritative).
+   760	
+   761	Lines whose JSON fails to parse → `warnings.push({lineOrdinal, reason})` and skipped from `messages` entirely.
+   762	
+   763	### Codex field paths (parser uses these; `components/collector-runtime/src/adapters/codex.rs` reads the same top-level shape; see `tests/fixtures/codex/sample_session.jsonl` for canonical examples)
+   764	
+   765	Codex JSONL records have a **top-level `"type"`** field tagging the record kind. The Rust adapter walks `string_field(record, "type")` (codex.rs:85, 137, 144); the client parser does the same. **There is no `record_type` field** — that name was incorrect in earlier drafts.
+   766	
+   767	**Anchor principle (resolves response_item ↔ event_msg duplication):** The Codex stream emits BOTH an API-layer `response_item` AND a UI-layer `event_msg` for the same logical user/assistant message. The fixture at `tests/fixtures/codex/sample_session.jsonl` shows the prompt "Introduce omx and its subcommands." appearing in both. To avoid duplicate `Message` rows in the timeline, **`event_msg` is the canonical anchor for user/assistant turns**; `response_item` of role user/assistant is SKIPPED (its information is captured in the matching event_msg). `response_item` is consulted only when it carries information NOT present in event_msg (e.g., explicit `tool_call` / `function_call` payloads in some Codex versions); M3 planner refines based on inspected fixtures.
+   768	
+   769	| Top-level `type` | `payload.type` | Parser action |
+   770	|------------------|----------------|---------------|
+   771	| `session_meta` | (none) | First occurrence in stream → `Message.kind = "system"` with `text` summarizing `payload.cwd / cli_version / model_provider`. **Subsequent occurrence in the same stream** → emit a `Message.kind = "boundary"` with `boundarySubtype: "session_resumed"`. (buildSkim then converts this to a `boundary` SkimBlock.) |
+   772	| `response_item` | `message` (role: user/assistant) | **SKIP** — duplicate of the matching `event_msg.user_message` / `agent_message`. The anchor principle above. No message emitted. |
+   773	| `response_item` | `function_call` / other non-message payloads | `Message.kind = "tool_use"` with `toolName: payload.name` (or fallback "function_call") and `text: JSON.stringify(payload.arguments)`. Emitted because event_msg might not carry this. M3 planner verifies. |
+   774	| `turn_context` | (none) | No message emitted; the field is for adapter metadata (project_path) and not part of the message timeline. |
+   775	| `event_msg` | `user_message` | `Message.kind = "user"` with `text: payload.message` (CANONICAL user turn anchor) |
+   776	| `event_msg` | `agent_message` | `Message.kind = "assistant"` with `text: payload.message` (CANONICAL assistant message anchor) |
+   777	| `event_msg` | `agent_reasoning` | `Message.kind = "assistant"` with `text: payload.text` (if present). Inline with the surrounding assistant text; no special discrimination at the typed-message layer (the Raw tab is the verifiability hatch if a consumer needs to distinguish reasoning from final output). |
+   778	| `event_msg` | `task_started` / `task_complete` | `Message.kind = "system"` with brief description |
+   779	| `event_msg` | `exec_command` / `exec_command_output` | `Message.kind = "tool_use"` / `tool_result` with `toolName: "exec"` and `text: JSON.stringify(payload.command)` / `payload.output` |
+   780	| `event_msg` | `error` | `Message.kind = "system"` with `text: payload.message` and a `warnings[]` entry citing the line |
+   781	| `event_msg` | other | `Message.kind = "unknown"` with `text` = `JSON.stringify(payload).slice(0, 240)` and a `warnings[]` entry citing the unknown payload.type |
+   782	| (any other top-level `type`) | n/a | `Message.kind = "unknown"` with a `warnings[]` entry |
+   783	
+   784	Top-level `/timestamp` → `Message.timestamp`. `payload.timestamp` is used as fallback when top-level is missing.
+   785	
+   786	**Important**: the table above lists known shapes from the Phase 4-era fixture and Rust adapter coverage. The Codex tool emits more `event_msg` payload types (active development); the M3 planner widens the table by inspecting:
+   787	- `tests/fixtures/codex/sample_session.jsonl` (canonical short session)
+   788	- `tests/parsers.rs` `CODEX_FORKED_FIXTURE` + `CODEX_UNRELATED_LATER_META_FIXTURE` constants
+   789	- The upstream Codex CLI changelog if any new event types have shipped since Phase 4 spec time
+   790	
+   791	Unknown payload types fall through to `MessageKind = "unknown"` with a `warnings[]` entry — the parser is total (never throws). The Raw tab is the verifiability hatch when the user encounters unknown shapes.
+   792	
+   793	### buildSkim algorithm (formal)
+   794	
+   795	Defined in §Data Model "User-turn boundary algorithm" above.
+   796	
+   797	### Truth tables (test fixtures must cover)
+   798	
+   799	- Empty file → `messages: []`, `skim: [{kind: "agent_only", start: 0, end: -1, meta: {empty: 1}}]`
+   800	- Single user message (string content) → one `user_turn` block
+   801	- User → assistant → user → assistant → two `user_turn` blocks of disjoint `messageIndex` ranges
+   802	- User → assistant → tool_use → tool_result → user → ... → still two `user_turn` blocks (tool calls extend the current turn)
+   803	- Boundary mid-stream (Codex `session_resumed`) → `user_turn` / `boundary` / `user_turn`
+   804	- Agent-only run (no user msg, only assistant + tool messages) → all messages flattened into one `agent_only` block
+   805	- Single oversize user message (text > 64 KB) → one `oversized_user_message` block; no `user_turn`
+
+exec
+/bin/bash -lc "nl -ba src/features/sessions/parsers/codex.test.ts | sed -n '1,340p'" in /home/huwei/ai_codings/distill-portal/apps/frontend
+exec
+/bin/bash -lc "nl -ba src/features/sessions/parsers/codex.ts | sed -n '1,260p'" in /home/huwei/ai_codings/distill-portal/apps/frontend
+ succeeded in 0ms:
+     1	// Pure / total / synchronous Codex NDJSON parser.
+     2	//
+     3	// Walks the raw text line-by-line and emits `Message` rows + `ParseWarning`
+     4	// entries per the truth table in `working/phase-5.md` lines 769-783.
+     5	//
+     6	// Anchor principle (spec line 767): the Codex stream emits BOTH an
+     7	// API-layer `response_item` AND a UI-layer `event_msg` for the same
+     8	// logical user/assistant turn. The fixture at
+     9	// `tests/fixtures/codex/sample_session.jsonl` shows the prompt
+    10	// "Introduce omx and its subcommands." appearing on both lines 2
+    11	// (`response_item.message.role: user`) and 3 (`event_msg.user_message`).
+    12	// To prevent duplicate timeline rows, this parser SKIPS
+    13	// `response_item` whose `payload.type === "message"` AND
+    14	// `payload.role` is `"user"` or `"assistant"`. `event_msg` is canonical.
+    15	//
+    16	// `response_item.function_call` is NOT skipped — if the Codex stream ever
+    17	// carries explicit function-call payloads on response_item (some Codex
+    18	// versions and the upstream changelog hint at this), we still want those
+    19	// rendered as `tool_use` rows. The fixture for M3a does not exercise this
+    20	// branch; it is documented in the JSDoc on the case below so reviewers
+    21	// can audit. NOTE: the spec says event_msg `exec_command` is canonical
+    22	// for shell calls; `response_item.function_call` is the broader function-
+    23	// call gateway for non-exec tools.
+    24	//
+    25	// Hard rules (same as parseClaudeCode):
+    26	// 1. NEVER throws.
+    27	// 2. `messageIndex` is sequential across the entire stream.
+    28	// 3. Top-level `type` is the authoritative discriminator (matches the
+    29	//    Rust adapter at components/collector-runtime/src/adapters/codex.rs:85,
+    30	//    137, 144 — the field is `type`, NOT `record_type`).
+    31	// 4. Top-level `/timestamp` preferred; falls back to `/payload/timestamp`.
+    32	
+    33	import type { Message, ParseWarning, ParserOutput } from "./types";
+    34	
+    35	type JsonValue =
+    36	  | string
+    37	  | number
+    38	  | boolean
+    39	  | null
+    40	  | JsonValue[]
+    41	  | { [key: string]: JsonValue };
+    42	
+    43	type JsonObject = { [key: string]: JsonValue };
+    44	
+    45	const isObject = (value: unknown): value is JsonObject =>
+    46	  typeof value === "object" && value !== null && !Array.isArray(value);
+    47	
+    48	/**
+    49	 * Parse a Codex NDJSON document into a `ParserOutput`.
+    50	 *
+    51	 * @param rawText The full NDJSON payload (already streamed and capped by `streamRawText`).
+    52	 */
+    53	export function parseCodex(rawText: string): ParserOutput {
+    54	  const messages: Message[] = [];
+    55	  const warnings: ParseWarning[] = [];
+    56	  let nextMessageIndex = 0;
+    57	  let sessionMetaSeen = false;
+    58	
+    59	  const lines = rawText.split("\n");
+    60	
+    61	  for (let lineOrdinal = 0; lineOrdinal < lines.length; lineOrdinal++) {
+    62	    const raw = lines[lineOrdinal];
+    63	
+    64	    if (raw === "" && lineOrdinal === lines.length - 1) {
+    65	      continue;
+    66	    }
+    67	    if (raw === "") {
+    68	      warnings.push({ lineOrdinal, reason: "empty line" });
+    69	      continue;
+    70	    }
+    71	
+    72	    let record: JsonValue;
+    73	    try {
+    74	      record = JSON.parse(raw) as JsonValue;
+    75	    } catch {
+    76	      warnings.push({ lineOrdinal, reason: "malformed JSON" });
+    77	      continue;
+    78	    }
+    79	
+    80	    if (!isObject(record)) {
+    81	      warnings.push({
+    82	        lineOrdinal,
+    83	        reason: "top-level JSON value is not an object",
+    84	      });
+    85	      continue;
+    86	    }
+    87	
+    88	    const topType = typeof record["type"] === "string" ? (record["type"] as string) : null;
+    89	    const payload = isObject(record["payload"]) ? record["payload"] : null;
+    90	    const timestamp = parseTimestamp(record, payload, lineOrdinal, warnings);
+    91	
+    92	    if (topType === null) {
+    93	      warnings.push({ lineOrdinal, reason: "missing top-level 'type' field" });
+    94	      messages.push({
+    95	        lineOrdinal,
+    96	        messageIndex: nextMessageIndex++,
+    97	        timestamp,
+    98	        kind: "unknown",
+    99	        text: stringifyTruncated(record),
+   100	        raw,
+   101	        bytes: byteLength(raw),
+   102	      });
+   103	      continue;
+   104	    }
+   105	
+   106	    switch (topType) {
+   107	      case "session_meta": {
+   108	        if (!sessionMetaSeen) {
+   109	          sessionMetaSeen = true;
+   110	          const cwd =
+   111	            payload && typeof payload["cwd"] === "string"
+   112	              ? (payload["cwd"] as string)
+   113	              : "(unknown cwd)";
+   114	          const cliVersion =
+   115	            payload && typeof payload["cli_version"] === "string"
+   116	              ? (payload["cli_version"] as string)
+   117	              : "(unknown cli)";
+   118	          const modelProvider =
+   119	            payload && typeof payload["model_provider"] === "string"
+   120	              ? (payload["model_provider"] as string)
+   121	              : "(unknown provider)";
+   122	          const text = `Codex session — cwd=${cwd}, cli_version=${cliVersion}, model_provider=${modelProvider}`;
+   123	          messages.push({
+   124	            lineOrdinal,
+   125	            messageIndex: nextMessageIndex++,
+   126	            timestamp,
+   127	            kind: "system",
+   128	            text,
+   129	            raw,
+   130	            bytes: byteLength(text),
+   131	          });
+   132	        } else {
+   133	          // Second `session_meta` mid-stream → boundary. buildSkim converts
+   134	          // this to a `boundary` SkimBlock that separates conversation
+   135	          // chapters (e.g. `CODEX_FORKED_FIXTURE` at parsers.rs line 16).
+   136	          messages.push({
+   137	            lineOrdinal,
+   138	            messageIndex: nextMessageIndex++,
+   139	            timestamp,
+   140	            kind: "boundary",
+   141	            boundarySubtype: "session_resumed",
+   142	            text: "session resumed",
+   143	            raw,
+   144	            bytes: byteLength(raw),
+   145	          });
+   146	        }
+   147	        break;
+   148	      }
+   149	
+   150	      case "response_item": {
+   151	        if (!payload) {
+   152	          warnings.push({ lineOrdinal, reason: "response_item missing payload" });
+   153	          messages.push({
+   154	            lineOrdinal, messageIndex: nextMessageIndex++, timestamp,
+   155	            kind: "unknown", text: stringifyTruncated(record), raw, bytes: byteLength(raw),
+   156	          });
+   157	          break;
+   158	        }
+   159	        const payloadType =
+   160	          typeof payload["type"] === "string" ? (payload["type"] as string) : null;
+   161	        const role =
+   162	          typeof payload["role"] === "string" ? (payload["role"] as string) : null;
+   163	
+   164	        if (payloadType === "message" && (role === "user" || role === "assistant")) {
+   165	          // ANCHOR PRINCIPLE: `event_msg` is canonical. SKIP entirely. No warning.
+   166	          break;
+   167	        }
+   168	
+   169	        if (payloadType === "function_call") {
+   170	          // Some Codex versions emit explicit function_call payloads on
+   171	          // response_item that are NOT duplicated in event_msg. Emit as
+   172	          // tool_use so they appear in the timeline.
+   173	          //
+   174	          // Verified against fixture: the canonical short fixture
+   175	          // (tests/fixtures/codex/sample_session.jsonl, 4 lines) does NOT
+   176	          // exercise this branch; CODEX_FORKED_FIXTURE in
+   177	          // components/collector-runtime/tests/parsers.rs also does not.
+   178	          // We keep the branch per the spec's M3 planner directive — a
+   179	          // unit test below covers it explicitly with an inline fixture.
+   180	          const name =
+   181	            typeof payload["name"] === "string"
+   182	              ? (payload["name"] as string)
+   183	              : "function_call";
+   184	          const args = payload["arguments"] ?? null;
+   185	          const text = JSON.stringify(args);
+   186	          messages.push({
+   187	            lineOrdinal,
+   188	            messageIndex: nextMessageIndex++,
+   189	            timestamp,
+   190	            kind: "tool_use",
+   191	            toolName: name,
+   192	            text,
+   193	            raw,
+   194	            bytes: byteLength(text),
+   195	          });
+   196	          break;
+   197	        }
+   198	
+   199	        // Unknown response_item shape (totality fallthrough).
+   200	        warnings.push({
+   201	          lineOrdinal,
+   202	          reason: `unknown response_item payload.type '${payloadType ?? "(missing)"}'`,
+   203	        });
+   204	        messages.push({
+   205	          lineOrdinal,
+   206	          messageIndex: nextMessageIndex++,
+   207	          timestamp,
+   208	          kind: "unknown",
+   209	          text: stringifyTruncated(record),
+   210	          raw,
+   211	          bytes: byteLength(raw),
+   212	        });
+   213	        break;
+   214	      }
+   215	
+   216	      case "turn_context": {
+   217	        // Adapter metadata (project_path); not part of the message timeline.
+   218	        // Spec line 774. Silent skip — no warning, no message.
+   219	        break;
+   220	      }
+   221	
+   222	      case "event_msg": {
+   223	        const payloadType =
+   224	          payload && typeof payload["type"] === "string"
+   225	            ? (payload["type"] as string)
+   226	            : null;
+   227	
+   228	        if (payloadType === null) {
+   229	          warnings.push({
+   230	            lineOrdinal,
+   231	            reason: "event_msg missing payload.type",
+   232	          });
+   233	          messages.push({
+   234	            lineOrdinal,
+   235	            messageIndex: nextMessageIndex++,
+   236	            timestamp,
+   237	            kind: "unknown",
+   238	            text: stringifyTruncated(record),
+   239	            raw,
+   240	            bytes: byteLength(raw),
+   241	          });
+   242	          break;
+   243	        }
+   244	
+   245	        switch (payloadType) {
+   246	          case "user_message": {
+   247	            const m = payload ? payload["message"] : undefined;
+   248	            let text = "";
+   249	            if (typeof m === "string") {
+   250	              text = m;
+   251	            } else {
+   252	              warnings.push({
+   253	                lineOrdinal,
+   254	                reason: "event_msg.user_message missing or non-string payload.message",
+   255	              });
+   256	            }
+   257	            messages.push({
+   258	              lineOrdinal,
+   259	              messageIndex: nextMessageIndex++,
+   260	              timestamp,
+
+ succeeded in 0ms:
+     1	// Coverage map (one test per truth-table row at spec lines 769-783 plus
+     2	// totality + anchor-principle + timestamp fallback + real-fixture):
+     3	//   1. session_meta first occurrence → system message summarizing cwd / cli / provider
+     4	//   2. session_meta SECOND occurrence → boundary message of subtype session_resumed
+     5	//   3. response_item.message role=user → SKIPPED (anchor principle, no message, no warning)
+     6	//   4. response_item.message role=assistant → SKIPPED
+     7	//   5. response_item.function_call → tool_use with toolName = payload.name
+     8	//   6. response_item.function_call missing name → tool_use with toolName fallback
+     9	//   7. response_item with unknown payload type → unknown + warning
+    10	//   8. turn_context → silently skipped
+    11	//   9. event_msg.user_message → user
+    12	//  10. event_msg.agent_message → assistant
+    13	//  11. event_msg.agent_reasoning → assistant (text from payload.text or fallback)
+    14	//  12. event_msg.task_started → system
+    15	//  13. event_msg.task_complete → system
+    16	//  14. event_msg.exec_command → tool_use toolName="exec"
+    17	//  15. event_msg.exec_command_output → tool_result toolName="exec"
+    18	//  16. event_msg.error → system + warning
+    19	//  17. event_msg unknown payload.type → unknown + warning
+    20	//  18. event_msg missing payload.type → unknown + warning
+    21	//  19. malformed JSON → warning, skipped, sequential messageIndex preserved
+    22	//  20. unknown top-level type → unknown + warning
+    23	//  21. timestamp: top-level preferred over payload; falls back when missing
+    24	//  22. totality: adversarial input does not throw
+    25	//  23. End-to-end real fixture: anchor principle skips response_item.user
+    26	
+    27	import { expect, test } from "bun:test";
+    28	import { readFileSync } from "node:fs";
+    29	import { join } from "node:path";
+    30	import { parseCodex } from "./codex";
+    31	
+    32	test("session_meta first occurrence emits a system message summarizing the session", () => {
+    33	  const raw = JSON.stringify({
+    34	    timestamp: "2026-04-11T11:05:37.639Z",
+    35	    type: "session_meta",
+    36	    payload: {
+    37	      cwd: "/home/huwei/example",
+    38	      cli_version: "0.120.0",
+    39	      model_provider: "OpenAI",
+    40	    },
+    41	  });
+    42	  const out = parseCodex(raw);
+    43	  expect(out.warnings).toEqual([]);
+    44	  expect(out.messages).toHaveLength(1);
+    45	  expect(out.messages[0].kind).toBe("system");
+    46	  expect(out.messages[0].text).toContain("/home/huwei/example");
+    47	  expect(out.messages[0].text).toContain("0.120.0");
+    48	  expect(out.messages[0].text).toContain("OpenAI");
+    49	  expect(out.messages[0].timestamp).toBe("2026-04-11T11:05:37.639Z");
+    50	});
+    51	
+    52	test("second session_meta in stream becomes a boundary message of subtype session_resumed", () => {
+    53	  const raw = [
+    54	    JSON.stringify({
+    55	      timestamp: "2026-04-11T11:05:37.639Z",
+    56	      type: "session_meta",
+    57	      payload: { cwd: "/a", cli_version: "0.120.0", model_provider: "OpenAI" },
+    58	    }),
+    59	    JSON.stringify({
+    60	      timestamp: "2026-04-11T11:06:00.000Z",
+    61	      type: "session_meta",
+    62	      payload: { cwd: "/b" },
+    63	    }),
+    64	  ].join("\n");
+    65	  const out = parseCodex(raw);
+    66	  expect(out.messages).toHaveLength(2);
+    67	  expect(out.messages[0].kind).toBe("system");
+    68	  expect(out.messages[1].kind).toBe("boundary");
+    69	  expect(out.messages[1].boundarySubtype).toBe("session_resumed");
+    70	});
+    71	
+    72	test("anchor principle: response_item.message role=user is SKIPPED (no message, no warning)", () => {
+    73	  const raw = JSON.stringify({
+    74	    timestamp: "2026-04-11T11:05:37.642Z",
+    75	    type: "response_item",
+    76	    payload: {
+    77	      type: "message",
+    78	      role: "user",
+    79	      content: [{ type: "input_text", text: "Introduce omx and its subcommands." }],
+    80	    },
+    81	  });
+    82	  const out = parseCodex(raw);
+    83	  expect(out.messages).toEqual([]);
+    84	  expect(out.warnings).toEqual([]);
+    85	});
+    86	
+    87	test("anchor principle: response_item.message role=assistant is also SKIPPED", () => {
+    88	  const raw = JSON.stringify({
+    89	    timestamp: "2026-04-11T11:05:38.000Z",
+    90	    type: "response_item",
+    91	    payload: {
+    92	      type: "message",
+    93	      role: "assistant",
+    94	      content: [{ type: "output_text", text: "Sure!" }],
+    95	    },
+    96	  });
+    97	  const out = parseCodex(raw);
+    98	  expect(out.messages).toEqual([]);
+    99	  expect(out.warnings).toEqual([]);
+   100	});
+   101	
+   102	test("response_item.function_call emits a tool_use with toolName from payload.name", () => {
+   103	  const raw = JSON.stringify({
+   104	    timestamp: "2026-04-11T11:05:38.000Z",
+   105	    type: "response_item",
+   106	    payload: {
+   107	      type: "function_call",
+   108	      name: "search_docs",
+   109	      arguments: { query: "omx subcommands" },
+   110	    },
+   111	  });
+   112	  const out = parseCodex(raw);
+   113	  expect(out.messages).toHaveLength(1);
+   114	  expect(out.messages[0]).toMatchObject({
+   115	    kind: "tool_use",
+   116	    toolName: "search_docs",
+   117	  });
+   118	  expect(out.messages[0].text).toContain("omx subcommands");
+   119	  expect(out.warnings).toEqual([]);
+   120	});
+   121	
+   122	test("response_item.function_call with STRING arguments emits text wrapped in JSON quotes (spec line 773 literal)", () => {
+   123	  const raw = JSON.stringify({
+   124	    type: "response_item",
+   125	    payload: { type: "function_call", name: "search", arguments: "raw string args" },
+   126	  });
+   127	  const out = parseCodex(raw);
+   128	  expect(out.messages).toHaveLength(1);
+   129	  expect(out.messages[0].kind).toBe("tool_use");
+   130	  // Spec mandates JSON.stringify regardless of input type. JSON.stringify("raw string args") → '"raw string args"'
+   131	  expect(out.messages[0].text).toBe('"raw string args"');
+   132	});
+   133	
+   134	test("response_item missing payload entirely emits unknown + warning (totality)", () => {
+   135	  const raw = JSON.stringify({ type: "response_item" });
+   136	  const out = parseCodex(raw);
+   137	  expect(out.messages).toHaveLength(1);
+   138	  expect(out.messages[0].kind).toBe("unknown");
+   139	  expect(out.warnings.some((w) => w.reason === "response_item missing payload")).toBe(true);
+   140	});
+   141	
+   142	test("response_item.function_call missing name falls back to 'function_call'", () => {
+   143	  const raw = JSON.stringify({
+   144	    type: "response_item",
+   145	    payload: { type: "function_call", arguments: { x: 1 } },
+   146	  });
+   147	  const out = parseCodex(raw);
+   148	  expect(out.messages[0].toolName).toBe("function_call");
+   149	});
+   150	
+   151	test("response_item with unknown payload type emits unknown + warning", () => {
+   152	  const raw = JSON.stringify({
+   153	    type: "response_item",
+   154	    payload: { type: "totally_new_thing" },
+   155	  });
+   156	  const out = parseCodex(raw);
+   157	  expect(out.messages).toHaveLength(1);
+   158	  expect(out.messages[0].kind).toBe("unknown");
+   159	  expect(out.warnings).toHaveLength(1);
+   160	  expect(out.warnings[0].reason).toContain("unknown response_item payload.type");
+   161	});
+   162	
+   163	test("turn_context is silently skipped (adapter metadata, not timeline)", () => {
+   164	  const raw = JSON.stringify({
+   165	    type: "turn_context",
+   166	    payload: { cwd: "/a", current_date: "2026-04-11" },
+   167	  });
+   168	  const out = parseCodex(raw);
+   169	  expect(out.messages).toEqual([]);
+   170	  expect(out.warnings).toEqual([]);
+   171	});
+   172	
+   173	test("event_msg.user_message emits a user message", () => {
+   174	  const raw = JSON.stringify({
+   175	    timestamp: "2026-04-11T11:05:37.642Z",
+   176	    type: "event_msg",
+   177	    payload: { type: "user_message", message: "do the thing" },
+   178	  });
+   179	  const out = parseCodex(raw);
+   180	  expect(out.messages).toHaveLength(1);
+   181	  expect(out.messages[0]).toMatchObject({
+   182	    kind: "user",
+   183	    text: "do the thing",
+   184	    timestamp: "2026-04-11T11:05:37.642Z",
+   185	  });
+   186	});
+   187	
+   188	test("event_msg.agent_message emits an assistant message", () => {
+   189	  const raw = JSON.stringify({
+   190	    type: "event_msg",
+   191	    payload: { type: "agent_message", message: "doing it" },
+   192	  });
+   193	  const out = parseCodex(raw);
+   194	  expect(out.messages[0]).toMatchObject({ kind: "assistant", text: "doing it" });
+   195	});
+   196	
+   197	test("event_msg.agent_reasoning emits an assistant message with payload.text", () => {
+   198	  const raw = JSON.stringify({
+   199	    type: "event_msg",
+   200	    payload: { type: "agent_reasoning", text: "thinking..." },
+   201	  });
+   202	  const out = parseCodex(raw);
+   203	  expect(out.messages[0]).toMatchObject({ kind: "assistant", text: "thinking..." });
+   204	});
+   205	
+   206	test("event_msg.agent_reasoning falls back to payload.message if text missing", () => {
+   207	  const raw = JSON.stringify({
+   208	    type: "event_msg",
+   209	    payload: { type: "agent_reasoning", message: "alt body" },
+   210	  });
+   211	  const out = parseCodex(raw);
+   212	  expect(out.messages[0].text).toBe("alt body");
+   213	});
+   214	
+   215	test("event_msg.user_message missing payload.message warns + emits empty-text user", () => {
+   216	  const raw = JSON.stringify({ type: "event_msg", payload: { type: "user_message" } });
+   217	  const out = parseCodex(raw);
+   218	  expect(out.messages[0]).toMatchObject({ kind: "user", text: "" });
+   219	  expect(out.warnings.some((w) => w.reason.includes("user_message missing"))).toBe(true);
+   220	});
+   221	
+   222	test("event_msg.agent_message missing payload.message warns", () => {
+   223	  const raw = JSON.stringify({ type: "event_msg", payload: { type: "agent_message" } });
+   224	  const out = parseCodex(raw);
+   225	  expect(out.messages[0]).toMatchObject({ kind: "assistant", text: "" });
+   226	  expect(out.warnings.some((w) => w.reason.includes("agent_message missing"))).toBe(true);
+   227	});
+   228	
+   229	test("event_msg.agent_reasoning missing both payload.text and payload.message warns", () => {
+   230	  const raw = JSON.stringify({ type: "event_msg", payload: { type: "agent_reasoning" } });
+   231	  const out = parseCodex(raw);
+   232	  expect(out.messages[0]).toMatchObject({ kind: "assistant", text: "" });
+   233	  expect(out.warnings.some((w) => w.reason.includes("agent_reasoning missing"))).toBe(true);
+   234	});
+   235	
+   236	test("event_msg.task_started emits a system message", () => {
+   237	  const raw = JSON.stringify({
+   238	    type: "event_msg",
+   239	    payload: { type: "task_started", turn_id: "abc-123" },
+   240	  });
+   241	  const out = parseCodex(raw);
+   242	  expect(out.messages[0]).toMatchObject({ kind: "system" });
+   243	  expect(out.messages[0].text).toContain("task_started");
+   244	  expect(out.messages[0].text).toContain("abc-123");
+   245	});
+   246	
+   247	test("event_msg.task_complete emits a system message", () => {
+   248	  const raw = JSON.stringify({
+   249	    type: "event_msg",
+   250	    payload: { type: "task_complete", turn_id: "abc-123" },
+   251	  });
+   252	  const out = parseCodex(raw);
+   253	  expect(out.messages[0]).toMatchObject({ kind: "system" });
+   254	  expect(out.messages[0].text).toContain("task_complete");
+   255	});
+   256	
+   257	test("event_msg.exec_command with array command emits tool_use with JSON.stringify text (spec line 779 literal)", () => {
+   258	  const raw = JSON.stringify({
+   259	    type: "event_msg",
+   260	    payload: { type: "exec_command", command: ["ls", "-la"] },
+   261	  });
+   262	  const out = parseCodex(raw);
+   263	  expect(out.messages[0]).toMatchObject({ kind: "tool_use", toolName: "exec" });
+   264	  // Spec line 779: text: JSON.stringify(payload.command) — array becomes JSON array literal.
+   265	  expect(out.messages[0].text).toBe('["ls","-la"]');
+   266	});
+   267	
+   268	test("event_msg.exec_command with STRING command JSON.stringify-wraps it in quotes (spec line 779 literal)", () => {
+   269	  const raw = JSON.stringify({
+   270	    type: "event_msg",
+   271	    payload: { type: "exec_command", command: "ls -la" },
+   272	  });
+   273	  const out = parseCodex(raw);
+   274	  // Spec mandates JSON.stringify regardless of input type.
+   275	  expect(out.messages[0].text).toBe('"ls -la"');
+   276	});
+   277	
+   278	test("event_msg.exec_command_output with string output passes through raw (spec line 779: payload.output, NOT JSON.stringify)", () => {
+   279	  const raw = JSON.stringify({
+   280	    type: "event_msg",
+   281	    payload: { type: "exec_command_output", output: "total 0\nfoo\n" },
+   282	  });
+   283	  const out = parseCodex(raw);
+   284	  expect(out.messages[0]).toMatchObject({ kind: "tool_result", toolName: "exec" });
+   285	  // Spec line 779 mandates `text: payload.output` (raw passthrough) for exec_command_output, NOT JSON.stringify.
+   286	  // This is asymmetric with exec_command which DOES wrap in JSON.stringify per the same line.
+   287	  expect(out.messages[0].text).toBe("total 0\nfoo\n");
+   288	});
+   289	
+   290	test("event_msg.exec_command_output with non-string output JSON.stringify-wraps for type safety", () => {
+   291	  const raw = JSON.stringify({
+   292	    type: "event_msg",
+   293	    payload: { type: "exec_command_output", output: { exit: 0, stdout: "ok" } },
+   294	  });
+   295	  const out = parseCodex(raw);
+   296	  // Non-string output (array/object) gets JSON.stringify to preserve Message.text: string.
+   297	  expect(out.messages[0].text).toBe('{"exit":0,"stdout":"ok"}');
+   298	});
+   299	
+   300	test("event_msg.exec_command missing payload.command warns AND emits text='null' (string, not undefined)", () => {
+   301	  const raw = JSON.stringify({ type: "event_msg", payload: { type: "exec_command" } });
+   302	  const out = parseCodex(raw);
+   303	  expect(out.warnings.some((w) => w.reason.includes("exec_command missing payload.command"))).toBe(true);
+   304	  // Regression: Message.text MUST be a string (JSON.stringify(undefined) returns undefined; we normalise to null first).
+   305	  expect(typeof out.messages[0].text).toBe("string");
+   306	  expect(out.messages[0].text).toBe("null");
+   307	});
+   308	
+   309	test("event_msg.exec_command_output missing payload.output warns AND emits text='null' (string, not undefined)", () => {
+   310	  const raw = JSON.stringify({ type: "event_msg", payload: { type: "exec_command_output" } });
+   311	  const out = parseCodex(raw);
+   312	  expect(out.warnings.some((w) => w.reason.includes("exec_command_output missing payload.output"))).toBe(true);
+   313	  expect(typeof out.messages[0].text).toBe("string");
+   314	  expect(out.messages[0].text).toBe("null");
+   315	});
+   316	
+   317	test("event_msg.error emits a system message AND a warning", () => {
+   318	  const raw = JSON.stringify({
+   319	    type: "event_msg",
+   320	    payload: { type: "error", message: "rate limited" },
+   321	  });
+   322	  const out = parseCodex(raw);
+   323	  expect(out.messages[0]).toMatchObject({ kind: "system", text: "rate limited" });
+   324	  expect(out.warnings).toHaveLength(1);
+   325	  expect(out.warnings[0].reason).toContain("rate limited");
+   326	});
+   327	
+   328	test("event_msg with unknown payload.type emits unknown + warning", () => {
+   329	  const raw = JSON.stringify({
+   330	    type: "event_msg",
+   331	    payload: { type: "novel_event" },
+   332	  });
+   333	  const out = parseCodex(raw);
+   334	  expect(out.messages[0].kind).toBe("unknown");
+   335	  expect(out.warnings[0].reason).toContain("unknown event_msg payload.type 'novel_event'");
+   336	});
+   337	
+   338	test("event_msg missing payload.type emits unknown + warning", () => {
+   339	  const raw = JSON.stringify({ type: "event_msg", payload: {} });
+   340	  const out = parseCodex(raw);
+
+exec
+/bin/bash -lc "nl -ba src/features/sessions/parsers/codex.ts | sed -n '260,560p'" in /home/huwei/ai_codings/distill-portal/apps/frontend
+exec
+/bin/bash -lc "nl -ba src/features/sessions/parsers/codex.test.ts | sed -n '340,760p'" in /home/huwei/ai_codings/distill-portal/apps/frontend
+ succeeded in 0ms:
+   340	  const out = parseCodex(raw);
+   341	  expect(out.messages[0].kind).toBe("unknown");
+   342	  expect(out.warnings[0].reason).toContain("event_msg missing payload.type");
+   343	});
+   344	
+   345	test("malformed JSON line warns and the next line still parses", () => {
+   346	  const raw = [
+   347	    JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: "first" } }),
+   348	    "{ corrupted",
+   349	    JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: "third" } }),
+   350	  ].join("\n");
+   351	  const out = parseCodex(raw);
+   352	  expect(out.messages).toHaveLength(2);
+   353	  expect(out.messages[0].text).toBe("first");
+   354	  expect(out.messages[1].text).toBe("third");
+   355	  expect(out.messages[1].messageIndex).toBe(1);
+   356	  expect(out.warnings[0]).toEqual({ lineOrdinal: 1, reason: "malformed JSON" });
+   357	});
+   358	
+   359	test("unknown top-level type emits unknown + warning", () => {
+   360	  const raw = JSON.stringify({ type: "totally_new_kind", foo: 1 });
+   361	  const out = parseCodex(raw);
+   362	  expect(out.messages[0].kind).toBe("unknown");
+   363	  expect(out.warnings[0].reason).toContain("unknown top-level type 'totally_new_kind'");
+   364	});
+   365	
+   366	test("missing top-level type emits unknown + warning", () => {
+   367	  const raw = JSON.stringify({ payload: { type: "user_message", message: "x" } });
+   368	  const out = parseCodex(raw);
+   369	  expect(out.messages[0].kind).toBe("unknown");
+   370	  expect(out.warnings.some((w) => w.reason === "missing top-level 'type' field")).toBe(true);
+   371	});
+   372	
+   373	test("non-object top-level JSON warns and skips", () => {
+   374	  const raw = "42";
+   375	  const out = parseCodex(raw);
+   376	  expect(out.messages).toEqual([]);
+   377	  expect(out.warnings).toHaveLength(1);
+   378	  expect(out.warnings[0].reason).toContain("not an object");
+   379	});
+   380	
+   381	test("timestamp: top-level preferred when valid", () => {
+   382	  const raw = JSON.stringify({
+   383	    timestamp: "2026-04-11T11:05:37.639Z",
+   384	    type: "event_msg",
+   385	    payload: {
+   386	      timestamp: "2999-01-01T00:00:00.000Z",
+   387	      type: "user_message",
+   388	      message: "x",
+   389	    },
+   390	  });
+   391	  const out = parseCodex(raw);
+   392	  expect(out.messages[0].timestamp).toBe("2026-04-11T11:05:37.639Z");
+   393	});
+   394	
+   395	test("timestamp: falls back to payload.timestamp when top-level missing", () => {
+   396	  const raw = JSON.stringify({
+   397	    type: "event_msg",
+   398	    payload: {
+   399	      timestamp: "2026-04-11T11:05:37.642Z",
+   400	      type: "user_message",
+   401	      message: "x",
+   402	    },
+   403	  });
+   404	  const out = parseCodex(raw);
+   405	  expect(out.messages[0].timestamp).toBe("2026-04-11T11:05:37.642Z");
+   406	});
+   407	
+   408	test("timestamp: unparseable top-level falls through to payload, both unparseable → null + 2 warnings", () => {
+   409	  const raw = JSON.stringify({
+   410	    timestamp: "broken",
+   411	    type: "event_msg",
+   412	    payload: {
+   413	      timestamp: "also-broken",
+   414	      type: "user_message",
+   415	      message: "x",
+   416	    },
+   417	  });
+   418	  const out = parseCodex(raw);
+   419	  expect(out.messages[0].timestamp).toBeNull();
+   420	  expect(out.warnings.filter((w) => w.reason.includes("unparseable"))).toHaveLength(2);
+   421	});
+   422	
+   423	test("timestamp: non-string top-level warns and falls through", () => {
+   424	  const raw = JSON.stringify({
+   425	    timestamp: 12345,
+   426	    type: "event_msg",
+   427	    payload: {
+   428	      timestamp: "2026-04-11T11:05:37.642Z",
+   429	      type: "user_message",
+   430	      message: "x",
+   431	    },
+   432	  });
+   433	  const out = parseCodex(raw);
+   434	  expect(out.messages[0].timestamp).toBe("2026-04-11T11:05:37.642Z");
+   435	  expect(out.warnings.some((w) => w.reason === "top-level timestamp is not a string")).toBe(true);
+   436	});
+   437	
+   438	test("non-string payload.timestamp warns and yields null timestamp", () => {
+   439	  const raw = JSON.stringify({
+   440	    type: "event_msg",
+   441	    payload: { type: "user_message", message: "x", timestamp: 12345 },
+   442	  });
+   443	  const out = parseCodex(raw);
+   444	  expect(out.messages[0].timestamp).toBeNull();
+   445	  expect(out.warnings.some((w) => w.reason === "payload.timestamp is not a string")).toBe(true);
+   446	});
+   447	
+   448	test("trailing newline stripped silently", () => {
+   449	  const raw =
+   450	    JSON.stringify({
+   451	      type: "event_msg",
+   452	      payload: { type: "user_message", message: "x" },
+   453	    }) + "\n";
+   454	  const out = parseCodex(raw);
+   455	  expect(out.messages).toHaveLength(1);
+   456	  expect(out.warnings).toEqual([]);
+   457	});
+   458	
+   459	test("empty mid-document line emits an 'empty line' warning", () => {
+   460	  const raw = [
+   461	    JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: "a" } }),
+   462	    "",
+   463	    JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: "b" } }),
+   464	  ].join("\n");
+   465	  const out = parseCodex(raw);
+   466	  expect(out.messages).toHaveLength(2);
+   467	  expect(out.warnings).toEqual([{ lineOrdinal: 1, reason: "empty line" }]);
+   468	});
+   469	
+   470	// ===== Totality =====
+   471	test("totality: parser does not throw on adversarial input", () => {
+   472	  const adversarial = [
+   473	    "",
+   474	    "null",
+   475	    "[]",
+   476	    "{}",
+   477	    "garbage",
+   478	    JSON.stringify({ type: "session_meta" }), // no payload
+   479	    JSON.stringify({ type: "event_msg" }), // no payload
+   480	    JSON.stringify({ type: "event_msg", payload: null }),
+   481	    JSON.stringify({ type: "event_msg", payload: { type: 42 } }), // payload.type not a string
+   482	    JSON.stringify({ type: "response_item" }), // no payload
+   483	    JSON.stringify({ type: 999 }), // type not string
+   484	    "{ truncated",
+   485	  ].join("\n");
+   486	  expect(() => parseCodex(adversarial)).not.toThrow();
+   487	});
+   488	
+   489	// ===== Anchor principle: end-to-end fixture =====
+   490	test("end-to-end: real fixture verifies anchor principle (response_item.user is SKIPPED)", () => {
+   491	  const fixturePath = join(
+   492	    process.cwd(),
+   493	    "../../tests/fixtures/codex/sample_session.jsonl",
+   494	  );
+   495	  const raw = readFileSync(fixturePath, "utf8");
+   496	  const out = parseCodex(raw);
+   497	
+   498	  // 4 lines:
+   499	  //   0: session_meta            → system (kept)
+   500	  //   1: response_item.user      → SKIPPED by anchor principle (no msg, no warning)
+   501	  //   2: event_msg.user_message  → user (kept) — CANONICAL
+   502	  //   3: turn_context            → silently skipped
+   503	  // Expect 2 messages: system + user; no warnings.
+   504	  expect(out.messages).toHaveLength(2);
+   505	  expect(out.messages[0]).toMatchObject({
+   506	    kind: "system",
+   507	    lineOrdinal: 0,
+   508	    messageIndex: 0,
+   509	  });
+   510	  expect(out.messages[0].text).toContain("/home/huwei/ai_codings/oh-my-codex");
+   511	  expect(out.messages[0].text).toContain("0.120.0");
+   512	  expect(out.messages[1]).toMatchObject({
+   513	    kind: "user",
+   514	    lineOrdinal: 2, // skipped lines do NOT shift lineOrdinal
+   515	    messageIndex: 1, // sequential after the system
+   516	    text: "Introduce omx and its subcommands.",
+   517	  });
+   518	  expect(out.warnings).toEqual([]);
+   519	});
+   520	
+   521	test("CODEX_FORKED_FIXTURE-style stream emits a session_resumed boundary on the second session_meta", () => {
+   522	  // Compact reproduction of CODEX_FORKED_FIXTURE (parsers.rs:16) — two
+   523	  // session_meta lines back-to-back. Verifies the boundary emission for the
+   524	  // embedded-parent-meta scenario without depending on the upstream Rust fixture.
+   525	  const raw = [
+   526	    JSON.stringify({
+   527	      timestamp: "2026-04-24T06:04:16.612Z",
+   528	      type: "session_meta",
+   529	      payload: {
+   530	        id: "child",
+   531	        timestamp: "2026-04-24T06:04:16.605Z",
+   532	        cwd: "/child",
+   533	        cli_version: "0.130.0",
+   534	        model_provider: "OpenAI",
+   535	      },
+   536	    }),
+   537	    JSON.stringify({
+   538	      timestamp: "2026-04-24T06:04:16.615Z",
+   539	      type: "session_meta",
+   540	      payload: { id: "parent", timestamp: "2026-04-24T05:58:39.481Z", cwd: "/parent" },
+   541	    }),
+   542	    JSON.stringify({
+   543	      timestamp: "2026-04-24T06:04:18.763Z",
+   544	      type: "event_msg",
+   545	      payload: { type: "user_message", message: "child prompt" },
+   546	    }),
+   547	  ].join("\n");
+   548	  const out = parseCodex(raw);
+   549	  expect(out.messages).toHaveLength(3);
+   550	  expect(out.messages[0].kind).toBe("system");
+   551	  expect(out.messages[1].kind).toBe("boundary");
+   552	  expect(out.messages[1].boundarySubtype).toBe("session_resumed");
+   553	  expect(out.messages[2]).toMatchObject({ kind: "user", text: "child prompt" });
+   554	});
+
+ succeeded in 0ms:
+   260	              timestamp,
+   261	              kind: "user",
+   262	              text,
+   263	              raw,
+   264	              bytes: byteLength(text),
+   265	            });
+   266	            break;
+   267	          }
+   268	
+   269	          case "agent_message": {
+   270	            const m = payload ? payload["message"] : undefined;
+   271	            let text = "";
+   272	            if (typeof m === "string") {
+   273	              text = m;
+   274	            } else {
+   275	              warnings.push({
+   276	                lineOrdinal,
+   277	                reason: "event_msg.agent_message missing or non-string payload.message",
+   278	              });
+   279	            }
+   280	            messages.push({
+   281	              lineOrdinal,
+   282	              messageIndex: nextMessageIndex++,
+   283	              timestamp,
+   284	              kind: "assistant",
+   285	              text,
+   286	              raw,
+   287	              bytes: byteLength(text),
+   288	            });
+   289	            break;
+   290	          }
+   291	
+   292	          case "agent_reasoning": {
+   293	            // Rendered as assistant per spec line 777. No special discrimination at
+   294	            // the typed-message layer — the Raw tab is the verifiability hatch.
+   295	            const t = payload ? payload["text"] : undefined;
+   296	            const m = payload ? payload["message"] : undefined;
+   297	            let text = "";
+   298	            if (typeof t === "string") {
+   299	              text = t;
+   300	            } else if (typeof m === "string") {
+   301	              text = m;
+   302	            } else {
+   303	              warnings.push({
+   304	                lineOrdinal,
+   305	                reason:
+   306	                  "event_msg.agent_reasoning missing or non-string payload.text and payload.message",
+   307	              });
+   308	            }
+   309	            messages.push({
+   310	              lineOrdinal,
+   311	              messageIndex: nextMessageIndex++,
+   312	              timestamp,
+   313	              kind: "assistant",
+   314	              text,
+   315	              raw,
+   316	              bytes: byteLength(text),
+   317	            });
+   318	            break;
+   319	          }
+   320	
+   321	          case "task_started": {
+   322	            // Brief system note; preserves the chronological landmark without bloat.
+   323	            const turn =
+   324	              payload && typeof payload["turn_id"] === "string"
+   325	                ? (payload["turn_id"] as string)
+   326	                : "(unknown turn)";
+   327	            const text = `task_started · turn ${turn}`;
+   328	            messages.push({
+   329	              lineOrdinal,
+   330	              messageIndex: nextMessageIndex++,
+   331	              timestamp,
+   332	              kind: "system",
+   333	              text,
+   334	              raw,
+   335	              bytes: byteLength(text),
+   336	            });
+   337	            break;
+   338	          }
+   339	
+   340	          case "task_complete": {
+   341	            const turn =
+   342	              payload && typeof payload["turn_id"] === "string"
+   343	                ? (payload["turn_id"] as string)
+   344	                : "(unknown turn)";
+   345	            const text = `task_complete · turn ${turn}`;
+   346	            messages.push({
+   347	              lineOrdinal,
+   348	              messageIndex: nextMessageIndex++,
+   349	              timestamp,
+   350	              kind: "system",
+   351	              text,
+   352	              raw,
+   353	              bytes: byteLength(text),
+   354	            });
+   355	            break;
+   356	          }
+   357	
+   358	          case "exec_command": {
+   359	            const rawCommand = payload ? payload["command"] : null;
+   360	            if (rawCommand === null || rawCommand === undefined) {
+   361	              warnings.push({
+   362	                lineOrdinal,
+   363	                reason: "event_msg.exec_command missing payload.command",
+   364	              });
+   365	            }
+   366	            // Normalize undefined → null so JSON.stringify always returns a string
+   367	            // (JSON.stringify(undefined) === undefined, which would violate Message.text: string).
+   368	            // Spec line 779 mandates JSON.stringify(payload.command) literally — strings get JSON-quote-wrapped.
+   369	            const command = rawCommand ?? null;
+   370	            const text = JSON.stringify(command);
+   371	            messages.push({
+   372	              lineOrdinal,
+   373	              messageIndex: nextMessageIndex++,
+   374	              timestamp,
+   375	              kind: "tool_use",
+   376	              toolName: "exec",
+   377	              text,
+   378	              raw,
+   379	              bytes: byteLength(text),
+   380	            });
+   381	            break;
+   382	          }
+   383	
+   384	          case "exec_command_output": {
+   385	            const rawOutput = payload ? payload["output"] : null;
+   386	            if (rawOutput === null || rawOutput === undefined) {
+   387	              warnings.push({
+   388	                lineOrdinal,
+   389	                reason: "event_msg.exec_command_output missing payload.output",
+   390	              });
+   391	            }
+   392	            // Spec line 779: `text: ... / payload.output` — for exec_command_output the raw
+   393	            // string passes through (no JSON.stringify wrapper, unlike exec_command). Non-string
+   394	            // outputs (array/object/missing) get JSON.stringify-with-null-normalization to keep
+   395	            // Message.text: string. JSON.stringify(undefined) === undefined, so normalize to null first.
+   396	            const text =
+   397	              typeof rawOutput === "string"
+   398	                ? rawOutput
+   399	                : JSON.stringify(rawOutput ?? null);
+   400	            messages.push({
+   401	              lineOrdinal,
+   402	              messageIndex: nextMessageIndex++,
+   403	              timestamp,
+   404	              kind: "tool_result",
+   405	              toolName: "exec",
+   406	              text,
+   407	              raw,
+   408	              bytes: byteLength(text),
+   409	            });
+   410	            break;
+   411	          }
+   412	
+   413	          case "error": {
+   414	            const errMsg =
+   415	              payload && typeof payload["message"] === "string"
+   416	                ? (payload["message"] as string)
+   417	                : "(no error message)";
+   418	            warnings.push({
+   419	              lineOrdinal,
+   420	              reason: `event_msg.error: ${errMsg}`,
+   421	            });
+   422	            messages.push({
+   423	              lineOrdinal,
+   424	              messageIndex: nextMessageIndex++,
+   425	              timestamp,
+   426	              kind: "system",
+   427	              text: errMsg,
+   428	              raw,
+   429	              bytes: byteLength(errMsg),
+   430	            });
+   431	            break;
+   432	          }
+   433	
+   434	          default: {
+   435	            warnings.push({
+   436	              lineOrdinal,
+   437	              reason: `unknown event_msg payload.type '${payloadType}'`,
+   438	            });
+   439	            messages.push({
+   440	              lineOrdinal,
+   441	              messageIndex: nextMessageIndex++,
+   442	              timestamp,
+   443	              kind: "unknown",
+   444	              text: stringifyTruncated(payload),
+   445	              raw,
+   446	              bytes: byteLength(raw),
+   447	            });
+   448	          }
+   449	        }
+   450	        break;
+   451	      }
+   452	
+   453	      default: {
+   454	        warnings.push({
+   455	          lineOrdinal,
+   456	          reason: `unknown top-level type '${topType}'`,
+   457	        });
+   458	        messages.push({
+   459	          lineOrdinal,
+   460	          messageIndex: nextMessageIndex++,
+   461	          timestamp,
+   462	          kind: "unknown",
+   463	          text: stringifyTruncated(record),
+   464	          raw,
+   465	          bytes: byteLength(raw),
+   466	        });
+   467	      }
+   468	    }
+   469	  }
+   470	
+   471	  return { messages, warnings };
+   472	}
+   473	
+   474	/**
+   475	 * Read timestamp: top-level `/timestamp` preferred (spec line 784);
+   476	 * falls back to `/payload/timestamp`. Returns RFC3339 string when
+   477	 * parseable, null otherwise. Issues a warning on unparseable strings.
+   478	 */
+   479	function parseTimestamp(
+   480	  record: JsonObject,
+   481	  payload: JsonObject | null,
+   482	  lineOrdinal: number,
+   483	  warnings: ParseWarning[],
+   484	): string | null {
+   485	  const top = record["timestamp"];
+   486	  if (typeof top === "string") {
+   487	    const millis = Date.parse(top);
+   488	    if (!Number.isNaN(millis)) return top;
+   489	    warnings.push({
+   490	      lineOrdinal,
+   491	      reason: `unparseable RFC3339 top-level timestamp '${top}'`,
+   492	    });
+   493	    // Fall through to payload check.
+   494	  } else if (top !== undefined && top !== null) {
+   495	    warnings.push({ lineOrdinal, reason: "top-level timestamp is not a string" });
+   496	  }
+   497	
+   498	  if (payload) {
+   499	    const inner = payload["timestamp"];
+   500	    if (typeof inner === "string") {
+   501	      const millis = Date.parse(inner);
+   502	      if (!Number.isNaN(millis)) return inner;
+   503	      warnings.push({
+   504	        lineOrdinal,
+   505	        reason: `unparseable RFC3339 payload.timestamp '${inner}'`,
+   506	      });
+   507	    } else if (inner !== undefined && inner !== null) {
+   508	      warnings.push({ lineOrdinal, reason: "payload.timestamp is not a string" });
+   509	    }
+   510	  }
+   511	
+   512	  return null;
+   513	}
+   514	
+   515	function byteLength(text: string): number {
+   516	  return new TextEncoder().encode(text).length;
+   517	}
+   518	
+   519	function stringifyTruncated(value: unknown): string {
+   520	  try {
+   521	    return JSON.stringify(value).slice(0, 240);
+   522	  } catch {
+   523	    return "[unserialisable record]";
+   524	  }
+   525	}
+
+exec
+/bin/bash -lc "rg -n \"exec_command_output|exec_command|JSON.stringify\\(rawOutput|rawOutput|payload.output|payload.command\" src/features/sessions/parsers/codex.ts src/features/sessions/parsers/codex.test.ts /home/huwei/ai_codings/distill-portal/working/phase-5.md" in /home/huwei/ai_codings/distill-portal/apps/frontend
+ succeeded in 0ms:
+/home/huwei/ai_codings/distill-portal/working/phase-5.md:779:| `event_msg` | `exec_command` / `exec_command_output` | `Message.kind = "tool_use"` / `tool_result` with `toolName: "exec"` and `text: JSON.stringify(payload.command)` / `payload.output` |
+src/features/sessions/parsers/codex.ts:21:// can audit. NOTE: the spec says event_msg `exec_command` is canonical
+src/features/sessions/parsers/codex.ts:358:          case "exec_command": {
+src/features/sessions/parsers/codex.ts:363:                reason: "event_msg.exec_command missing payload.command",
+src/features/sessions/parsers/codex.ts:368:            // Spec line 779 mandates JSON.stringify(payload.command) literally — strings get JSON-quote-wrapped.
+src/features/sessions/parsers/codex.ts:384:          case "exec_command_output": {
+src/features/sessions/parsers/codex.ts:385:            const rawOutput = payload ? payload["output"] : null;
+src/features/sessions/parsers/codex.ts:386:            if (rawOutput === null || rawOutput === undefined) {
+src/features/sessions/parsers/codex.ts:389:                reason: "event_msg.exec_command_output missing payload.output",
+src/features/sessions/parsers/codex.ts:392:            // Spec line 779: `text: ... / payload.output` — for exec_command_output the raw
+src/features/sessions/parsers/codex.ts:393:            // string passes through (no JSON.stringify wrapper, unlike exec_command). Non-string
+src/features/sessions/parsers/codex.ts:397:              typeof rawOutput === "string"
+src/features/sessions/parsers/codex.ts:398:                ? rawOutput
+src/features/sessions/parsers/codex.ts:399:                : JSON.stringify(rawOutput ?? null);
+src/features/sessions/parsers/codex.test.ts:16://  14. event_msg.exec_command → tool_use toolName="exec"
+src/features/sessions/parsers/codex.test.ts:17://  15. event_msg.exec_command_output → tool_result toolName="exec"
+src/features/sessions/parsers/codex.test.ts:257:test("event_msg.exec_command with array command emits tool_use with JSON.stringify text (spec line 779 literal)", () => {
+src/features/sessions/parsers/codex.test.ts:260:    payload: { type: "exec_command", command: ["ls", "-la"] },
+src/features/sessions/parsers/codex.test.ts:264:  // Spec line 779: text: JSON.stringify(payload.command) — array becomes JSON array literal.
+src/features/sessions/parsers/codex.test.ts:268:test("event_msg.exec_command with STRING command JSON.stringify-wraps it in quotes (spec line 779 literal)", () => {
+src/features/sessions/parsers/codex.test.ts:271:    payload: { type: "exec_command", command: "ls -la" },
+src/features/sessions/parsers/codex.test.ts:278:test("event_msg.exec_command_output with string output passes through raw (spec line 779: payload.output, NOT JSON.stringify)", () => {
+src/features/sessions/parsers/codex.test.ts:281:    payload: { type: "exec_command_output", output: "total 0\nfoo\n" },
+src/features/sessions/parsers/codex.test.ts:285:  // Spec line 779 mandates `text: payload.output` (raw passthrough) for exec_command_output, NOT JSON.stringify.
+src/features/sessions/parsers/codex.test.ts:286:  // This is asymmetric with exec_command which DOES wrap in JSON.stringify per the same line.
+src/features/sessions/parsers/codex.test.ts:290:test("event_msg.exec_command_output with non-string output JSON.stringify-wraps for type safety", () => {
+src/features/sessions/parsers/codex.test.ts:293:    payload: { type: "exec_command_output", output: { exit: 0, stdout: "ok" } },
+src/features/sessions/parsers/codex.test.ts:300:test("event_msg.exec_command missing payload.command warns AND emits text='null' (string, not undefined)", () => {
+src/features/sessions/parsers/codex.test.ts:301:  const raw = JSON.stringify({ type: "event_msg", payload: { type: "exec_command" } });
+src/features/sessions/parsers/codex.test.ts:303:  expect(out.warnings.some((w) => w.reason.includes("exec_command missing payload.command"))).toBe(true);
+src/features/sessions/parsers/codex.test.ts:309:test("event_msg.exec_command_output missing payload.output warns AND emits text='null' (string, not undefined)", () => {
+src/features/sessions/parsers/codex.test.ts:310:  const raw = JSON.stringify({ type: "event_msg", payload: { type: "exec_command_output" } });
+src/features/sessions/parsers/codex.test.ts:312:  expect(out.warnings.some((w) => w.reason.includes("exec_command_output missing payload.output"))).toBe(true);
+
+codex
+The key fix matches the spec’s asymmetric wording at line 779: `exec_command` is stringified, `exec_command_output` is raw output. I’m doing one more pass over the shared parser types and then I’ll run the relevant frontend checks rather than relying only on the supplied counts.
+exec
+/bin/bash -lc "nl -ba src/features/sessions/parsers/types.ts | sed -n '1,220p'" in /home/huwei/ai_codings/distill-portal/apps/frontend
+ succeeded in 0ms:
+     1	// Type definitions for the per-tool message parsers, the dispatcher, and
+     2	// the buildSkim block model. Mirrors `working/phase-5.md` §Data Model in
+     3	// the Browser (lines 233-348) verbatim.
+     4	//
+     5	// Per-tool parsers (`parseClaudeCode`, `parseCodex`) return `ParserOutput`
+     6	// — pure of stream metadata. The dispatcher (`dispatchParser`) wraps the
+     7	// parser output with `StreamMeta` and `buildSkim(messages)` to produce the
+     8	// consumable `ParsedSession`.
+     9	//
+    10	// `Tool` is re-imported from the existing contracts barrel to keep the
+    11	// frontend's typed-message data model anchored to the canonical Rust
+    12	// contract crate. If `Tool` later grows a third variant the dispatcher's
+    13	// `Record<Tool, ParserFn>` type fails the build until a parser is added.
+    14	
+    15	import type { Tool } from "../../../lib/contracts";
+    16	
+    17	/**
+    18	 * The kinds a single parsed message can carry. Parsers assign these
+    19	 * authoritatively; `buildSkim` consumes them but never mutates.
+    20	 *
+    21	 * - `user` / `assistant` / `tool_use` / `tool_result`: standard timeline shapes.
+    22	 * - `system`: prelude / metadata (e.g., Codex `session_meta` first occurrence,
+    23	 *   Claude Code `summary`).
+    24	 * - `boundary`: chapter-break marker (Codex second `session_meta` →
+    25	 *   `session_resumed`; future `compacted` markers). Carries `boundarySubtype`.
+    26	 * - `unknown`: fallthrough for unrecognised top-level / payload shapes.
+    27	 *   Always paired with a `warnings[]` entry by the parser.
+    28	 */
+    29	export type MessageKind =
+    30	  | "user"
+    31	  | "assistant"
+    32	  | "tool_use"
+    33	  | "tool_result"
+    34	  | "system"
+    35	  | "unknown"
+    36	  | "boundary";
+    37	
+    38	/**
+    39	 * One typed message in the timeline. Multiple `Message` rows can share a
+    40	 * single `lineOrdinal` when one NDJSON line splits into N typed rows
+    41	 * (Claude Code assistant content arrays carrying both `text` and
+    42	 * `tool_use` items, for example). `messageIndex` is always sequential
+    43	 * across the entire stream — that monotonicity is what `buildSkim`
+    44	 * relies on to define inclusive `[start, end]` ranges.
+    45	 */
+    46	export type Message = {
+    47	  /** 0-indexed JSONL line number. Multiple messages may share this when one line splits into N rows. */
+    48	  lineOrdinal: number;
+    49	  /** 0-indexed sequential position in `messages[]`. Stable identity used by skim block ranges. */
+    50	  messageIndex: number;
+    51	  /** RFC3339-parsed timestamp from the line, or `null` if missing/unparseable. */
+    52	  timestamp: string | null;
+    53	  kind: MessageKind;
+    54	  /** Human-readable text body. Tool calls JSON.stringify their input here. */
+    55	  text: string;
+    56	  /** Populated when `kind === "tool_use"` or `kind === "tool_result"`. */
+    57	  toolName?: string;
+    58	  /** Populated when `kind === "boundary"`. Consumed by `buildSkim` for the chapter-break label. */
+    59	  boundarySubtype?: "session_resumed" | "compacted";
+    60	  /** Verbatim NDJSON line for "Expand to raw" affordances. */
+    61	  raw: string;
+    62	  /** Approximate UTF-8 byte size for oversize detection in `buildSkim`. */
+    63	  bytes: number;
+    64	};
+    65	
+    66	/**
+    67	 * The four block kinds emitted by `buildSkim`. Note `oversized_user_message`
+    68	 * and `boundary` are EMITTED as their own one-element blocks; `user_turn` and
+    69	 * `agent_only` are RANGES.
+    70	 *
+    71	 * Per spec lines 260-262.
+    72	 */
+    73	export type BlockKind =
+    74	  | "user_turn"
+    75	  | "boundary"
+    76	  | "agent_only"
+    77	  | "oversized_user_message";
+    78	
+    79	/**
+    80	 * One Skim block. `start` and `end` are INCLUSIVE indices into `messages[]`
+    81	 * (NOT `lineOrdinal`). `meta` carries kind-specific bookkeeping:
+    82	 *
+    83	 * - `user_turn` blocks may carry `oversize: N` if N user messages within
+    84	 *   the block exceed the threshold (we still keep the turn as `user_turn`;
+    85	 *   only top-level oversized-user-message-as-its-own-block emits the
+    86	 *   `oversized_user_message` kind). For M3a, the spec defers the inside-turn
+    87	 *   oversize counter to a later pass — buildSkim simply emits a top-level
+    88	 *   `oversized_user_message` block when the user turn would have started with
+    89	 *   an oversize user message.
+    90	 * - `agent_only` blocks may carry `empty: 1` for the empty-stream case.
+    91	 * - `boundary` blocks carry `subtype: "session_resumed" | "compacted"`.
+    92	 * - `oversized_user_message` blocks carry `sizeBytes: number`.
+    93	 */
+    94	export type SkimBlock = {
+    95	  kind: BlockKind;
+    96	  /** Inclusive `messageIndex` of the first message in the block. */
+    97	  start: number;
+    98	  /** Inclusive `messageIndex` of the last message in the block. -1 is reserved for the empty-stream sentinel. */
+    99	  end: number;
+   100	  meta?: Record<string, string | number>;
+   101	};
+   102	
+   103	/**
+   104	 * One parser warning. Surfaced as a small dismissible banner in M4/M5.
+   105	 * Every malformed input (JSON parse failure, unknown shape, role
+   106	 * mismatch, low-severity Claude-meta type) lands here — parsers MUST
+   107	 * NEVER throw.
+   108	 */
+   109	export type ParseWarning = {
+   110	  /** 0-indexed JSONL line number where the warning was raised. */
+   111	  lineOrdinal: number;
+   112	  /** Human-readable reason; surfaced as a small dismissible banner. */
+   113	  reason: string;
+   114	};
+   115	
+   116	/**
+   117	 * What a per-tool parser returns. Pure of stream metadata.
+   118	 */
+   119	export type ParserOutput = {
+   120	  messages: Message[];
+   121	  warnings: ParseWarning[];
+   122	};
+   123	
+   124	/**
+   125	 * Stream metadata produced by `streamRawText` (M3b) and passed into
+   126	 * `dispatchParser`. The dispatcher wraps it onto the `ParserOutput` to
+   127	 * form the consumable `ParsedSession`.
+   128	 */
+   129	export type StreamMeta = {
+   130	  /** Bytes accepted into `text` (UTF-8). */
+   131	  totalBytes: number;
+   132	  /** True when the 5 MB cap fired during streamRawText. */
+   133	  truncated: boolean;
+   134	};
+   135	
+   136	/**
+   137	 * What the dispatcher assembles. Consumed by Skim/Transcript views.
+   138	 */
+   139	export type ParsedSession = {
+   140	  tool: Tool;
+   141	  messages: Message[];
+   142	  skim: SkimBlock[];
+   143	  totalBytes: number;
+   144	  truncated: boolean;
+   145	  warnings: ParseWarning[];
+   146	};
+
+exec
+/bin/bash -lc "sed -n '1,220p' package.json" in /home/huwei/ai_codings/distill-portal/apps/frontend
+ succeeded in 0ms:
+{
+  "name": "distill-portal-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "bun test src",
+    "test:e2e": "bun --bun x playwright test",
+    "test:e2e:install": "playwright install chromium"
+  },
+  "dependencies": {
+    "focus-trap-react": "^11",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@testing-library/react": "16.3.2",
+    "@types/bun": "^1.3.13",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.7.0",
+    "happy-dom": "20.9.0",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.2"
+  }
+}
+
+codex
+The shared type confirms `Message.text` must remain a string, so the non-string fallback around `payload.output` is justified as a type-contract guard. I’m running the frontend unit suite and TypeScript check now.
+exec
+/bin/bash -lc 'bun run test' in /home/huwei/ai_codings/distill-portal/apps/frontend
+exec
+/bin/bash -lc 'bunx tsc --noEmit' in /home/huwei/ai_codings/distill-portal/apps/frontend
+ succeeded in 1796ms:
+ succeeded in 2004ms:
+
+ 415 pass
+ 0 fail
+ 1477 expect() calls
+Ran 415 tests across 27 files. [3.87s]
+
+codex
+- **Verdict**: approved
+- **Findings**: none
+- **Missing Evidence**: none
+- **Required Changes**: none
+- **Notes**: Verified spec line 779 against implementation and tests. Ran `bun run test` successfully: 415 pass, 0 fail, 1477 expects. Ran `bunx tsc --noEmit` successfully.
+tokens used
+33,616
+- **Verdict**: approved
+- **Findings**: none
+- **Missing Evidence**: none
+- **Required Changes**: none
+- **Notes**: Verified spec line 779 against implementation and tests. Ran `bun run test` successfully: 415 pass, 0 fail, 1477 expects. Ran `bunx tsc --noEmit` successfully.
