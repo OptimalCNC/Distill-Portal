@@ -39,10 +39,20 @@ import {
   cleanup,
   fireEvent,
   render,
+  renderHook,
   screen,
   waitFor,
 } from "@testing-library/react";
 import { App } from "./App";
+// M3b cacheEpoch wire-up tests use the hook + reset helper directly so
+// they can observe whether bumpCacheEpoch fired by checking whether a
+// pre-populated cache hit survives or not after the App's Rescan/
+// Import flows resolve.
+import {
+  _resetForTests as resetParsedSessionCache,
+  useParsedSession,
+} from "./features/sessions/useParsedSession";
+import type { SessionRow } from "./features/sessions/types";
 import {
   IMPORT_PATH,
   RESCAN_PATH,
@@ -3386,6 +3396,314 @@ test("M1b: <ActionBar> renders exactly once in the DOM (inside the sticky footer
   const footers = container.querySelectorAll(".list-pane-footer");
   expect(footers.length).toBe(1);
   expect(footers[0]?.querySelector(".action-bar")).not.toBeNull();
+});
+
+// ---------------------------------------------------------------------------
+// M3b: cacheEpoch wire-up tests
+// ---------------------------------------------------------------------------
+//
+// These tests exercise the bumpCacheEpoch() calls that App.tsx makes
+// from the Rescan-success and Import-success branches. The plan §7
+// recommends an OBSERVABLE-SIDE-EFFECT approach (NOT a mock.module
+// harness): pre-populate the parser cache by mounting `useParsedSession`
+// directly against a stored row, await success, then trigger the App
+// flow that should bump the epoch, and re-mount the hook to observe
+// whether the cache survived. This double-tests the contract — it
+// proves the bump fires AND that the bump actually clears the cache.
+// On the error paths, the cache MUST survive (a re-mount returns
+// synchronous "success" instead of "loading").
+
+/** SessionRow fixture for cache-priming. Mirrors the fixture used by
+ * useParsedSession.test.ts but co-located so this test file is
+ * self-contained. */
+function makeStoredRowFixture(uid: string): SessionRow {
+  return {
+    rowKey: `claude_code:${uid}`,
+    sourceSessionKey: `claude_code:${uid}`,
+    tool: "claude_code",
+    sourceSessionId: uid,
+    title: null,
+    projectPath: null,
+    sourcePath: `/tmp/${uid}.jsonl`,
+    sourcePathIsStale: false,
+    sourceFingerprint: `fp-${uid}`,
+    createdAt: "2026-04-22T00:00:00Z",
+    sourceUpdatedAt: "2026-04-22T00:00:00Z",
+    ingestedAt: "2026-04-22T00:00:01Z",
+    storedSessionUid: uid,
+    storedRawRef: `raw/${uid}.ndjson`,
+    hasSubagentSidecars: false,
+    status: "up_to_date",
+    statusConflict: false,
+    presence: "both",
+  };
+}
+
+/** Build a one-line valid Claude NDJSON streaming Response. */
+function makeRawSessionResponse(): Response {
+  const body = JSON.stringify({
+    type: "user",
+    timestamp: "2026-04-22T00:00:00Z",
+    message: { role: "user", content: "hi" },
+  }) + "\n";
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(body));
+      controller.close();
+    },
+  });
+  return new Response(stream, { status: 200 });
+}
+
+/** Wait three microtask ticks so the parser pipeline + setState chain
+ * settles. Mirrors the `flushMicrotasks` helper in
+ * useParsedSession.test.ts. */
+async function flushTicks(): Promise<void> {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+test("M3b: Rescan SUCCESS path bumps cache epoch (cached parsed payload is invalidated)", async () => {
+  resetParsedSessionCache();
+  // Prime the cache: mount a hook against a stored row and await success.
+  const row = makeStoredRowFixture("rescan-success-uid");
+  const fetchMock = mock(
+    async (
+      input: Request | string | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const url = urlOf(input);
+      const method = init?.method ?? "GET";
+      if (method === "GET" && /\/api\/v1\/sessions\/[^/]+\/raw$/.test(url)) {
+        return makeRawSessionResponse();
+      }
+      if (method === "POST" && url === RESCAN_PATH) {
+        return jsonResponse(RESCAN_FIXTURE);
+      }
+      if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
+        return jsonResponse(SOURCE_FIXTURE);
+      }
+      if (method === "GET" && url === STORED_SESSIONS_PATH) {
+        return jsonResponse(STORED_FIXTURE);
+      }
+      if (method === "GET" && url === SCAN_ERRORS_PATH) {
+        return jsonResponse(SCAN_ERRORS_FIXTURE);
+      }
+      return new Response(`unexpected ${method} ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  const primer = renderHook(() => useParsedSession(row));
+  await flushTicks();
+  expect(primer.result.current.state).toBe("success");
+  primer.unmount();
+  // Sanity: re-mount BEFORE the rescan returns synchronous success
+  // (cache hit, no fetch).
+  const sanity = renderHook(() => useParsedSession(row));
+  expect(sanity.result.current.state).toBe("success");
+  sanity.unmount();
+
+  // Now mount App and click Rescan.
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:fixture-abc");
+  const rescanButton = container.querySelector<HTMLButtonElement>(
+    ".action-bar button:nth-of-type(1)",
+  );
+  expect(rescanButton?.textContent).toBe("Rescan");
+  await act(async () => {
+    rescanButton?.click();
+  });
+  // Wait for the rescan-success toast — proves the success branch
+  // ran (and therefore bumpCacheEpoch must have fired).
+  await waitFor(() => {
+    expect(container.textContent?.includes("Rescan complete")).toBe(true);
+  });
+
+  // Cache should now be empty: re-mounting the hook against the same
+  // row must transition through "loading" instead of returning
+  // synchronous "success".
+  const after = renderHook(() => useParsedSession(row));
+  expect(after.result.current.state).toBe("loading");
+  await flushTicks();
+  // After the fresh fetch resolves, state is "success" again.
+  expect(after.result.current.state).toBe("success");
+});
+
+test("M3b: Rescan ERROR path does NOT bump cache epoch (cache survives)", async () => {
+  resetParsedSessionCache();
+  const row = makeStoredRowFixture("rescan-error-uid");
+  const fetchMock = mock(
+    async (
+      input: Request | string | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const url = urlOf(input);
+      const method = init?.method ?? "GET";
+      if (method === "GET" && /\/api\/v1\/sessions\/[^/]+\/raw$/.test(url)) {
+        return makeRawSessionResponse();
+      }
+      if (method === "POST" && url === RESCAN_PATH) {
+        // Rescan fails.
+        return new Response("server error", { status: 500 });
+      }
+      if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
+        return jsonResponse(SOURCE_FIXTURE);
+      }
+      if (method === "GET" && url === STORED_SESSIONS_PATH) {
+        return jsonResponse(STORED_FIXTURE);
+      }
+      if (method === "GET" && url === SCAN_ERRORS_PATH) {
+        return jsonResponse(SCAN_ERRORS_FIXTURE);
+      }
+      return new Response(`unexpected ${method} ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  // Prime cache.
+  const primer = renderHook(() => useParsedSession(row));
+  await flushTicks();
+  expect(primer.result.current.state).toBe("success");
+  primer.unmount();
+
+  // Mount App, click Rescan; expect failure toast.
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:fixture-abc");
+  const rescanButton = container.querySelector<HTMLButtonElement>(
+    ".action-bar button:nth-of-type(1)",
+  );
+  await act(async () => {
+    rescanButton?.click();
+  });
+  await waitFor(() => {
+    expect(container.textContent?.includes("Rescan failed")).toBe(true);
+  });
+
+  // Cache MUST survive: re-mount returns synchronous success.
+  const after = renderHook(() => useParsedSession(row));
+  expect(after.result.current.state).toBe("success");
+});
+
+test("M3b: Import SUCCESS path bumps cache epoch (cached parsed payload is invalidated)", async () => {
+  resetParsedSessionCache();
+  const row = makeStoredRowFixture("import-success-uid");
+  const fetchMock = mock(
+    async (
+      input: Request | string | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const url = urlOf(input);
+      const method = init?.method ?? "GET";
+      if (method === "GET" && /\/api\/v1\/sessions\/[^/]+\/raw$/.test(url)) {
+        return makeRawSessionResponse();
+      }
+      if (method === "POST" && url === IMPORT_PATH) {
+        return jsonResponse(IMPORT_FIXTURE);
+      }
+      if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
+        return jsonResponse(IMPORT_SOURCE_FIXTURE);
+      }
+      if (method === "GET" && url === STORED_SESSIONS_PATH) {
+        return jsonResponse(STORED_FIXTURE);
+      }
+      if (method === "GET" && url === SCAN_ERRORS_PATH) {
+        return jsonResponse(SCAN_ERRORS_FIXTURE);
+      }
+      return new Response(`unexpected ${method} ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  // Prime cache.
+  const primer = renderHook(() => useParsedSession(row));
+  await flushTicks();
+  expect(primer.result.current.state).toBe("success");
+  primer.unmount();
+
+  // Mount App, select an importable row, click Import.
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:selected-key-1");
+  const rowCheckbox = container.querySelector<HTMLInputElement>(
+    'input[type="checkbox"][aria-label="Select claude_code:selected-key-1"]',
+  );
+  await act(async () => {
+    rowCheckbox?.click();
+  });
+  const importButton = container.querySelector<HTMLButtonElement>(
+    ".action-bar button:nth-of-type(2)",
+  );
+  await act(async () => {
+    importButton?.click();
+  });
+  await waitFor(() => {
+    expect(container.textContent?.includes("Import complete")).toBe(true);
+  });
+
+  // Cache should be empty: re-mount transitions through "loading".
+  const after = renderHook(() => useParsedSession(row));
+  expect(after.result.current.state).toBe("loading");
+  await flushTicks();
+  expect(after.result.current.state).toBe("success");
+});
+
+test("M3b: Import ERROR path does NOT bump cache epoch (cache survives)", async () => {
+  resetParsedSessionCache();
+  const row = makeStoredRowFixture("import-error-uid");
+  const fetchMock = mock(
+    async (
+      input: Request | string | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const url = urlOf(input);
+      const method = init?.method ?? "GET";
+      if (method === "GET" && /\/api\/v1\/sessions\/[^/]+\/raw$/.test(url)) {
+        return makeRawSessionResponse();
+      }
+      if (method === "POST" && url === IMPORT_PATH) {
+        return new Response("server error", { status: 500 });
+      }
+      if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
+        return jsonResponse(IMPORT_SOURCE_FIXTURE);
+      }
+      if (method === "GET" && url === STORED_SESSIONS_PATH) {
+        return jsonResponse(STORED_FIXTURE);
+      }
+      if (method === "GET" && url === SCAN_ERRORS_PATH) {
+        return jsonResponse(SCAN_ERRORS_FIXTURE);
+      }
+      return new Response(`unexpected ${method} ${url}`, { status: 404 });
+    },
+  );
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+  // Prime cache.
+  const primer = renderHook(() => useParsedSession(row));
+  await flushTicks();
+  expect(primer.result.current.state).toBe("success");
+  primer.unmount();
+
+  // Mount App, select importable row, click Import; expect failure.
+  const { container } = render(<App />);
+  await screen.findByText("claude_code:selected-key-1");
+  const rowCheckbox = container.querySelector<HTMLInputElement>(
+    'input[type="checkbox"][aria-label="Select claude_code:selected-key-1"]',
+  );
+  await act(async () => {
+    rowCheckbox?.click();
+  });
+  const importButton = container.querySelector<HTMLButtonElement>(
+    ".action-bar button:nth-of-type(2)",
+  );
+  await act(async () => {
+    importButton?.click();
+  });
+  await waitFor(() => {
+    expect(container.textContent?.includes("Import failed")).toBe(true);
+  });
+
+  // Cache MUST survive: re-mount returns synchronous success.
+  const after = renderHook(() => useParsedSession(row));
+  expect(after.result.current.state).toBe("success");
 });
 
 test("M1a: session_not_found state renders only AFTER all three GETs settle", async () => {

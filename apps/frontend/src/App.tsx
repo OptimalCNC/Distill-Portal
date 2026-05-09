@@ -77,6 +77,12 @@ import { useToastQueue } from "./features/sessions/useToastQueue";
 import { readLastRescan, writeLastRescan } from "./features/sessions/lastRescan";
 import { useSelectedSession } from "./features/sessions/useSelectedSession";
 import { SessionView } from "./features/sessions/SessionView";
+// M3b: bumpCacheEpoch clears the per-session parser cache + aborts
+// in-flight fetches whenever a Rescan or Import succeeds. Spec line
+// 466 + Resolved Decision #13 (line 1158): cached parsed payloads are
+// invalidated whenever a Rescan or Import-success has changed the
+// underlying raw bytes.
+import { bumpCacheEpoch } from "./features/sessions/useParsedSession";
 
 export function App() {
   const [sourceState, setSourceState] = useState<PanelState<SourceSessionView[]>>(
@@ -461,6 +467,12 @@ export function App() {
         message: rescanSummary(report),
         details: rescanCounts(report),
       });
+      // M3b: clear the parser cache + abort in-flight fetches now
+      // that the user explicitly asked for fresh data. MUST run
+      // before refetchAll so a network blip on the refetch still
+      // leaves the cache invalidated; MUST NOT live in finally
+      // (error path keeps cache valid). Spec line 466.
+      bumpCacheEpoch();
       await refetchAll();
     } catch (error) {
       pushToast({
@@ -536,6 +548,11 @@ export function App() {
         message: importSummary(report),
         details: importCounts(report),
       });
+      // M3b: raw bytes may have been replaced by the import — clear
+      // the parser cache + abort in-flight fetches so the next
+      // Skim/Transcript view fetches fresh data. Same ordering rules
+      // as the Rescan branch. Spec line 466.
+      bumpCacheEpoch();
       await refetchAll();
     } catch (error) {
       pushToast({
