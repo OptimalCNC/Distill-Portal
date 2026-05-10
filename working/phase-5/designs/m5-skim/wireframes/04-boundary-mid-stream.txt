@@ -1,0 +1,100 @@
+M5 — Wireframe 04 — Boundary mid-stream (both subtypes)
+========================================================
+
+Scenario: a session with TWO boundary blocks of different subtypes
+("SESSION RESUMED" + "CONVERSATION COMPACTED") adjacent to user_turns
+on either side. Demonstrates byte-equivalence of the BoundaryRow
+component to M4's chapter break.
+
+  +-----------------------------------------------------------------------+
+  | Long-running multi-session thread                   [Open raw] [...]  |
+  | Transcript  Skim  Raw  Metadata                                       |
+  | -------                                                               |
+  |                                                                       |
+  |  +-----------------------------------------------------------+        |  <- user_turn[0]
+  |  | User message before the chapter break.                    |        |
+  |  +-----------------------------------------------------------+        |
+  |                                                                       |
+  |  ▸ Agent reaction (2 messages)                                        |
+  |                                                                       |  <- 32px (kind-change override: user_turn -> boundary)
+  |  ───────────────────  SESSION RESUMED  ───────────────────            |  <- .boundary-row[0]
+  |                       ^^^^^^^^^^^^^^^^                                |     Fraunces italic small-caps
+  |                       |                                               |     letter-spacing 0.18em
+  |                       |                                               |     --color-ink-muted
+  |                       1px hairlines flanking, --color-border-strong   |     --text-sm --font-display
+  |                                                                       |  <- 32px (boundary breathing below)
+  |  +-----------------------------------------------------------+        |  <- user_turn[1]
+  |  | Returning user picks up the thread after a session resume.|        |
+  |  +-----------------------------------------------------------+        |
+  |                                                                       |
+  |  ▸ Agent reaction (3 messages)                                        |
+  |                                                                       |  <- 32px (kind-change override)
+  |  ──────────────  CONVERSATION COMPACTED  ──────────────               |  <- .boundary-row[1]
+  |                                                                       |
+  |  +-----------------------------------------------------------+        |  <- user_turn[2]
+  |  | Final user message after a compaction event.              |        |
+  |  +-----------------------------------------------------------+        |
+  |                                                                       |
+  |  ▸ Agent reaction (1 messages)                                        |
+  |                                                                       |
+  +-----------------------------------------------------------------------+
+
+Notes
+-----
+- BYTE-EQUIVALENCE CONTRACT (signature detail #1, spec line 691):
+  The boundary recipe rendered here MUST match M4's TranscriptView
+  boundary recipe at the rendered DOM level. The shared BoundaryRow
+  component (apps/frontend/src/features/sessions/BoundaryRow.tsx)
+  guarantees this — both M4 and M5 import the SAME component, so the
+  DOM tree is identical (modulo the optional `style` attribute carrying
+  the M5 stagger animationDelay).
+
+- DOM tree (both contexts):
+    <li class="boundary-row" role="separator" aria-orientation="horizontal">
+      <span aria-hidden="true" class="boundary-row-rule boundary-row-rule-start"></span>
+      <span class="boundary-row-label">SESSION RESUMED</span>
+      <span aria-hidden="true" class="boundary-row-rule boundary-row-rule-end"></span>
+    </li>
+
+- CSS recipe (BoundaryRow.css):
+    .boundary-row {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: var(--space-4);
+      margin-block: var(--space-8);    /* 32px breathing */
+      list-style: none;
+      inline-size: 100%;
+    }
+    .boundary-row-rule {
+      block-size: 1px;
+      inline-size: 100%;
+      background: var(--color-border-strong);
+    }
+    .boundary-row-label {
+      font-family: var(--font-display);
+      font-size: var(--text-sm);
+      color: var(--color-ink-muted);
+      font-style: italic;
+      font-variant: small-caps;
+      letter-spacing: 0.18em;
+      padding: 0 var(--space-3);
+    }
+
+- Subtype copy mapping (verbatim per spec line 691):
+  - subtype === "session_resumed" -> "SESSION RESUMED"
+  - subtype === "compacted"        -> "CONVERSATION COMPACTED"
+  - subtype === undefined          -> "SESSION RESUMED" (defensive default)
+
+- a11y: <li role="separator" aria-orientation="horizontal"> — flat shape
+  on the <li> itself (no nested <div>). Screen readers announce as
+  "separator: SESSION RESUMED" / "separator: CONVERSATION COMPACTED",
+  bypassing the list-item count.
+
+- Spacing rhythm: 32px above + below every boundary (overrides both
+  the 24px same-kind floor and the 32px kind-change override). Source
+  order ensures the boundary rule wins.
+
+- The boundary block also participates in the skim-block stagger
+  animation (animationDelay = 40ms × min(idx, 8) just like sibling
+  skim-blocks).

@@ -1,0 +1,116 @@
+M5 — Wireframe 07 — user_turn fully expanded
+=============================================
+
+Scenario: BOTH outer "Agent reaction" disclosure AND inner
+"Expand to raw messages" disclosure are OPEN. The scoped
+TranscriptView is mounted and renders the agent reaction's
+messages inline.
+
+  +-----------------------------------------------------------------------+
+  | Tracking down a regression                          [Open raw] [...]  |
+  | Transcript  Skim  Raw  Metadata                                       |
+  | -------                                                               |
+  |                                                                       |
+  |  +-----------------------------------------------------------+        |  <- .skim-user-panel
+  |  | I'm seeing a weird off-by-one error in the SkimView       |        |
+  |  | rhythm rules. The 24px gap fires between adjacent          |        |
+  |  | user_turns, which is what I want, but between user_turn   |        |
+  |  | and the boundary I'm only getting 16px instead of 32px.   |        |
+  |  +-----------------------------------------------------------+        |
+  |                                                                       |
+  |  ▾ Agent reaction (4 messages)                                        |  <- outer <details> OPEN
+  |                                                                       |
+  |    │  Summary disabled — generation deferred to a later phase.        |  <- .skim-summary-disabled
+  |    │  Use "Expand to raw messages" to read the agent's response       |
+  |    │  inline.                                                         |
+  |                                                                       |
+  |    ▾ Expand to raw messages                                           |  <- inner <details> OPEN
+  |                                                                       |     padding-inline-start: --space-4
+  |    │ +---------------------------------------------------------+      |     border-inline-start: 1px solid --color-border
+  |    │ | ASSISTANT · 3 minutes ago                               |      |  <- scoped TranscriptView mounted
+  |    │ |                                                         |      |     messageRange = {start: block.start+1, end: block.end}
+  |    │ | The off-by-one is in the kind-change override rule.     |      |     renders messages from M4 TranscriptView.
+  |    │ | Source-order: same-kind floor (24px) -> kind-change     |      |     Each message uses M4's per-kind recipe verbatim.
+  |    │ | override (32px) -> boundary breathing (32px). Boundary  |      |
+  |    │ | rule comes LAST so it always wins.                      |      |
+  |    │ +---------------------------------------------------------+      |
+  |    │                                                                  |  <- 16px (M4 default rhythm — different kind in M4)
+  |    │ +---------------------------------------------------------+      |
+  |    │ | TOOL · Read                                             |      |
+  |    │ |                                                         |      |     M4 .msg-tool-use shape inherited
+  |    │ | ▸ Arguments                                             |      |
+  |    │ +---------------------------------------------------------+      |
+  |    │                                                                  |
+  |    │ +---------------------------------------------------------+      |
+  |    │ | TOOL RESULT · Read                                      |      |
+  |    │ | ╔═════════════════════════════════════════════════════╗ |      |     M4 .msg-tool-result shape inherited
+  |    │ | ║ .skim-stream > .skim-block + .skim-block {          ║ |      |
+  |    │ | ║   margin-top: var(--space-6);                       ║ |      |
+  |    │ | ║ }                                                   ║ |      |
+  |    │ | ╚═════════════════════════════════════════════════════╝ |      |
+  |    │ +---------------------------------------------------------+      |
+  |    │                                                                  |
+  |    │ +---------------------------------------------------------+      |
+  |    │ | ASSISTANT · 2 minutes ago                               |      |
+  |    │ |                                                         |      |
+  |    │ | Confirmed — the kind-change override CSS at line 38 of  |      |
+  |    │ | SkimView.css fires only for the enumerated pairs. If    |      |
+  |    │ | a future kind is added, that selector list needs an     |      |
+  |    │ | extension.                                              |      |
+  |    │ +---------------------------------------------------------+      |
+  |                                                                       |
+  +-----------------------------------------------------------------------+
+
+DOM tree:
+
+  <li class="skim-block skim-block-user-turn">
+    <article class="skim-user-panel">
+      <div class="skim-user-body">I'm seeing a weird off-by-one error...</div>
+    </article>
+    <details class="skim-agent-reaction" open>
+      <summary class="skim-agent-reaction-summary">Agent reaction (4 messages)</summary>
+      <div class="skim-agent-reaction-body">
+        <p class="skim-summary-disabled">Summary disabled — ...</p>
+        <details class="skim-expand-raw" open>
+          <summary class="skim-expand-raw-summary">Expand to raw messages</summary>
+          <div class="skim-expand-raw-body">
+            <section class="transcript-body" aria-label="Session transcript">
+              <ol class="transcript-stream" role="list">
+                <li><article class="msg msg-assistant">...</article></li>
+                <li><article class="msg msg-tool-use">...</article></li>
+                <li><article class="msg msg-tool-result">...</article></li>
+                <li><article class="msg msg-assistant">...</article></li>
+              </ol>
+            </section>
+          </div>
+        </details>
+      </div>
+    </details>
+  </li>
+
+Notes
+-----
+- The scoped TranscriptView is REUSED VERBATIM from M4. The new
+  optional `messageRange` prop slices `parsed.messages` to the agent
+  reaction range `[block.start+1, block.end]` (inclusive both ends,
+  per planner Q10).
+
+- Per-message rendering inherits M4's recipe entirely:
+  - `msg-assistant`: bare surface panel with attribution row.
+  - `msg-tool-use`: hairline-bordered chrome with disclosure.
+  - `msg-tool-result`: hairline-bordered chrome + collapsible tail.
+  - All messages respect the 70ch reading measure within the
+    `transcript-stream`.
+
+- a11y: Nested <section aria-label="..."> landmarks. The outer
+  SkimView is `aria-label="Session skim outline"`; the inner scoped
+  TranscriptView is `aria-label="Session transcript"`. Both are
+  reachable via `getByRole("region", { name: ... })`.
+
+- The scoped TranscriptView's stream container has its own
+  rhythm rules (M4's three-magnitude rule for messages). NO override
+  needed in M5; the messages render with M4 spacing.
+
+- Performance: a 4-message scoped TranscriptView mounts trivially
+  (well under 16ms). For larger reactions (e.g., 50+ messages),
+  consider the long-corpus observation step in design.md §13.3.

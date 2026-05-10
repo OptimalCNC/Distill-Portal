@@ -1,0 +1,71 @@
+M5 — Wireframe 05 — user_turn collapsed (default state)
+========================================================
+
+Scenario: a single user_turn block with the outer "Agent reaction"
+disclosure CLOSED. This is the default state for every user_turn at
+first paint.
+
+  +-----------------------------------------------------------------------+
+  | Tracking down a regression                          [Open raw] [...]  |
+  | Transcript  Skim  Raw  Metadata                                       |
+  | -------                                                               |
+  |                                                                       |
+  |  +-----------------------------------------------------------+        |  <- .skim-block-user-turn
+  |  | I'm seeing a weird off-by-one error in the SkimView       |        |     padding 24px 32px (--space-6 --space-8)
+  |  | rhythm rules. The 24px gap fires between adjacent user_turns,    |     background: 5% accent + surface mix
+  |  | which is what I want, but between user_turn and the boundary    |     border-radius: --radius-md
+  |  | I'm only getting 16px instead of 32px.                            |     max-inline-size: --measure (70ch)
+  |  +-----------------------------------------------------------+        |
+  |                                                                       |  <- agent-reaction margin-top: --space-3
+  |  ▸ Agent reaction (4 messages)                                        |  <- .skim-agent-reaction <details> CLOSED
+  |  ^                                                                    |     summary text:
+  |  |                                                                    |       --font-chrome --text-sm --color-ink-muted
+  |  Native disclosure triangle (rotated for closed state)                |       padding: --space-2 0
+  |                                                                       |       cursor: pointer
+  |                                                                       |       list-style: revert (preserve triangle)
+  |                                                                       |
+  +-----------------------------------------------------------------------+
+
+DOM tree (closed state):
+
+  <li class="skim-block skim-block-user-turn" style="animation-delay: 0ms;">
+    <article class="skim-user-panel">
+      <div class="skim-user-body">I'm seeing a weird off-by-one error in
+      the SkimView rhythm rules...</div>
+    </article>
+    <details class="skim-agent-reaction">
+      <summary class="skim-agent-reaction-summary">Agent reaction (4 messages)</summary>
+      <div class="skim-agent-reaction-body">
+        <p class="skim-summary-disabled">Summary disabled — generation
+        deferred to a later phase. Use "Expand to raw messages" to read
+        the agent's response inline.</p>
+        <details class="skim-expand-raw">
+          <summary class="skim-expand-raw-summary">Expand to raw messages</summary>
+          <div class="skim-expand-raw-body">
+            <TranscriptView row={row} now={now}
+                            messageRange={{start: block.start+1, end: block.end}} />
+          </div>
+        </details>
+      </div>
+    </details>
+  </li>
+
+The body of the outer <details> exists in the DOM but is HIDDEN by
+the native browser style (display: none) until the user clicks the
+summary. The scoped TranscriptView is mounted (eagerly) — but
+invisible. Clicking the summary unhides the body via the M2b-authorized
+block-size disclosure animation.
+
+Notes
+-----
+- Default closed: per planner Q2 ("collapsible <details> element" + the
+  spec's broader "collapsed default" pattern for disclosures).
+- The agent-reaction summary uses --color-ink-muted (NOT --color-accent
+  — this is chrome metadata, NOT an interactive affordance like "Expand
+  to raw messages").
+- Hover on summary: NO visible state change (no transition on color or
+  background; the cursor: pointer + native triangle are the affordance).
+- Focus-visible on summary: native browser focus ring (preserved); M5
+  does NOT customize.
+- Activation: Enter or Space toggles open. Tab moves focus to the next
+  focusable element (the inner "Expand to raw messages" summary).

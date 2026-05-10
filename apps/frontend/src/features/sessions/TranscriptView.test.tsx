@@ -929,3 +929,170 @@ test("truncation banner copy is exactly the spec line 715 literal", () => {
     "Truncated at 5 MB — full payload not parsed. Use the Open raw anchor in the session header to inspect the full payload.",
   );
 });
+
+// ==========================================================================
+// messageRange prop (M5 composition)
+// ==========================================================================
+
+test("messageRange prop omitted → renders all messages (M4 default behaviour)", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      makeMessage({ kind: "user", text: "u1", messageIndex: 0 }),
+      makeMessage({ kind: "assistant", text: "a1", messageIndex: 1 }),
+      makeMessage({ kind: "assistant", text: "a2", messageIndex: 2 }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const stream = container.querySelector(".transcript-stream");
+  expect(stream?.children.length).toBe(3);
+});
+
+test("messageRange={start:1, end:2} → renders only messages at index 1, 2 (inclusive)", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      makeMessage({ kind: "user", text: "u1", messageIndex: 0 }),
+      makeMessage({ kind: "assistant", text: "a1", messageIndex: 1 }),
+      makeMessage({ kind: "assistant", text: "a2", messageIndex: 2 }),
+      makeMessage({ kind: "assistant", text: "a3", messageIndex: 3 }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView
+      row={buildRow()}
+      now={NOW}
+      messageRange={{ start: 1, end: 2 }}
+    />,
+  );
+  const stream = container.querySelector(".transcript-stream");
+  expect(stream?.children.length).toBe(2);
+  expect(stream?.textContent).toContain("a1");
+  expect(stream?.textContent).toContain("a2");
+  expect(stream?.textContent).not.toContain("u1");
+  expect(stream?.textContent).not.toContain("a3");
+});
+
+test("messageRange={start:0, end:0} → renders single message (inclusive both ends)", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      makeMessage({ kind: "user", text: "only", messageIndex: 0 }),
+      makeMessage({ kind: "assistant", text: "agent", messageIndex: 1 }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView
+      row={buildRow()}
+      now={NOW}
+      messageRange={{ start: 0, end: 0 }}
+    />,
+  );
+  expect(container.querySelector(".transcript-stream")?.children.length).toBe(
+    1,
+  );
+});
+
+test("messageRange with start > end → renders empty-stream copy (defensive)", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      makeMessage({ kind: "user", text: "u1", messageIndex: 0 }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView
+      row={buildRow()}
+      now={NOW}
+      messageRange={{ start: 5, end: 1 }}
+    />,
+  );
+  expect(
+    container.querySelector(".transcript-empty-stream")?.textContent,
+  ).toBe("No messages parsed.");
+});
+
+test("messageRange with empty-stream sentinel {start:0, end:-1} → renders 'No messages parsed.' (no crash)", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([]),
+  };
+  const { container } = render(
+    <TranscriptView
+      row={buildRow()}
+      now={NOW}
+      messageRange={{ start: 0, end: -1 }}
+    />,
+  );
+  expect(
+    container.querySelector(".transcript-empty-stream")?.textContent,
+  ).toBe("No messages parsed.");
+});
+
+test("messageRange with end > messages.length-1 → clamps to last index (no out-of-bounds)", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      makeMessage({ kind: "user", text: "u1", messageIndex: 0 }),
+      makeMessage({ kind: "assistant", text: "a1", messageIndex: 1 }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView
+      row={buildRow()}
+      now={NOW}
+      messageRange={{ start: 0, end: 999 }}
+    />,
+  );
+  expect(container.querySelector(".transcript-stream")?.children.length).toBe(
+    2,
+  );
+});
+
+test("messageRange with start < 0 → clamps to 0", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      makeMessage({ kind: "user", text: "u1", messageIndex: 0 }),
+      makeMessage({ kind: "assistant", text: "a1", messageIndex: 1 }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView
+      row={buildRow()}
+      now={NOW}
+      messageRange={{ start: -5, end: 1 }}
+    />,
+  );
+  expect(container.querySelector(".transcript-stream")?.children.length).toBe(
+    2,
+  );
+});
+
+// ==========================================================================
+// BoundaryRow composition (M5 extraction byte-equivalence)
+// ==========================================================================
+
+test("boundary message uses BoundaryRow shared component (carries 'boundary-row' class alongside legacy 'msg-boundary')", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      makeMessage({
+        kind: "boundary",
+        boundarySubtype: "session_resumed",
+        text: "",
+        bytes: 0,
+      }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const boundary = container.querySelector('[role="separator"]') as HTMLElement;
+  expect(boundary).not.toBeNull();
+  expect(boundary.classList.contains("boundary-row")).toBe(true);
+  expect(boundary.classList.contains("msg-boundary")).toBe(true);
+  expect(boundary.classList.contains("msg")).toBe(true);
+});

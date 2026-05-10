@@ -1,0 +1,63 @@
+M5 — Wireframe 02 — Truncated variant
+=======================================
+
+Scenario: parsed.truncated === true. SkimView renders the truncation banner
+ABOVE the stream. Banner is BYTE-EQUIVALENT to M4's transcript banner
+(8% warn-tinted background, 3px warn left stripe, opacity-only entrance).
+
+  +-----------------------------------------------------------------------+
+  | Long debugging session                              [Open raw] [...]  |  <- session-pane-header
+  | Transcript  Skim  Raw  Metadata                                       |
+  | -------                                                               |
+  |                                                                       |
+  | │===================================================================│ |  <- .skim-banner-truncation
+  | │  Truncated at 5 MB — full payload not parsed. Use the **Open       │ |     8% warn-mix background
+  | │  raw** anchor in the session header to inspect the full payload.   │ |     3px --color-warn left stripe
+  | │===================================================================│ |     opacity 0->1 entrance (--motion-base)
+  |                                                                       |  <- 24px margin-bottom
+  |  +-----------------------------------------------------------+        |  <- .skim-block-user-turn[0]
+  |  | First user message in a truncated session — only partial  |        |
+  |  | content was parsed before the 5 MB cap fired.             |        |
+  |  +-----------------------------------------------------------+        |
+  |                                                                       |
+  |  ▸ Agent reaction (2 messages)                                        |
+  |                                                                       |  <- 24px (same-kind floor)
+  |  +-----------------------------------------------------------+        |
+  |  | Second user message before truncation — note the banner   |        |
+  |  | above persists until the user opens the raw payload.      |        |
+  |  +-----------------------------------------------------------+        |
+  |                                                                       |
+  |  ▸ Agent reaction (1 messages)                                        |  <- N=1 spec literal "(1 messages)"
+  |                                                                       |
+  |  ─────────────  CONVERSATION COMPACTED  ─────────────                 |  <- .boundary-row
+  |                                                                       |
+  |  +-----------------------------------------------------------+        |
+  |  | Final user message before the cap fired.                  |        |
+  |  +-----------------------------------------------------------+        |
+  |                                                                       |
+  |  ▸ Agent reaction (0 messages)                                        |  <- N=0 spec literal "(0 messages)"
+  |                                                                       |
+  +-----------------------------------------------------------------------+
+
+Notes
+-----
+- The truncation banner ALWAYS renders at the top of the stream when
+  `state === "truncated"`. It does NOT have a dismiss button (truncation
+  is a data invariant, not user-clearable; matches M4's M4 design.md §6.4).
+- The "Open raw" word in the banner is bolded text only — there is NO
+  anchor element embedded inside the banner. The banner copy is a
+  reference to the "Open raw" anchor in the session-pane-header (landed
+  in M4 per design.md §6.1.1; visible only when `row.storedSessionUid !==
+  null`).
+- Banner copy is byte-equivalent to M4's truncation banner. The CSS
+  recipe lives in SkimView.css inline (per planner Q12 — "byte-equivalent
+  CSS, NOT shared component extraction").
+- The N=1 and N=0 cases for "Agent reaction" are spec-literal verbatim
+  ("Agent reaction (1 messages)" / "Agent reaction (0 messages)"); the
+  M3a parse-warnings precedent applies — spec literal beats English
+  grammar.
+- Skim-block stagger: blocks 0..3 cascade at 0ms, 40ms, 80ms (boundary),
+  120ms.
+- The CONVERSATION COMPACTED boundary block in this scenario is between
+  user_turn[1] and user_turn[2]; the boundary block carries 32px
+  breathing top + bottom (overrides the 24px same-kind rule).

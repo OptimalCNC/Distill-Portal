@@ -1,0 +1,138 @@
+External non-Claude reviewer for distill-portal Phase 5 M5 design artifact (round 1).
+
+You have full sandbox permission. Execute every check below directly, including running Python scripts. Return concrete file:line findings + command outputs.
+
+## What M5 ships (design artifact only — no code yet)
+
+M5 is the SkimView design artifact: layout + visual treatments for the four `SkimBlock` kinds (`user_turn`, `boundary`, `agent_only`, `oversized_user_message`) on the Skim tab. The design composes the M2a Archive-room aesthetic + M4 TranscriptView vocabulary. M5 introduces ZERO new tokens, ZERO new hex literals, ZERO new fonts, ZERO new motion vocab.
+
+The implementation chunk has NOT yet shipped — this review covers the design artifact only.
+
+## Spec source-of-truth
+
+- `/home/huwei/ai_codings/distill-portal/working/phase-5.md` lines 679-697 (§Skim tab)
+- lines 84-95 (motion budget)
+- lines 1042-1059 (Milestone 5 DoD)
+- lines 233-348 (Data Model)
+
+Spec frozen at commit `05467ad` on `main`.
+
+## Design artifact under review
+
+Files (NEW, all under `/home/huwei/ai_codings/distill-portal/working/phase-5/designs/m5-skim/`):
+- `design.md` (1830 lines)
+- `colors.md` (409 lines, 29 WCAG-AA pairs)
+- `motion.md` (629 lines)
+- `prototype.html` (1157 lines)
+- `wcag_m5.py` (214 lines, pure-stdlib reproducible script)
+- `wireframes/{01..09}.txt` (9 files, 787 lines total)
+
+## Coordinator context: known follow-ups
+
+The designer flagged 2 explicit open issues in their summary:
+
+1. **`python3 wcag_m5.py` could not be executed** during the design dispatch (sandbox classifier was down). Designer transcribed ratios from M4's published authoritative output where pairs overlap. **YOU MUST run the script and confirm zero drift** against the colors.md table values. M4 codex precedent: 4 numerical-drift pairs surfaced in r1 via `python3 wcag_m4.py` execution; same blast radius applies here.
+
+2. **translateY vs translateX in stagger keyframe**: spec line 93 reads `translateX(4px → 0)`; M5 design ships `translateY(4px → 0)` for editorial reasons (vertical stack → vertical offset). Documented at `working/phase-5/designs/m5-skim/design.md` §13.4. Coordinator preliminary call: vertical stagger feels right for a vertical block list; codex may overrule.
+
+## YOU MUST EXECUTE these commands in your sandbox
+
+```bash
+cd /home/huwei/ai_codings/distill-portal
+
+# 1. WCAG script execution and drift check (M4 r1 precedent)
+python3 working/phase-5/designs/m5-skim/wcag_m5.py | tee /tmp/m5-wcag-out.txt
+# Cross-check every ratio in the script output against the table values in
+# working/phase-5/designs/m5-skim/colors.md. ANY drift > 0.005 is BLOCKING.
+
+# 2. Token-equivalence check (M5 introduces ZERO new tokens)
+diff <(grep -A 30 'TOKENS = {' working/phase-5/designs/m4-transcript/wcag_m4.py) \
+     <(grep -A 30 'TOKENS = {' working/phase-5/designs/m5-skim/wcag_m5.py)
+# Expected: differs only by comments / encoding (Bjorn vs Björn). NOT in numerical values.
+
+# 3. Hex isolation invariant (must be unchanged from M4 close)
+rg -n '#[0-9a-fA-F]{3,8}' apps/frontend/src/ | wc -l   # MUST equal 24
+
+# 4. Token count invariant
+rg -c '^\s*--' apps/frontend/src/styles/tokens.css     # MUST equal 83
+
+# 5. Spec-literal copy in design.md
+grep -nE 'Agent reaction \(N messages\)|Agent reaction \(\{' working/phase-5/designs/m5-skim/design.md
+grep -nE 'Agent-only session \(\{count\} messages\)|\(N messages\)' working/phase-5/designs/m5-skim/design.md
+grep -nE 'Oversized user message \(\{sizeKB\} KB\) — collapsed by default' working/phase-5/designs/m5-skim/design.md
+grep -nE 'Summary disabled — generation deferred to a later phase' working/phase-5/designs/m5-skim/design.md
+grep -nE 'Expand to raw messages' working/phase-5/designs/m5-skim/design.md
+grep -nE 'SESSION RESUMED|CONVERSATION COMPACTED' working/phase-5/designs/m5-skim/design.md
+
+# 6. Motion-budget compliance
+grep -nE '^\s*animation:|^\s*transition:' working/phase-5/designs/m5-skim/prototype.html
+# Expected: animation OK on opacity/transform/background-color (enumerated surfaces);
+# NO transitions on color/border/width/height/top/padding/transform-on-message-panels.
+
+# 7. Boundary recipe equivalence with M4
+grep -nE 'role=.separator.|aria-orientation' working/phase-5/designs/m5-skim/design.md
+grep -nE 'role=.separator.|aria-orientation' working/phase-5/designs/m5-skim/prototype.html
+
+# 8. Stagger keyframe inspection (translateY vs translateX)
+grep -nE 'translateY|translateX' working/phase-5/designs/m5-skim/{design.md,motion.md,prototype.html}
+
+# 9. Pluralization rule check (spec literal beats grammar — N=1 must read "(1 messages)")
+grep -nE '\(1 message\b|1 messages|\\?{count\\?} messages|\(\{count\}' working/phase-5/designs/m5-skim/design.md
+```
+
+## Block if you find any of these
+
+### WCAG drift (codex M4 r1 precedent)
+- ANY ratio in colors.md that doesn't match `wcag_m5.py` output to two decimal places → BLOCKING.
+- ANY pair where the AA verdict (PASS/FAIL) disagrees with the ratio computation → BLOCKING.
+- ANY non-text pair below SC 1.4.11 3:1 threshold (without documented decorative justification) → BLOCKING.
+
+### Token discipline (codex M2b r1 #3 precedent)
+- Any new `--*` token in design.md that doesn't exist in tokens.css → BLOCKING.
+- Hex isolation drift (must equal 24) → BLOCKING.
+- Token count drift (must equal 83) → BLOCKING.
+
+### Motion budget (codex M2b r1 #2 precedent)
+- ANY transition on color, border-color, width, height, top, padding, transform-on-message-panels, background-color-on-message-panels → BLOCKING.
+- Stagger keyframe must animate ONLY transform + opacity (NO top/padding/width/height).
+- `translateX` vs `translateY` (spec line 93 says `translateX`): designer intentionally diverged. Decide if this is acceptable design rationale or blocking spec literal.
+
+### Spec literal (codex M3a r1/r4 precedent)
+- "Agent reaction (N messages)" — verify the design template renders ALL N (no special-cased `(1 message)` singular).
+- "Agent-only session ({count} messages)" — same pluralization rule.
+- "Oversized user message ({sizeKB} KB) — collapsed by default" verbatim.
+- "Summary disabled — generation deferred to a later phase. Use \"Expand to raw messages\" to read the agent's response inline." verbatim.
+- "SESSION RESUMED" / "CONVERSATION COMPACTED" verbatim uppercase.
+
+### Boundary chapter-break recipe sharing
+- Spec line 691 mandates byte-equivalence between Skim's boundary and Transcript's boundary at M5 close (signature detail #1).
+- Verify design.md proposes a shared `BoundaryRow` component (not duplicated implementation).
+- Verify the shape: flat `<li role="separator" aria-orientation="horizontal">` (matches M4 TranscriptView.tsx:370-371).
+
+### a11y
+- SkimView root: `<section aria-label="...">` landmark.
+- Block list: ordered list semantics.
+- `<details>` summary as accessible label.
+- Scoped TranscriptView a11y inherited.
+
+### Bun-first invariant (project-wide)
+- No `child_process`, no `npm`/`node` references in the design.
+
+### Protected paths
+- No design artifact references modifications to `apps/backend/`, `components/`, `tests/e2e/` (Rust), root `Cargo.{toml,lock}`.
+
+## Files to inspect (you have full read access)
+
+All paths under `/home/huwei/ai_codings/distill-portal/`. Read the M5 design artifact (6 files + 9 wireframes), the M5 plan at `working/phase-5/m5-plan.md`, the spec at `working/phase-5.md`, the existing M4 design artifact at `working/phase-5/designs/m4-transcript/` for comparison, and `apps/frontend/src/features/sessions/TranscriptView.{tsx,css}` for the boundary recipe.
+
+EXECUTE every command above. Provide concrete file:line findings + command outputs. DO NOT decline to inspect.
+
+## Output exactly
+
+- Verdict: approved | approved with nits | needs changes | needs more evidence
+- Findings: bullets with file:line, or none
+- Missing Evidence: required missing evidence, or none
+- Required Changes: precise file:line + before/after, or none
+- Notes: optional improvements, or none
+
+Begin review now.

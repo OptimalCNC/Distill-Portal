@@ -1,0 +1,93 @@
+M5 — Wireframe 08 — Empty stream (agent_only with 0 messages)
+==============================================================
+
+Scenario: parsed.messages is empty. buildSkim emits the sentinel
+`{ kind: "agent_only", start: 0, end: -1, meta: { empty: 1 } }`.
+SkimView renders ONE block: an agent_only with summary "Agent-only
+session (0 messages)". Spec line 697: "The Skim view NEVER renders
+silently blank for any state."
+
+Wireframe state A: agent_only block CLOSED (default).
+
+  +-----------------------------------------------------------------------+
+  | Empty session (no messages parsed)                  [Open raw] [...]  |
+  | Transcript  Skim  Raw  Metadata                                       |
+  | -------                                                               |
+  |                                                                       |
+  |  +-----------------------------------------------------------+        |  <- .skim-block-agent-only (animationDelay: 0ms)
+  |  | ▸ Agent-only session (0 messages)                         |        |     muted bordered shell
+  |  +-----------------------------------------------------------+        |     hairline border --color-border
+  |                                                                       |     padding 12px 16px (--space-3 --space-4)
+  +-----------------------------------------------------------------------+
+
+Wireframe state B: agent_only block OPENED (user clicks summary).
+
+  +-----------------------------------------------------------------------+
+  | Empty session (no messages parsed)                  [Open raw] [...]  |
+  | Transcript  Skim  Raw  Metadata                                       |
+  | -------                                                               |
+  |                                                                       |
+  |  +-----------------------------------------------------------+        |  <- .skim-block-agent-only
+  |  | ▾ Agent-only session (0 messages)                         |        |     <details> OPEN
+  |  | -------------------------------------------               |        |
+  |  |                                                           |        |
+  |  |   No messages parsed.                                     |        |  <- scoped TranscriptView with empty range
+  |  |                                                           |        |     -> renders "No messages parsed." copy
+  |  +-----------------------------------------------------------+        |     italic, --color-ink-muted, centered
+  |                                                                       |
+  +-----------------------------------------------------------------------+
+
+DOM tree:
+
+  <li class="skim-block skim-block-agent-only">
+    <details class="skim-agent-only">
+      <summary class="skim-agent-only-summary">Agent-only session (0 messages)</summary>
+      <div class="skim-agent-only-body">
+        <!-- Scoped TranscriptView with empty messageRange -->
+        <section class="transcript-body" aria-label="Session transcript">
+          <p class="transcript-empty-stream">No messages parsed.</p>
+        </section>
+      </div>
+    </details>
+  </li>
+
+Notes
+-----
+- Spec line 697 invariant: "The Skim view NEVER renders silently blank
+  for any state — the disabled placeholder always carries copy per
+  PRD line 223." Both the summary line ("Agent-only session (0
+  messages)") AND the expanded body ("No messages parsed.") carry
+  copy.
+
+- Count formula: `block.end - block.start + 1`. For the sentinel
+  `{start: 0, end: -1}`, the count is `-1 - 0 + 1 = 0` ->
+  "Agent-only session (0 messages)".
+
+- Pluralization: spec literal beats English grammar (M3a r1 codex
+  precedent). Renders as "(0 messages)" — not "(no messages)" or
+  "(0 message)".
+
+- Scoped TranscriptView with `messageRange={{start: 0, end: -1}}`:
+  - The defensive clamping in TranscriptView (planner Q10):
+    `lo = Math.max(0, 0) = 0`
+    `hi = Math.min(parsed.messages.length - 1, -1) = -1` (since len=0,
+    len-1 = -1)
+    `if (hi < lo) return [];` -> empty slice.
+  - TranscriptView's "No messages parsed." copy renders.
+
+- Skim-block stagger applies: animationDelay = 0ms (only block).
+
+- a11y: <li> role inherits "listitem" from the <ol> parent; the
+  <details> summary is the accessible label for the disclosure.
+  Screen readers announce the disclosure name + state ("Agent-only
+  session (0 messages), collapsed" / "expanded").
+
+- This is the ONLY block in the stream when the empty-stream sentinel
+  fires. NO truncation banner (data is intact, just empty). NO
+  parse-warnings banner (no warnings unless the parser emitted any
+  during the empty case).
+
+- Edge case: if the empty-stream parse ALSO produced warnings (e.g.,
+  the parser saw lines but none matched any MessageKind), the
+  parse-warnings banner mounts above the agent_only block. Wireframe
+  not depicted — combine wireframe 03 + this wireframe.

@@ -59,6 +59,7 @@
 // @see working/phase-5/m4-plan.md (implementation plan)
 
 import { useEffect, useState, type ReactNode } from "react";
+import { BoundaryRow } from "./BoundaryRow";
 import { relativeTimeFrom } from "./relativeTime";
 import { useParsedSession } from "./useParsedSession";
 import type { Message, ParsedSession, ParseWarning } from "./parsers";
@@ -92,9 +93,23 @@ export type TranscriptViewProps = {
    * SessionMetadata's contract).
    */
   now: string;
+  /**
+   * Optional inclusive [start, end] messageIndex range. When provided,
+   * the body renders only `parsed.messages.slice(start, end + 1)`.
+   * Used by SkimView (M5) to mount a scoped TranscriptView inside the
+   * "Expand to raw messages" affordance and the agent_only block
+   * expansion (Resolved Decision #9). Out-of-bounds values clamp to
+   * `[0, parsed.messages.length - 1]`. When `start > end` (e.g., the
+   * empty-stream sentinel `{start: 0, end: -1}`) the body slice is
+   * empty and the empty-stream copy renders.
+   *
+   * Omitting this prop renders the full transcript (M4 default
+   * behaviour — backward compatible).
+   */
+  messageRange?: { start: number; end: number };
 };
 
-export function TranscriptView({ row, now }: TranscriptViewProps) {
+export function TranscriptView({ row, now, messageRange }: TranscriptViewProps) {
   const result = useParsedSession(row);
   const [warningsBannerDismissed, setWarningsBannerDismissed] =
     useState<boolean>(false);
@@ -151,6 +166,7 @@ export function TranscriptView({ row, now }: TranscriptViewProps) {
       truncated={result.state === "truncated"}
       warningsBannerDismissed={warningsBannerDismissed}
       onDismissWarnings={() => setWarningsBannerDismissed(true)}
+      messageRange={messageRange}
     />
   );
 }
@@ -161,13 +177,29 @@ function TranscriptBody({
   truncated,
   warningsBannerDismissed,
   onDismissWarnings,
+  messageRange,
 }: {
   parsed: ParsedSession;
   now: string;
   truncated: boolean;
   warningsBannerDismissed: boolean;
   onDismissWarnings: () => void;
+  messageRange?: { start: number; end: number };
 }) {
+  // Defensive slice with clamping. Per design.md §10.3 + planner Q10:
+  //   - missing prop -> render the full message stream (M4 default).
+  //   - start < 0       -> clamp to 0.
+  //   - end >= len      -> clamp to len - 1.
+  //   - start > end     -> empty slice (renders the empty-stream copy).
+  //     This includes the buildSkim empty-stream sentinel
+  //     `{start: 0, end: -1}` per spec line 697.
+  const slicedMessages = (() => {
+    if (!messageRange) return parsed.messages;
+    const lo = Math.max(0, messageRange.start);
+    const hi = Math.min(parsed.messages.length - 1, messageRange.end);
+    if (hi < lo) return [];
+    return parsed.messages.slice(lo, hi + 1);
+  })();
   return (
     <section className="transcript-body" aria-label="Session transcript">
       {truncated ? <TruncationBanner /> : null}
@@ -177,11 +209,11 @@ function TranscriptBody({
           onDismiss={onDismissWarnings}
         />
       ) : null}
-      {parsed.messages.length === 0 ? (
+      {slicedMessages.length === 0 ? (
         <p className="transcript-empty-stream">No messages parsed.</p>
       ) : (
         <ol className="transcript-stream">
-          {parsed.messages.map((msg) => (
+          {slicedMessages.map((msg) => (
             <MessageRow key={msg.messageIndex} msg={msg} now={now} />
           ))}
         </ol>
@@ -360,27 +392,11 @@ function SystemMessage({ msg }: { msg: Message }) {
 }
 
 function BoundaryMessage({ msg }: { msg: Message }) {
-  const label =
-    msg.boundarySubtype === "compacted"
-      ? "CONVERSATION COMPACTED"
-      : "SESSION RESUMED";
-  return (
-    <li
-      className="msg msg-boundary"
-      role="separator"
-      aria-orientation="horizontal"
-    >
-      <span
-        aria-hidden="true"
-        className="msg-boundary-rule msg-boundary-rule-start"
-      />
-      <span className="msg-boundary-label">{label}</span>
-      <span
-        aria-hidden="true"
-        className="msg-boundary-rule msg-boundary-rule-end"
-      />
-    </li>
-  );
+  // M5 extracted the inline recipe into the shared `BoundaryRow`
+  // component (signature detail #1; design.md §4.2). Transcript does
+  // NOT pass `staggerIndex` — the per-block stagger animation is a
+  // SkimView-only authorization (spec table row 9).
+  return <BoundaryRow subtype={msg.boundarySubtype} />;
 }
 
 function UnknownMessage({ msg }: { msg: Message }) {
@@ -425,7 +441,7 @@ export function renderUnknownLine(text: string): string {
  * The detector is render-time (Q1 in m4-plan §5) so the parser
  * surface stays stable.
  */
-function renderBodyWithCode(text: string): ReactNode[] {
+export function renderBodyWithCode(text: string): ReactNode[] {
   const out: ReactNode[] = [];
   // Fence-pair scan first. Triple-backtick is the strongest signal;
   // resolve it before single-backtick inline code.

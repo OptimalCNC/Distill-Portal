@@ -1,0 +1,93 @@
+M5 — Wireframe 01 — Standard mixed skim outline
+=================================================
+
+Scenario: parse-warnings banner + 1 boundary + 3 user_turn (one closed, one
+agent-reaction-open, one fully expanded) + 1 agent_only (collapsed) + 1
+oversized_user_message (collapsed). Skim tab activated; SkimView mounted
+inside .session-pane.
+
+Width: 70ch reading column for skim-block panels; boundary rules reach
+edge-to-edge of the stream container.
+
+  +-----------------------------------------------------------------------+
+  | Refactoring the metadata grid                       [Open raw] [...]  |  <- session-pane-header (M2b + M4)
+  | Transcript  Skim  Raw  Metadata                                       |  <- tabs-strip
+  | -------                                                               |
+  |                                                                       |
+  |  +-------------------------------------------------------------------+|
+  |  | 3 parse warnings — click to view.                              [v]||  <- .skim-banner-warnings (open)
+  |  | • line 42 · unrecognized event type "thinking_block"             ||
+  |  | • line 87 · invalid timestamp "2025-13-32T99:99:99Z" (clamped)   ||
+  |  | • line 156 · oversized tool_result truncated at 2 KB head         ||
+  |  | [Dismiss]                                                         ||
+  |  +-------------------------------------------------------------------+|
+  |                                                                       |  <- 24px banner-to-stream margin (.skim-banner-* margin-block-end)
+  |  +-----------------------------------------------------------+        |  <- .skim-block-user-turn[0] (animationDelay: 0ms)
+  |  | Can you walk me through how the metadata <dl> grid is     |        |     .skim-user-panel (5% accent tint, --color-surface)
+  |  | laid out? I'd like to add a new field but I'm not sure    |        |     padding 24px 32px, max-inline-size 70ch
+  |  | where the column rule lives.                              |        |
+  |  +-----------------------------------------------------------+        |
+  |                                                                       |
+  |  ▸ Agent reaction (3 messages)                                        |  <- .skim-agent-reaction <details> CLOSED
+  |                                                                       |     summary muted ink, --text-sm
+  |                                                                       |
+  |  ─────────────  SESSION RESUMED  ─────────────                        |  <- .boundary-row (animationDelay: 40ms)
+  |                                                                       |     32px breathing top + bottom
+  |                                                                       |     Fraunces italic small-caps label
+  |                                                                       |
+  |  +-----------------------------------------------------------+        |  <- .skim-block-user-turn[1] (animationDelay: 80ms)
+  |  | Got it — thanks. One more: what controls the spacing      |        |
+  |  | between rows? It looks tighter on the Phase 4 metadata    |        |
+  |  | than on the new Phase 5 surfaces.                         |        |
+  |  +-----------------------------------------------------------+        |
+  |                                                                       |
+  |  ▾ Agent reaction (5 messages)                                        |  <- <details> OPEN
+  |    │ Summary disabled — generation deferred to a later phase.         |  <- .skim-summary-disabled
+  |    │ Use "Expand to raw messages" to read the agent's response        |     italic, ink-muted, 4px left border in --color-border
+  |    │ inline.                                                          |
+  |                                                                       |
+  |    ▸ Expand to raw messages                                           |  <- nested <details> CLOSED, summary --color-accent
+  |                                                                       |
+  |                                                                       |
+  |  +-----------------------------------------------------------+        |  <- .skim-block-agent-only (animationDelay: 120ms)
+  |  | ▸ Agent-only session (12 messages)                        |        |     muted bordered shell, no accent tint
+  |  +-----------------------------------------------------------+        |     hairline border --color-border
+  |                                                                       |
+  |  │ ▸ Oversized user message (78 KB) — collapsed by default            |  <- .skim-block-oversized (animationDelay: 160ms)
+  |  │                                                                    |     4px left border --color-warn (warn stripe)
+  |                                                                       |
+  +-----------------------------------------------------------------------+
+
+Notes
+-----
+- Three-magnitude rhythm:
+  - 24px (--space-6) between same-kind adjacent skim blocks (e.g., user_turn
+    -> user_turn).
+  - 32px (--space-8) between different-kind adjacent skim blocks (e.g.,
+    user_turn -> agent_only, user_turn -> oversized).
+  - 32px (--space-8) breathing above + below boundary blocks (overrides
+    same-kind / kind-change rules).
+- The user_turn panels carry the 5% accent tint (warm amber wash) — same
+  recipe as M4 .msg-user. The agent_only panel sits on the bare warm
+  surface with a hairline border.
+- The oversized_user_message has NO panel background — only the 4px warn
+  left stripe. The summary is on .text-sm chrome at .color-ink (NOT
+  ink-muted — the size signal warrants stronger ink than the
+  agent-only summary).
+- The boundary block is byte-equivalent to M4's chapter break (signature
+  detail #1). Same Fraunces italic small-caps label, same 1px hairline
+  rules, same 32px breathing.
+- Skim-block stagger animation: 40ms × min(idx, 8) delay; opacity 0→1 +
+  translateY(4px → 0) only. Reduced-motion zeroes via global rule.
+- All <details> elements are CLOSED by default (planner Q2). User opts in
+  to read each agent reaction.
+- Spec-literal copy:
+  - "Agent reaction (3 messages)" / "(5 messages)" — verbatim per-block.
+  - "Summary disabled — generation deferred to a later phase. Use
+    \"Expand to raw messages\" to read the agent's response inline." —
+    verbatim spec line 687.
+  - "Expand to raw messages" — verbatim summary inner text.
+  - "Agent-only session (12 messages)" — verbatim spec line 693.
+  - "Oversized user message (78 KB) — collapsed by default" — verbatim
+    spec line 695. KB = Math.round(meta.sizeBytes / 1024).
+  - "SESSION RESUMED" — verbatim per spec line 691 + Resolved Decision #16.

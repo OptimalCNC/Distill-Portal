@@ -47,6 +47,7 @@ import { Tabs } from "../../components/Tabs";
 import { RAW_SESSION_PATH } from "../../lib/api";
 import { SessionMetadata } from "./SessionMetadata";
 import { RawTab } from "./RawTab";
+import { SkimView } from "./SkimView";
 import { TranscriptView } from "./TranscriptView";
 import type { SessionRow } from "./types";
 import "./SessionView.css";
@@ -247,7 +248,7 @@ function ReadyTabShell({
   // (acceptance #27).
   const panelContent: Record<TabId, ReactNode> = {
     transcript: <TranscriptView row={row} now={now} />,
-    skim: <SkimPlaceholder />,
+    skim: <SkimView row={row} now={now} />,
     raw: <RawTab row={row} />,
     metadata: <SessionMetadata row={row} now={now} />,
   };
@@ -362,11 +363,3 @@ function TabPanel({
   );
 }
 
-function SkimPlaceholder() {
-  return (
-    <div className="tab-placeholder">
-      <strong>Skim</strong>
-      <span>Coming in Milestone 5</span>
-    </div>
-  );
-}

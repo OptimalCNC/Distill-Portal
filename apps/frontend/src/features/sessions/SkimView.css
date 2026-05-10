@@ -1,0 +1,435 @@
+/*
+ * Feature-local CSS for the Phase-5 / M5 SkimView.
+ *
+ * Imported by `SkimView.tsx` (sibling-import convention). Token
+ * consumption set documented in
+ * `working/phase-5/designs/m5-skim/colors.md` (28 unique tokens; ZERO
+ * new tokens introduced — total stays at 83). Hex isolation
+ * preserved at 24 — every color reference in this file is `var(--*)`
+ * or `color-mix(... var(--*) ...)`.
+ *
+ * Selectors owned here:
+ *   - `.skim-empty`,
+ *     `.skim-not-imported`,
+ *     `.skim-loading`,
+ *     `.skim-error-block`,
+ *     `.skim-error`,
+ *     `.skim-retry`,
+ *     `.skim-empty-stream`           -> state-branch copy.
+ *   - `.skim-body`                   -> wrapping <section> for the
+ *                                       success / truncated branches.
+ *   - `.skim-stream`                 -> <ol> of <SkimBlockRow>s.
+ *   - `.skim-banner`,
+ *     `.skim-banner-truncation`,
+ *     `.skim-banner-warnings`,
+ *     `.skim-banner-dismiss`,
+ *     `.skim-warnings-list`          -> banner family (byte-equivalent
+ *                                       recipe to TranscriptView's).
+ *   - `.skim-block`                  -> base <li> for every block.
+ *   - `.skim-block-user-turn`,
+ *     `.skim-user-panel`,
+ *     `.skim-user-body`              -> user_turn block.
+ *   - `.skim-agent-reaction`,
+ *     `.skim-agent-reaction-summary`,
+ *     `.skim-agent-reaction-body`    -> outer disclosure.
+ *   - `.skim-summary-disabled`       -> the disabled placeholder.
+ *   - `.skim-expand-raw`,
+ *     `.skim-expand-raw-summary`,
+ *     `.skim-expand-raw-body`        -> nested "Expand to raw messages"
+ *                                       affordance.
+ *   - `.skim-block-agent-only`,
+ *     `.skim-agent-only`,
+ *     `.skim-agent-only-summary`,
+ *     `.skim-agent-only-body`        -> agent_only block.
+ *   - `.skim-block-oversized`,
+ *     `.skim-oversized`,
+ *     `.skim-oversized-summary`,
+ *     `.skim-oversized-body`,
+ *     `.skim-oversized-pre`          -> oversized_user_message block.
+ *   - `@keyframes skim-block-fade-in`  -> opacity + translateY stagger.
+ *   - `@keyframes skim-banner-fade`    -> opacity-only banner entrance.
+ *
+ * Motion budget (per design.md §6 + motion.md):
+ *   - The skim-block stagger uses `animation: skim-block-fade-in
+ *     var(--motion-disclosure) var(--ease-out) both` (opacity 0->1 +
+ *     transform: translateY(4px -> 0)). Authorized by spec table
+ *     row 9 (working/phase-5.md:93).
+ *   - The truncation banner uses `animation: skim-banner-fade
+ *     var(--motion-base) var(--ease-out) both` (opacity 0->1 only).
+ *     Mirrors M4's recipe.
+ *   - The `<details>` block-size animation is inherited via the M2b
+ *     `interpolate-size: allow-keywords` global rule. NOT redeclared.
+ *   - The reduced-motion zero-out comes from
+ *     `apps/frontend/src/styles/global.css` and is NOT redeclared.
+ *   - PROHIBITED on every selector in this file: `transition: color`,
+ *     `transition: border-color`, `transition: width`, `transition:
+ *     height`, `transition: top`, `transition: padding`,
+ *     `transition: margin`, `transition: font-size`, `transition:
+ *     letter-spacing`, `transition: line-height`. Forbidden on
+ *     `.skim-block*` selectors: any `transition: background-color`,
+ *     any `transition: transform` (Codex M2b r1 #2 precedent).
+ *
+ * Code-fence segments inside `.skim-user-body` reuse the
+ * `.msg-code-inline` + `.msg-code-block` classes declared in
+ * `TranscriptView.css`. The cascade carries them transitively
+ * (every SkimView mount eventually mounts at least one
+ * `<TranscriptView>` inside an expanded `<details>`, which imports
+ * TranscriptView.css). This is documented in design.md §10.2.
+ */
+
+/* ---------- State-branch copy ---------- */
+
+.skim-empty,
+.skim-not-imported,
+.skim-loading,
+.skim-empty-stream {
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+  font-style: italic;
+  margin: 0;
+}
+
+.skim-loading,
+.skim-empty-stream {
+  text-align: center;
+  padding: var(--space-8) 0;
+}
+
+.skim-not-imported {
+  font-style: normal;
+  padding: var(--space-3) 0;
+  max-inline-size: var(--measure);
+}
+
+.skim-not-imported strong {
+  font-weight: 600;
+}
+
+.skim-error-block {
+  padding: var(--space-6) 0;
+}
+
+.skim-error {
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-error);
+  margin: 0 0 var(--space-3);
+  max-inline-size: var(--measure);
+}
+
+.skim-retry {
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+}
+
+.skim-retry:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ---------- Skim body ---------- */
+
+.skim-body {
+  /* Reading-column max-inline-size — blocks flow within 70ch.
+   * Boundary blocks override this with `inline-size: 100%`. */
+  max-inline-size: var(--measure);
+}
+
+.skim-stream {
+  /* Reset list chrome — <li>s carry their own block styling. */
+  list-style: none;
+  margin: 0;
+  padding: var(--space-6) 0 0;
+}
+
+.skim-stream > .skim-block,
+.skim-stream > .boundary-row {
+  /* Block base: no margin until adjacent-sibling rules kick in. */
+  margin: 0;
+}
+
+/* Three-magnitude rhythm rule (design.md §5):
+ *   - 24 px default between any two adjacent skim blocks.
+ *   - 32 px override between adjacent different-kind blocks.
+ *   - 32 px around boundary blocks (overrides the above). */
+
+.skim-stream > .skim-block + .skim-block {
+  margin-top: var(--space-6);
+}
+
+.skim-stream > .skim-block-user-turn + .skim-block-agent-only,
+.skim-stream > .skim-block-agent-only + .skim-block-user-turn,
+.skim-stream > .skim-block-user-turn + .skim-block-oversized,
+.skim-stream > .skim-block-oversized + .skim-block-user-turn,
+.skim-stream > .skim-block-agent-only + .skim-block-oversized,
+.skim-stream > .skim-block-oversized + .skim-block-agent-only {
+  margin-top: var(--space-8);
+}
+
+.skim-stream > .boundary-row,
+.skim-stream > .boundary-row + .skim-block,
+.skim-stream > .skim-block + .boundary-row {
+  margin-top: var(--space-8);
+}
+
+/* ---------- Stagger animation ---------- */
+
+.skim-block,
+.skim-stream > .boundary-row {
+  /* Per spec table row 9: opacity 0->1 + translateY(4px->0) ONLY.
+   * `animation-delay` is set inline via React style prop. */
+  opacity: 0;
+  animation: skim-block-fade-in var(--motion-disclosure) var(--ease-out) both;
+}
+
+@keyframes skim-block-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---------- Banner family (byte-equivalent recipe to TranscriptView) ---------- */
+
+.skim-banner {
+  margin-bottom: var(--space-6);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+}
+
+.skim-banner-truncation {
+  background: color-mix(in srgb, var(--color-warn) 8%, var(--color-surface));
+  border-inline-start: 3px solid var(--color-warn);
+  padding: var(--space-3) var(--space-4);
+  /* Opacity-only entrance per spec line 91 + design.md §6.3. */
+  animation: skim-banner-fade var(--motion-base) var(--ease-out) both;
+}
+
+.skim-banner-truncation strong {
+  font-weight: 600;
+}
+
+@keyframes skim-banner-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.skim-banner-warnings {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  padding: var(--space-2) var(--space-3);
+}
+
+.skim-banner-warnings > summary {
+  cursor: pointer;
+  list-style: revert;
+  padding: var(--space-1) 0;
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+}
+
+.skim-banner-warnings > summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.skim-warnings-list {
+  list-style: disc;
+  margin: var(--space-2) 0 var(--space-3);
+  padding-inline-start: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+}
+
+.skim-warnings-list > li {
+  padding-block: var(--space-1);
+  word-break: break-all;
+}
+
+.skim-banner-dismiss {
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-ink);
+}
+
+.skim-banner-dismiss:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ---------- Block base ---------- */
+
+.skim-block {
+  list-style: none;
+  margin: 0;
+}
+
+/* ---------- user_turn ---------- */
+
+.skim-user-panel {
+  background: color-mix(in srgb, var(--color-accent) 5%, var(--color-surface));
+  padding: var(--space-6) var(--space-8);
+  border-radius: var(--radius-md);
+  max-inline-size: var(--measure);
+}
+
+.skim-user-body {
+  font-family: var(--font-chrome);
+  font-size: var(--text-base);
+  line-height: var(--leading-comfortable);
+  color: var(--color-ink);
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.skim-agent-reaction {
+  margin-top: var(--space-3);
+  max-inline-size: var(--measure);
+}
+
+.skim-agent-reaction-summary {
+  cursor: pointer;
+  list-style: revert;
+  padding: var(--space-2) 0;
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+}
+
+.skim-agent-reaction-summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.skim-agent-reaction-body {
+  padding-inline-start: var(--space-3);
+}
+
+.skim-summary-disabled {
+  border-inline-start: 4px solid var(--color-border);
+  padding-inline-start: var(--space-4);
+  margin: var(--space-3) 0;
+  color: var(--color-ink-muted);
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  line-height: var(--leading-comfortable);
+  font-style: italic;
+  max-inline-size: var(--measure);
+}
+
+.skim-expand-raw {
+  margin-top: var(--space-3);
+}
+
+.skim-expand-raw-summary {
+  cursor: pointer;
+  list-style: revert;
+  padding: var(--space-2) 0;
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-accent);
+}
+
+.skim-expand-raw-summary:hover {
+  text-decoration: underline;
+}
+
+.skim-expand-raw-summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.skim-expand-raw-body {
+  margin-top: var(--space-3);
+}
+
+/* ---------- agent_only ---------- */
+
+.skim-agent-only {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  max-inline-size: var(--measure);
+}
+
+.skim-agent-only-summary {
+  cursor: pointer;
+  list-style: revert;
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+}
+
+.skim-agent-only-summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.skim-agent-only-body {
+  margin-top: var(--space-3);
+}
+
+/* ---------- oversized_user_message ---------- */
+
+.skim-block-oversized {
+  border-inline-start: 4px solid var(--color-warn);
+  padding-inline-start: var(--space-4);
+  max-inline-size: var(--measure);
+}
+
+.skim-oversized-summary {
+  cursor: pointer;
+  list-style: revert;
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+}
+
+.skim-oversized-summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.skim-oversized-body {
+  margin-top: var(--space-3);
+}
+
+.skim-oversized-pre {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  background: var(--color-surface-raised);
+  color: var(--color-ink);
+  padding: var(--space-3) var(--space-4);
+  margin: 0;
+  border-radius: var(--radius-sm);
+  white-space: pre;
+  overflow-x: auto;
+  line-height: 1.4;
+}

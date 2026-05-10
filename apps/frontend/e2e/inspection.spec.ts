@@ -180,7 +180,8 @@ test.describe.serial("inspection surface end-to-end", () => {
     //    Sub-steps:
     //      (a) Click each tab → verify aria-selected + the right
     //          panel is active.
-    //      (b) Skim + Transcript show placeholder copy; Metadata
+    //      (b) Skim renders the SkimView no_raw branch (M5);
+    //          Transcript renders the TranscriptView (M4); Metadata
     //          shows the <dl>; Raw shows preview.
     //      (c) Keyboard nav: ArrowLeft / ArrowRight cycle with
     //          wrap; Home / End jump to first / last.
@@ -203,7 +204,14 @@ test.describe.serial("inspection surface end-to-end", () => {
     );
     const skimPanel = page.locator("#panel-skim");
     await expect(skimPanel).toBeVisible();
-    await expect(skimPanel).toContainText("Coming in Milestone 5");
+    // M5: SkimView replaces the "Coming in Milestone 5" placeholder.
+    // Source-only row → SkimView lands on the no_raw branch and
+    // renders the spec-verbatim "not yet imported" copy (mirrors
+    // TranscriptView's no_raw surface).
+    await expect(skimPanel).not.toContainText("Coming in Milestone 5");
+    await expect(skimPanel).toContainText(
+      "This session has not been imported yet",
+    );
 
     await page.locator("#tab-transcript").click();
     await expect(page.locator("#tab-transcript")).toHaveAttribute(

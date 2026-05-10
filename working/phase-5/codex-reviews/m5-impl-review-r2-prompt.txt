@@ -1,0 +1,57 @@
+External non-Claude reviewer for distill-portal Phase 5 M5 implementation (round 2 — fix-up confirmation).
+
+## Round 1 result
+
+You returned `needs changes` with one BLOCKING finding + one nit:
+
+1. **BLOCKING** — `apps/frontend/src/features/sessions/BoundaryRow.test.tsx:20-21`: JSDoc comment contained the literal forbidden tokens `jest.fn()`, `node:fs`, `child_process` (used to document the Bun-first prohibition). The grep gate matches them in the comment.
+2. **NIT** — `apps/frontend/e2e/inspection.spec.ts:183`: stale comment text said Skim shows placeholder copy.
+
+## Fixes applied
+
+- `apps/frontend/src/features/sessions/BoundaryRow.test.tsx:20-21` — comment rewritten to "Bun-first: imports from \"bun:test\"; no Jest-style mocks or Node process helpers." (no longer contains the forbidden tokens).
+- `apps/frontend/e2e/inspection.spec.ts:183` — comment updated to reflect that Skim now renders the SkimView no_raw branch and Transcript renders the M4 TranscriptView (not placeholder).
+
+No other code changes were made. Test count remains 557/0/1860/32; build size unchanged; tsc still clean.
+
+## YOU MUST EXECUTE these confirmation commands
+
+```bash
+cd /home/huwei/ai_codings/distill-portal
+
+# Bun-first grep gate — must now be EMPTY across M5 sources
+grep -rn 'jest\.fn\|child_process\|node:fs' apps/frontend/src/features/sessions/SkimView.tsx apps/frontend/src/features/sessions/SkimView.test.tsx apps/frontend/src/features/sessions/BoundaryRow.tsx apps/frontend/src/features/sessions/BoundaryRow.test.tsx
+
+# Verify the comment update at BoundaryRow.test.tsx
+sed -n '18,22p' apps/frontend/src/features/sessions/BoundaryRow.test.tsx
+
+# Verify the comment update at inspection.spec.ts
+sed -n '178,190p' apps/frontend/e2e/inspection.spec.ts
+
+# Re-confirm test gates (should be unchanged from r1)
+cd apps/frontend && bun run test 2>&1 | tail -5
+cd apps/frontend && bunx tsc --noEmit 2>&1 | tail -3
+
+# Re-confirm hex / token invariants
+cd /home/huwei/ai_codings/distill-portal
+rg -n '#[0-9a-fA-F]{3,8}' apps/frontend/src/ | wc -l   # MUST equal 24
+rg -c '^\s*--' apps/frontend/src/styles/tokens.css     # MUST equal 83
+
+# Protected paths still untouched
+git diff --stat HEAD -- apps/backend/ components/ tests/e2e/ Cargo.toml Cargo.lock apps/frontend/package.json apps/frontend/bun.lock
+# Expected: empty output
+```
+
+## Round 2 review tasks
+
+Verify both fix-ups landed at file:line. If both are clean, return `approved`. If either fix is incomplete or introduced regression, return `needs changes` with precise file:line + before/after.
+
+## Output exactly
+
+- Verdict: approved | approved with nits | needs changes | needs more evidence
+- Findings: bullets with file:line, or none
+- Missing Evidence: required missing evidence, or none
+- Required Changes: precise file:line + before/after, or none
+- Notes: optional improvements, or none
+
+Begin review now.

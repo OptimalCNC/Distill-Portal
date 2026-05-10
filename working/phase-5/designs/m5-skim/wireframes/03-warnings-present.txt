@@ -1,0 +1,70 @@
+M5 — Wireframe 03 — Warnings-present variant
+=============================================
+
+Scenario: parsed.warnings.length > 0. SkimView mounts a parse-warnings
+banner ABOVE the stream. Banner is BYTE-EQUIVALENT to M4's parse-warnings
+banner (--color-surface-raised background, native <details>, dismissible).
+
+  +-----------------------------------------------------------------------+
+  | Session with parse anomalies                        [Open raw] [...]  |  <- session-pane-header
+  | Transcript  Skim  Raw  Metadata                                       |
+  | -------                                                               |
+  |                                                                       |
+  |  +---------------------------------------------------------------+    |  <- .skim-banner-warnings (open)
+  |  | ▾ 3 parse warnings — click to view.                           |    |     summary text --color-ink, --text-sm
+  |  |                                                               |    |     background --color-surface-raised
+  |  |   line 42 · unrecognized event type "thinking_block"          |    |     1px hairline border --color-border
+  |  |   line 87 · invalid timestamp "2025-13-32T99:99:99Z" (clamped)|    |     warnings list: --font-mono --text-xs
+  |  |   line 156 · oversized tool_result truncated at 2 KB head     |    |
+  |  |                                                               |    |
+  |  |   [Dismiss]                                                   |    |  <- dismiss button: --color-ink, hairline border
+  |  +---------------------------------------------------------------+    |
+  |                                                                       |  <- 24px margin-bottom
+  |  +-----------------------------------------------------------+        |  <- .skim-block-user-turn[0]
+  |  | Session that triggered three parse warnings — the warnings|        |
+  |  | cite line ordinals from the raw NDJSON.                   |        |
+  |  +-----------------------------------------------------------+        |
+  |                                                                       |
+  |  ▸ Agent reaction (4 messages)                                        |
+  |                                                                       |
+  +-----------------------------------------------------------------------+
+
+State variants:
+
+a) Banner CLOSED (initial state when warnings.length > 0):
+
+  +---------------------------------------------------------------+
+  | ▸ 3 parse warnings — click to view.                           |
+  +---------------------------------------------------------------+
+
+b) Banner DISMISSED (after click):
+
+  (banner unmounts entirely — re-arrives on next session selection
+   via component-local React state reset on row.rowKey change)
+
+c) Banner with N=1 warning (spec literal):
+
+  +---------------------------------------------------------------+
+  | ▸ 1 parse warnings — click to view.                           |  <- spec-literal "1 parse warnings"
+  +---------------------------------------------------------------+      (English grammar deferred per M4 IMPORTANT-3)
+
+Notes
+-----
+- The parse-warnings banner is a NATIVE <details> element. Clicking the
+  summary toggles open/closed via the M2b-authorized block-size
+  disclosure animation (200ms ease-in-out).
+- Summary copy "{N} parse warnings — click to view." for ALL N including
+  N=1 (spec literal beats English grammar — M3a r1 codex precedent).
+- The list items use --font-mono --text-xs --color-ink-muted on the
+  --color-surface-raised banner background. Each item: "line {ordinal} ·
+  {reason}".
+- Dismiss button: quiet text-button styled (transparent background,
+  hairline border --color-border, --font-chrome --text-xs --color-ink).
+  Hover: border-color swap to --color-border-strong (instant).
+  Focus-visible: 2px --color-accent outline + 2px offset.
+- Dismissal is component-local React state. On row.rowKey change, the
+  banner re-arrives (component-local state resets via useEffect
+  defensive belt; mirror M4's pattern).
+- When BOTH truncation banner AND parse-warnings banner are present:
+  truncation banner sits ABOVE parse-warnings banner (truncation is the
+  more-impactful signal). Stream follows underneath.

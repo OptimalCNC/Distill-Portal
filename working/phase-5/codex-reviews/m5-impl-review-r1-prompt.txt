@@ -1,0 +1,181 @@
+External non-Claude reviewer for distill-portal Phase 5 M5 implementation (round 1).
+
+You have full sandbox permission. Execute every check below directly, including running test suites and Python scripts. Return concrete file:line findings + command outputs.
+
+## What M5 ships
+
+M5 ships SkimView (the Skim tab functional), BoundaryRow (signature-detail #1 byte-equivalence shared component), and refactors TranscriptView to compose with both surfaces.
+
+## M5 implementation under review
+
+NEW files:
+- `apps/frontend/src/features/sessions/SkimView.tsx` (439 lines)
+- `apps/frontend/src/features/sessions/SkimView.css` (435 lines)
+- `apps/frontend/src/features/sessions/SkimView.test.tsx` (1091 lines, 45 tests)
+- `apps/frontend/src/features/sessions/BoundaryRow.tsx` (62 lines)
+- `apps/frontend/src/features/sessions/BoundaryRow.css` (48 lines)
+- `apps/frontend/src/features/sessions/BoundaryRow.test.tsx` (183 lines, 12 tests)
+
+MODIFIED files:
+- `apps/frontend/src/features/sessions/TranscriptView.tsx` (+39/-22): added `messageRange` prop with defensive clamping; replaced inline boundary recipe with `<BoundaryRow>`; exported `renderBodyWithCode`.
+- `apps/frontend/src/features/sessions/TranscriptView.css` (+5/-29): removed `.msg-boundary*` declarations (now in `BoundaryRow.css`).
+- `apps/frontend/src/features/sessions/TranscriptView.test.tsx` (+167): 8 new tests (7 messageRange + 1 BoundaryRow composition).
+- `apps/frontend/src/features/sessions/SessionView.tsx` (+2/-9): wired `<SkimView />`; removed `SkimPlaceholder`.
+- `apps/frontend/src/features/sessions/SessionView.test.tsx` (+78/-8): rewrote placeholder test as M5 functional state assertion; added Skim keep-mounted regression.
+- `apps/frontend/e2e/inspection.spec.ts` (+7/-2): replaced placeholder assertion with no_raw branch assertion.
+
+## Spec source-of-truth
+
+- `/home/huwei/ai_codings/distill-portal/working/phase-5.md` lines 679-697 (§Skim tab)
+- lines 84-95 (motion budget)
+- lines 1042-1059 (M5 DoD)
+- lines 233-348 (Data Model)
+- Resolved Decision #16 (boundary chapter-break recipe shared with M4)
+
+Spec frozen at commit `05467ad` on `main`.
+
+## Plan / design artifact
+
+- `/home/huwei/ai_codings/distill-portal/working/phase-5/m5-plan.md` (planner brief with 15 resolved Q-decisions; reflects post-design-review fixes for translateY narrative + open={false} JSX cleanup)
+- `/home/huwei/ai_codings/distill-portal/working/phase-5/designs/m5-skim/design.md` (design.md cleaned post-r1 with translateY verbatim, no false-divergence narrative)
+- `/home/huwei/ai_codings/distill-portal/working/phase-5/designs/m5-skim/colors.md` (29 WCAG-AA pairs verified by codex r1 design review with zero drift)
+
+## YOU MUST EXECUTE these commands in your sandbox
+
+```bash
+cd /home/huwei/ai_codings/distill-portal
+
+# Test gates
+cd apps/frontend && bun run test 2>&1 | tail -10
+cd apps/frontend && bunx tsc --noEmit 2>&1 | tail -5
+cd apps/frontend && bun run build 2>&1 | tail -10
+cd ../..
+
+# Token discipline
+rg -nE 'var\(--[a-z-]+\)' apps/frontend/src/features/sessions/SkimView.css | sort -u
+rg -nE 'var\(--[a-z-]+\)' apps/frontend/src/features/sessions/BoundaryRow.css | sort -u
+rg -n '#[0-9a-fA-F]{3,8}' apps/frontend/src/ | wc -l   # MUST equal 24
+rg -c '^\s*--' apps/frontend/src/styles/tokens.css     # MUST equal 83
+
+# Cross-check that every M5 token exists in tokens.css
+for tok in $(rg -nE 'var\(--[a-z-]+\)' apps/frontend/src/features/sessions/SkimView.css apps/frontend/src/features/sessions/BoundaryRow.css | grep -oE '\-\-[a-z-]+' | sort -u); do
+  grep -q -- "${tok}:" apps/frontend/src/styles/tokens.css || echo "MISSING: ${tok}"
+done
+
+# Spec-literal compliance (M3a r1 + r4 + M4 precedent)
+grep -nE 'Agent reaction \(' apps/frontend/src/features/sessions/SkimView.tsx
+grep -nE 'Agent-only session \(' apps/frontend/src/features/sessions/SkimView.tsx
+grep -nE 'Oversized user message \(' apps/frontend/src/features/sessions/SkimView.tsx
+grep -nE 'Summary disabled' apps/frontend/src/features/sessions/SkimView.tsx
+grep -nE 'Expand to raw messages' apps/frontend/src/features/sessions/SkimView.tsx
+grep -nE 'SESSION RESUMED|CONVERSATION COMPACTED' apps/frontend/src/features/sessions/BoundaryRow.tsx
+grep -nE 'Truncated at 5 MB' apps/frontend/src/features/sessions/SkimView.tsx
+grep -nE 'parse warnings' apps/frontend/src/features/sessions/SkimView.tsx
+
+# Spec-literal pluralization for N=1 — must NOT have special-cased singular
+grep -nE '\(1 message\b' apps/frontend/src/features/sessions/SkimView.tsx apps/frontend/src/features/sessions/SkimView.test.tsx
+# Expected: zero hits (verify N=1 reads "(1 messages)" via test assertions)
+grep -nE 'Agent reaction \(1 messages\)|Agent-only session \(1 messages\)' apps/frontend/src/features/sessions/SkimView.test.tsx
+# Expected: hits in test fixtures asserting verbatim spec-literal pluralization
+
+# Motion budget — verify NO disallowed properties animated
+rg -n 'transition' apps/frontend/src/features/sessions/SkimView.css apps/frontend/src/features/sessions/BoundaryRow.css
+rg -n 'animation' apps/frontend/src/features/sessions/SkimView.css apps/frontend/src/features/sessions/BoundaryRow.css
+rg -nE '^\s*transition\s*:\s*(color|border-color|width|height|top|padding)\b' apps/frontend/src/features/sessions/
+
+# Stagger keyframe must be translateY only (NOT translateX)
+grep -nE 'translate[XY]' apps/frontend/src/features/sessions/SkimView.css
+
+# Keep-mounted contract — no key= on SkimView root
+grep -nE '<section.+aria-label' apps/frontend/src/features/sessions/SkimView.tsx
+grep -nE 'key=' apps/frontend/src/features/sessions/SkimView.tsx
+# Expected: keys present only on .map() list items, NOT on <section> root
+
+# Native <details> — no controlled `open` attribute
+grep -nE '<details.*open=' apps/frontend/src/features/sessions/SkimView.tsx
+# Expected: zero hits
+
+# Boundary <li role="separator"> + aria-orientation
+grep -nE 'role="separator"|aria-orientation' apps/frontend/src/features/sessions/BoundaryRow.tsx
+
+# BoundaryRow byte-equivalence — kept legacy classes for M4 cascade compatibility
+grep -nE 'msg|msg-boundary|boundary-row' apps/frontend/src/features/sessions/BoundaryRow.tsx
+
+# messageRange prop in TranscriptView (M5 composition)
+grep -nE 'messageRange' apps/frontend/src/features/sessions/TranscriptView.tsx
+grep -nE 'export function renderBodyWithCode|export.*renderBodyWithCode' apps/frontend/src/features/sessions/TranscriptView.tsx
+
+# Defensive clamp — start > end produces empty
+grep -nE 'start\s*>\s*end|hi\s*<\s*lo|messageRange\.start\s*>\s*messageRange\.end' apps/frontend/src/features/sessions/TranscriptView.tsx
+
+# Bun-first invariant
+grep -rn 'jest\.fn\|child_process\|require("npm' apps/frontend/src/features/sessions/SkimView*.* apps/frontend/src/features/sessions/BoundaryRow*.*
+
+# SessionView wiring
+grep -nE 'SkimPlaceholder|SkimView' apps/frontend/src/features/sessions/SessionView.tsx
+# Expected: SkimView import + render; NO SkimPlaceholder remaining
+
+# Default tab unchanged (still "transcript")
+grep -nE 'DEFAULT_TAB_ON_SELECTION' apps/frontend/src/features/sessions/SessionView.tsx
+
+# Protected paths untouched
+git diff --stat HEAD -- apps/backend/ components/ tests/e2e/ Cargo.toml Cargo.lock
+git diff --stat HEAD -- apps/frontend/package.json apps/frontend/bun.lock
+```
+
+## Block if you find any of these
+
+### Spec literal violations (codex M3a r1/r4 + M4 precedent)
+- "Agent reaction (N messages)" not verbatim for ALL N (including N=0/1).
+- "Agent-only session (N messages)" not verbatim for ALL N.
+- "Oversized user message ({sizeKB} KB) — collapsed by default" not verbatim.
+- "Summary disabled — generation deferred to a later phase. Use \"Expand to raw messages\" to read the agent's response inline." not verbatim.
+- "SESSION RESUMED" / "CONVERSATION COMPACTED" not verbatim uppercase.
+- Truncation banner not "Truncated at 5 MB — full payload not parsed. Use the **Open raw** anchor in the session header to inspect the full payload." (with `**Open raw**` rendering as `<strong>`).
+- Parse-warnings banner not "{N} parse warnings — click to view." for ALL N.
+
+### Token discipline (codex M2b r1 #3 precedent)
+- Any SkimView.css / BoundaryRow.css `var(--*)` not declared in tokens.css → BLOCKING.
+- Hex isolation 24, token count 83 — drift → BLOCKING.
+
+### Motion budget (codex M2b r1 #2 precedent)
+- ANY transition on color, border-color, width, height, top, padding, transform on .skim-block panels, background-color on .skim-block panels → BLOCKING.
+- Stagger keyframe MUST animate ONLY transform: translateY + opacity (per spec line 93). NOT translateX (M5 design verified spec line 93 says translateY).
+
+### Keep-mounted contract (codex M2b r1 #4 precedent)
+- ANY `key=` on SkimView's `<section>` root → BLOCKING.
+- ANY `<details open=...>` controlled by React state (must rely on browser-managed native open) → BLOCKING.
+
+### a11y
+- BoundaryRow not `<li ... role="separator" aria-orientation="horizontal">` flat shape.
+- SkimView root missing `aria-label="Session skim outline"`.
+- Block list not `<ol>` with `<li>` per block.
+
+### Pluralization (M3a precedent)
+- N=1 must read "(1 messages)" — NOT "(1 message)". Spec literal beats grammar.
+
+### TranscriptView refactor regression
+- Existing 491-baseline TranscriptView tests must still pass (now folded into 557 total).
+- BoundaryRow byte-equivalence: same `<li role="separator" aria-orientation="horizontal">` shape; same Fraunces italic small-caps label; same `--color-border-strong` hairline; same 32 px breathing.
+
+### Bun-first invariant (project-wide)
+- No `jest.fn()`, no `child_process`, no npm-only imports.
+
+### Protected paths
+- No edits under `apps/backend/`, `components/`, `tests/e2e/` (Rust e2e), root `Cargo.{toml,lock}`, `apps/frontend/package.json`, `apps/frontend/bun.lock`.
+
+## Files to inspect (you have full read access)
+
+All paths under `/home/huwei/ai_codings/distill-portal/`. Read the new SkimView/BoundaryRow files, the modified TranscriptView/SessionView files, the design artifact at `working/phase-5/designs/m5-skim/`, the M5 plan at `working/phase-5/m5-plan.md`, and the spec at `working/phase-5.md`.
+
+EXECUTE every command. Provide concrete file:line findings + command outputs.
+
+## Output exactly
+
+- Verdict: approved | approved with nits | needs changes | needs more evidence
+- Findings: bullets with file:line, or none
+- Missing Evidence: required missing evidence, or none
+- Required Changes: precise file:line + before/after, or none
+- Notes: optional improvements, or none
+
+Begin review now.

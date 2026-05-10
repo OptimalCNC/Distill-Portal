@@ -1,0 +1,93 @@
+M5 — Wireframe 06 — user_turn agent reaction expanded
+======================================================
+
+Scenario: outer "Agent reaction (N messages)" disclosure OPEN.
+Disabled placeholder visible. Inner "Expand to raw messages"
+disclosure CLOSED.
+
+  +-----------------------------------------------------------------------+
+  | Tracking down a regression                          [Open raw] [...]  |
+  | Transcript  Skim  Raw  Metadata                                       |
+  | -------                                                               |
+  |                                                                       |
+  |  +-----------------------------------------------------------+        |  <- .skim-user-panel
+  |  | I'm seeing a weird off-by-one error in the SkimView       |        |
+  |  | rhythm rules. The 24px gap fires between adjacent          |        |
+  |  | user_turns, which is what I want, but between user_turn   |        |
+  |  | and the boundary I'm only getting 16px instead of 32px.   |        |
+  |  +-----------------------------------------------------------+        |
+  |                                                                       |
+  |  ▾ Agent reaction (4 messages)                                        |  <- <details> OPEN (triangle rotated)
+  |                                                                       |     summary --color-ink-muted
+  |    │  Summary disabled — generation deferred to a later phase. Use    |  <- .skim-summary-disabled
+  |    │  "Expand to raw messages" to read the agent's response inline.   |     italic, --color-ink-muted, --text-sm
+  |    │                                                                  |     border-inline-start: 4px solid --color-border
+  |    ^                                                                  |     padding-inline-start: --space-4
+  |    |                                                                  |     margin: --space-3 0
+  |    4px left border in --color-border                                  |
+  |                                                                       |
+  |    ▸ Expand to raw messages                                           |  <- nested <details> CLOSED
+  |      ^                                                                |     summary --font-chrome --text-sm
+  |      |                                                                |     color: --color-accent (quiet text link)
+  |      Native disclosure triangle                                       |     cursor: pointer; list-style: revert
+  |                                                                       |
+  +-----------------------------------------------------------------------+
+
+DOM tree:
+
+  <li class="skim-block skim-block-user-turn">
+    <article class="skim-user-panel">
+      <div class="skim-user-body">I'm seeing a weird off-by-one error...</div>
+    </article>
+    <details class="skim-agent-reaction" open>
+      <summary class="skim-agent-reaction-summary">Agent reaction (4 messages)</summary>
+      <div class="skim-agent-reaction-body">
+        <p class="skim-summary-disabled">
+          Summary disabled — generation deferred to a later phase. Use
+          "Expand to raw messages" to read the agent's response inline.
+        </p>
+        <details class="skim-expand-raw">
+          <summary class="skim-expand-raw-summary">Expand to raw messages</summary>
+          <div class="skim-expand-raw-body">
+            <TranscriptView ... messageRange={{...}} />
+          </div>
+        </details>
+      </div>
+    </details>
+  </li>
+
+Visual elements
+---------------
+- Outer disclosure: open. Body becomes visible via the M2b-authorized
+  block-size animation (200ms ease-in-out).
+- Disabled placeholder paragraph: italic prose at --color-ink-muted,
+  with a 4px left border in --color-border. Reads as a "quiet
+  documentation note" — distinct from body prose.
+- Inner "Expand to raw messages" disclosure: CLOSED at this stage.
+  Summary text styled as a quiet text link: --color-accent text +
+  native disclosure triangle. Hover: text-decoration: underline (instant).
+
+Spec-literal copy (verbatim)
+----------------------------
+"Summary disabled — generation deferred to a later phase. Use \"Expand
+to raw messages\" to read the agent's response inline."
+
+(The smart-quote vs straight-quote rendering of the inner "Expand to
+raw messages" inside the placeholder paragraph: the spec quote uses
+straight quotes; M5 ships verbatim with straight quotes. If the IDE
+auto-converts to smart quotes during implementation, the developer
+must revert to straight quotes — codex precedent: spec literal is the
+contract.)
+
+Tab order from this state
+-------------------------
+1. Outer summary "Agent reaction (4 messages)" — already focused.
+2. Tab -> inner summary "Expand to raw messages".
+3. Tab -> next focusable element after the user_turn block (the next
+   block's outer summary, or end of stream).
+
+Activation
+----------
+- Click outer summary: closes (returns to wireframe 05 state).
+- Click inner summary "Expand to raw messages": opens to wireframe 07
+  state (scoped TranscriptView mounted).

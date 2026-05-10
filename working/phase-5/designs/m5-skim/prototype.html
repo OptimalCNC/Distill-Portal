@@ -1,0 +1,1157 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-motion="auto">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>distill-portal · Phase 5 · M5 — SkimView</title>
+
+<style>
+/* =========================================================================
+ * M5 SkimView reference prototype — Archive-room Design Language.
+ *
+ * Vanilla HTML/CSS, no React. Token names are byte-equivalent to
+ * apps/frontend/src/styles/tokens.css so codex can verify that the
+ * production CSS files (SkimView.css, BoundaryRow.css) consume only
+ * the tokens declared here.
+ *
+ * Hex literals appear here ONLY in the @supports fallback layer
+ * (matching M2a's 24-hex pattern). The shipping SkimView.css and
+ * BoundaryRow.css MUST NOT contain hex literals — only `var(--...)`
+ * references.
+ *
+ * Scenarios demonstrated (in order top to bottom):
+ *   1. Standard mixed skim — banner + 1 boundary + user_turn (with
+ *      nested disclosures expanded) + agent_only + oversized.
+ *   2. Truncated variant — truncation banner at top.
+ *   3. Warnings-present variant — dismissible parse-warnings banner.
+ *   4. Boundary mid-stream — chapter break between user_turn pairs.
+ *   5. user_turn collapsed — closed Agent reaction disclosure.
+ *   6. user_turn agent_reaction expanded — disclosure open showing
+ *      the disabled placeholder + closed "Expand to raw messages".
+ *   7. user_turn fully expanded — Expand-to-raw open mounting a
+ *      mocked TranscriptView.
+ *   8. agent_only block (collapsed + expanded variants).
+ *   9. oversized_user_message (collapsed + expanded variants).
+ *  10. Empty stream — agent_only(0 messages) edge case (never blank).
+ *  11. Skim-block stagger animation demo.
+ *
+ * Theme toggle: <button data-toggle-theme> swaps data-theme on <html>
+ * between "light" and "dark". When data-theme="auto", the
+ * prefers-color-scheme media query takes over.
+ * ===================================================================== */
+
+:root {
+  /* ===== Spacing scale (tokens.css line 96-102) ===== */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  /* ===== Radius (tokens.css line 104-107) ===== */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+
+  /* ===== Color tokens (oklch source-of-truth, light) ===== */
+  --color-surface:        oklch(98% 0.01 70);
+  --color-surface-raised: oklch(96% 0.01 70);
+  --color-ink:            oklch(20% 0.02 70);
+  --color-ink-muted:      oklch(45% 0.02 70);
+  --color-border:         oklch(85% 0.01 70);
+  --color-border-strong:  oklch(65% 0.02 70);
+  --color-accent:         oklch(55% 0.15 50);
+  --color-accent-hover:   oklch(50% 0.16 50);
+  --color-success:        oklch(48% 0.13 155);
+  --color-warn:           oklch(58% 0.15 60);
+  --color-error:          oklch(52% 0.18 25);
+
+  /* Aliases */
+  --color-text:       var(--color-ink);
+  --color-text-muted: var(--color-ink-muted);
+  --color-bg:         var(--color-surface);
+
+  /* ===== Typography ===== */
+  --font-display: "Fraunces", Charter, "Iowan Old Style", Georgia, serif;
+  --font-chrome:  -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans:    var(--font-chrome);
+
+  --text-xs:   0.75rem;
+  --text-sm:   0.875rem;
+  --text-base: 1rem;
+  --text-lg:   1.125rem;
+  --text-xl:   1.5rem;
+  --text-2xl:  2rem;
+
+  --leading-tight:       1.25;
+  --leading-comfortable: 1.55;
+  --measure:             70ch;
+
+  /* ===== Motion ===== */
+  --motion-fast:       80ms;
+  --motion-base:       120ms;
+  --motion-disclosure: 200ms;
+  --motion-pulse:      600ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out:      cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out:   cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+/* Dark mode via system preference (when data-theme="auto") */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="auto"] {
+    --color-surface:        oklch(15% 0.01 70);
+    --color-surface-raised: oklch(18% 0.01 70);
+    --color-ink:            oklch(92% 0.01 70);
+    --color-ink-muted:      oklch(70% 0.01 70);
+    --color-border:         oklch(28% 0.01 70);
+    --color-border-strong:  oklch(48% 0.02 70);
+    --color-accent:         oklch(65% 0.15 50);
+    --color-accent-hover:   oklch(72% 0.13 50);
+    --color-success:        oklch(64% 0.13 155);
+    --color-warn:           oklch(72% 0.13 60);
+    --color-error:          oklch(68% 0.16 25);
+  }
+}
+
+/* Manual dark override */
+:root[data-theme="dark"] {
+  --color-surface:        oklch(15% 0.01 70);
+  --color-surface-raised: oklch(18% 0.01 70);
+  --color-ink:            oklch(92% 0.01 70);
+  --color-ink-muted:      oklch(70% 0.01 70);
+  --color-border:         oklch(28% 0.01 70);
+  --color-border-strong:  oklch(48% 0.02 70);
+  --color-accent:         oklch(65% 0.15 50);
+  --color-accent-hover:   oklch(72% 0.13 50);
+  --color-success:        oklch(64% 0.13 155);
+  --color-warn:           oklch(72% 0.13 60);
+  --color-error:          oklch(68% 0.16 25);
+}
+
+/* ===== Reset / global =====
+ * Lightweight; the production app has reset.css + global.css already. */
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: var(--text-base) / var(--leading-comfortable) var(--font-chrome);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Reduced-motion zero-out (matches global.css) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+[data-motion="reduce"] *, [data-motion="reduce"] *::before, [data-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* interpolate-size global (M2b authorization) */
+@supports (interpolate-size: allow-keywords) {
+  :root {
+    interpolate-size: allow-keywords;
+  }
+}
+details > *:not(summary) {
+  transition: block-size var(--motion-disclosure) var(--ease-in-out);
+}
+
+/* ===== Prototype scaffolding ===== */
+.proto-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4);
+}
+
+.proto-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-8);
+}
+
+.proto-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: var(--text-xl);
+  color: var(--color-ink);
+}
+.proto-title small {
+  font-family: var(--font-chrome);
+  font-style: normal;
+  font-weight: 400;
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+  margin-left: var(--space-3);
+}
+
+.proto-controls {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.proto-btn {
+  appearance: none;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font: var(--text-sm) / var(--leading-comfortable) var(--font-chrome);
+  color: var(--color-ink);
+}
+.proto-btn:hover {
+  border-color: var(--color-accent);
+}
+.proto-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.proto-section-heading {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: var(--text-lg);
+  color: var(--color-ink);
+  margin: var(--space-8) 0 var(--space-4);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.proto-scenario-note {
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+  font-style: italic;
+  margin: 0 0 var(--space-4);
+}
+
+/* Mock session-pane container */
+.session-pane-mock {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  margin-bottom: var(--space-8);
+}
+
+/* =========================================================================
+ * SkimView surface
+ * ===================================================================== */
+
+.skim-body {
+  /* Mirrors TranscriptView body wrapper. */
+  display: block;
+}
+
+.skim-stream {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  padding-block: var(--space-6) 0;
+  max-inline-size: var(--measure);
+}
+
+/* Three-magnitude rhythm (design.md §5):
+ * 24 px between same-kind adjacent blocks (the floor).
+ * 32 px between different-kind adjacent blocks (override).
+ * 32 px around boundary blocks (last rule, takes precedence). */
+.skim-stream > .skim-block + .skim-block {
+  margin-top: var(--space-6); /* 24 px — same-kind floor */
+}
+.skim-stream > .skim-block-user-turn + .skim-block-agent-only,
+.skim-stream > .skim-block-agent-only + .skim-block-user-turn,
+.skim-stream > .skim-block-user-turn + .skim-block-oversized,
+.skim-stream > .skim-block-oversized + .skim-block-user-turn,
+.skim-stream > .skim-block-agent-only + .skim-block-oversized,
+.skim-stream > .skim-block-oversized + .skim-block-agent-only {
+  margin-top: var(--space-8); /* 32 px — kind-change override */
+}
+.skim-stream > .boundary-row,
+.skim-stream > .boundary-row + .skim-block,
+.skim-stream > .skim-block + .boundary-row {
+  margin-top: var(--space-8); /* 32 px — boundary breathing (LAST rule) */
+}
+
+/* Skim-block first-paint stagger (spec working/phase-5.md:93 row 9 authorization) */
+.skim-block,
+.boundary-row {
+  opacity: 0;
+  animation: skim-block-fade-in var(--motion-disclosure) var(--ease-out) both;
+}
+
+@keyframes skim-block-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ----- user_turn block ----- */
+.skim-block-user-turn { /* container only — chrome lives on the panel below */ }
+
+.skim-user-panel {
+  background: color-mix(in srgb, var(--color-accent) 5%, var(--color-surface));
+  padding: var(--space-6) var(--space-8);
+  border-radius: var(--radius-md);
+  max-inline-size: var(--measure);
+}
+
+.skim-user-body {
+  font-family: var(--font-chrome);
+  font-size: var(--text-base);
+  line-height: var(--leading-comfortable);
+  color: var(--color-ink);
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+/* Inline code + code-block recipes (cascade-inherited from
+ * TranscriptView.css in production; replicated here for the prototype) */
+.msg-code-inline {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  background: var(--color-surface-raised);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+}
+.msg-code-block {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  background: var(--color-surface-raised);
+  color: var(--color-ink);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-3) 0;
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.skim-agent-reaction {
+  margin-top: var(--space-3);
+}
+
+.skim-agent-reaction-summary,
+.skim-agent-reaction > summary {
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+  padding: var(--space-2) 0;
+  cursor: pointer;
+  list-style: revert;
+}
+
+.skim-agent-reaction-body {
+  padding-block-start: var(--space-3);
+}
+
+.skim-summary-disabled {
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+  font-style: italic;
+  border-inline-start: 4px solid var(--color-border);
+  padding-inline-start: var(--space-4);
+  margin: var(--space-3) 0;
+  max-inline-size: var(--measure);
+  line-height: var(--leading-comfortable);
+}
+
+.skim-expand-raw {
+  margin-top: var(--space-3);
+}
+
+.skim-expand-raw-summary,
+.skim-expand-raw > summary {
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-accent);
+  padding: var(--space-2) 0;
+  cursor: pointer;
+  list-style: revert;
+}
+.skim-expand-raw > summary:hover {
+  text-decoration: underline;
+}
+
+.skim-expand-raw-body {
+  margin-top: var(--space-3);
+  padding-inline-start: var(--space-4);
+  border-inline-start: 1px solid var(--color-border);
+}
+
+/* ----- boundary block ----- */
+.boundary-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--space-4);
+  margin-block: var(--space-8);
+  list-style: none;
+  inline-size: 100%;
+}
+.boundary-row-rule {
+  block-size: 1px;
+  inline-size: 100%;
+  background: var(--color-border-strong);
+}
+.boundary-row-label {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+  font-style: italic;
+  font-variant: small-caps;
+  letter-spacing: 0.18em;
+  padding: 0 var(--space-3);
+}
+
+/* ----- agent_only block ----- */
+.skim-block-agent-only { /* container; <details> below carries chrome */ }
+
+.skim-agent-only {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  max-inline-size: var(--measure);
+}
+.skim-agent-only-summary,
+.skim-agent-only > summary {
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  list-style: revert;
+}
+.skim-agent-only-body {
+  margin-top: var(--space-3);
+  padding-block-start: var(--space-3);
+  border-block-start: 1px solid var(--color-border);
+}
+
+/* ----- oversized_user_message block ----- */
+.skim-block-oversized {
+  border-inline-start: 4px solid var(--color-warn);
+  padding-inline-start: var(--space-4);
+  max-inline-size: var(--measure);
+}
+.skim-oversized-summary,
+.skim-oversized > summary {
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  cursor: pointer;
+  list-style: revert;
+  padding: var(--space-2) 0;
+}
+.skim-oversized-body {
+  margin-top: var(--space-3);
+}
+.skim-oversized-pre {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  background: var(--color-surface-raised);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  white-space: pre;
+  overflow-x: auto;
+  margin: 0;
+}
+
+/* ----- truncation banner (M4-inherited) ----- */
+.skim-banner-truncation {
+  background: color-mix(in srgb, var(--color-warn) 8%, var(--color-surface));
+  border-inline-start: 3px solid var(--color-warn);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-ink);
+  font: var(--text-sm) / var(--leading-comfortable) var(--font-chrome);
+  margin-block-end: var(--space-6);
+  animation: skim-banner-fade var(--motion-base) var(--ease-out) both;
+}
+
+@keyframes skim-banner-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ----- parse-warnings banner (M4-inherited) ----- */
+.skim-banner-warnings {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  margin-block-end: var(--space-6);
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+}
+.skim-banner-warnings > summary {
+  cursor: pointer;
+  list-style: revert;
+  padding: var(--space-1) 0;
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+}
+.skim-warnings-list {
+  list-style: none;
+  padding-inline-start: var(--space-4);
+  margin: var(--space-2) 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+}
+.skim-warnings-list > li {
+  padding-block: var(--space-1);
+  word-break: break-all;
+}
+.skim-banner-dismiss {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-ink);
+  cursor: pointer;
+}
+.skim-banner-dismiss:hover {
+  border-color: var(--color-border-strong);
+}
+.skim-banner-dismiss:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ----- state branches ----- */
+.skim-empty,
+.skim-not-imported,
+.skim-loading,
+.skim-empty-stream {
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+  font-style: italic;
+  text-align: center;
+  padding: var(--space-8) 0;
+  margin: 0;
+}
+
+.skim-error {
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-error);
+  margin: var(--space-6) 0 var(--space-3);
+}
+
+.skim-retry {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  cursor: pointer;
+}
+.skim-retry:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ----- mock TranscriptView (for the Expand-to-raw demo) ----- */
+.mock-transcript-stream {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-block-start: 1px dashed var(--color-border);
+  padding-block-start: var(--space-4);
+}
+.mock-transcript-stream > li {
+  margin-bottom: var(--space-4);
+}
+.mock-msg-panel {
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-6);
+  max-inline-size: var(--measure);
+}
+.mock-msg-user {
+  background: color-mix(in srgb, var(--color-accent) 5%, var(--color-surface));
+}
+.mock-msg-assistant {
+  background: var(--color-surface);
+}
+.mock-msg-attr {
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: var(--space-2);
+}
+.mock-msg-body {
+  font-family: var(--font-chrome);
+  font-size: var(--text-base);
+  color: var(--color-ink);
+  line-height: var(--leading-comfortable);
+  white-space: pre-wrap;
+}
+</style>
+</head>
+
+<body>
+<div class="proto-shell">
+
+<header class="proto-toolbar">
+  <h1 class="proto-title">SkimView <small>M5 — Phase 5 reference prototype</small></h1>
+  <div class="proto-controls">
+    <button class="proto-btn" data-toggle-theme>Toggle theme</button>
+    <button class="proto-btn" data-toggle-motion>Toggle reduced-motion</button>
+  </div>
+</header>
+
+<!-- ============================================================
+ 1. STANDARD MIXED SKIM
+============================================================ -->
+<h2 class="proto-section-heading">1. Standard mixed skim outline</h2>
+<p class="proto-scenario-note">User turn (panel + closed Agent reaction) → boundary "SESSION RESUMED" → user_turn (panel + open Agent reaction with placeholder + closed "Expand to raw messages") → agent_only (collapsed) → oversized (collapsed).</p>
+<div class="session-pane-mock">
+  <section class="skim-body" aria-label="Session skim outline">
+    <ol class="skim-stream" role="list">
+
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 0ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">Can you walk me through how the metadata <code class="msg-code-inline">&lt;dl&gt;</code> grid is laid out? I'd like to add a new field but I'm not sure where the column rule lives.</div>
+        </article>
+        <details class="skim-agent-reaction">
+          <summary class="skim-agent-reaction-summary">Agent reaction (3 messages)</summary>
+          <div class="skim-agent-reaction-body">
+            <p class="skim-summary-disabled">Summary disabled — generation deferred to a later phase. Use "Expand to raw messages" to read the agent's response inline.</p>
+            <details class="skim-expand-raw">
+              <summary class="skim-expand-raw-summary">Expand to raw messages</summary>
+              <div class="skim-expand-raw-body"><em>(Scoped TranscriptView mounts here — see scenario 7.)</em></div>
+            </details>
+          </div>
+        </details>
+      </li>
+
+      <li class="boundary-row" role="separator" aria-orientation="horizontal" style="animation-delay: 40ms;">
+        <span aria-hidden="true" class="boundary-row-rule boundary-row-rule-start"></span>
+        <span class="boundary-row-label">SESSION RESUMED</span>
+        <span aria-hidden="true" class="boundary-row-rule boundary-row-rule-end"></span>
+      </li>
+
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 80ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">Got it — thanks. One more: what controls the spacing between rows? It looks tighter on the Phase 4 metadata than on the new Phase 5 surfaces.</div>
+        </article>
+        <details class="skim-agent-reaction" open>
+          <summary class="skim-agent-reaction-summary">Agent reaction (5 messages)</summary>
+          <div class="skim-agent-reaction-body">
+            <p class="skim-summary-disabled">Summary disabled — generation deferred to a later phase. Use "Expand to raw messages" to read the agent's response inline.</p>
+            <details class="skim-expand-raw">
+              <summary class="skim-expand-raw-summary">Expand to raw messages</summary>
+              <div class="skim-expand-raw-body"><em>(Scoped TranscriptView mounts here — see scenario 7.)</em></div>
+            </details>
+          </div>
+        </details>
+      </li>
+
+      <li class="skim-block skim-block-agent-only" style="animation-delay: 120ms;">
+        <details class="skim-agent-only">
+          <summary class="skim-agent-only-summary">Agent-only session (12 messages)</summary>
+          <div class="skim-agent-only-body"><em>(Scoped TranscriptView spanning the agent_only range mounts here.)</em></div>
+        </details>
+      </li>
+
+      <li class="skim-block skim-block-oversized" style="animation-delay: 160ms;">
+        <details class="skim-oversized">
+          <summary class="skim-oversized-summary">Oversized user message (78 KB) — collapsed by default</summary>
+          <div class="skim-oversized-body"><em>(Verbatim mono &lt;pre&gt; mounts here — see scenario 9.)</em></div>
+        </details>
+      </li>
+
+    </ol>
+  </section>
+</div>
+
+<!-- ============================================================
+ 2. TRUNCATED VARIANT
+============================================================ -->
+<h2 class="proto-section-heading">2. Truncated variant — banner at top</h2>
+<p class="proto-scenario-note">When `state === "truncated"`, the SkimView mounts a truncation banner above the stream. Byte-equivalent visual recipe to M4's transcript banner.</p>
+<div class="session-pane-mock">
+  <section class="skim-body" aria-label="Session skim outline">
+    <div class="skim-banner-truncation" role="status">
+      Truncated at 5 MB — full payload not parsed. Use the <strong>Open raw</strong> anchor in the session header to inspect the full payload.
+    </div>
+    <ol class="skim-stream" role="list">
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 0ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">First user message in a truncated session — only partial content was parsed before the 5 MB cap fired.</div>
+        </article>
+        <details class="skim-agent-reaction">
+          <summary class="skim-agent-reaction-summary">Agent reaction (2 messages)</summary>
+          <div class="skim-agent-reaction-body">
+            <p class="skim-summary-disabled">Summary disabled — generation deferred to a later phase. Use "Expand to raw messages" to read the agent's response inline.</p>
+            <details class="skim-expand-raw">
+              <summary class="skim-expand-raw-summary">Expand to raw messages</summary>
+              <div class="skim-expand-raw-body"><em>(Scoped TranscriptView mounts here.)</em></div>
+            </details>
+          </div>
+        </details>
+      </li>
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 40ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">Second user message before truncation — note the banner above persists until the user opens the raw payload.</div>
+        </article>
+        <details class="skim-agent-reaction">
+          <summary class="skim-agent-reaction-summary">Agent reaction (1 messages)</summary>
+          <div class="skim-agent-reaction-body">
+            <p class="skim-summary-disabled">Summary disabled — generation deferred to a later phase. Use "Expand to raw messages" to read the agent's response inline.</p>
+            <details class="skim-expand-raw">
+              <summary class="skim-expand-raw-summary">Expand to raw messages</summary>
+              <div class="skim-expand-raw-body"><em>(Scoped TranscriptView mounts here.)</em></div>
+            </details>
+          </div>
+        </details>
+      </li>
+    </ol>
+  </section>
+</div>
+
+<!-- ============================================================
+ 3. WARNINGS-PRESENT VARIANT
+============================================================ -->
+<h2 class="proto-section-heading">3. Warnings-present variant — dismissible parse-warnings banner</h2>
+<p class="proto-scenario-note">When `parsed.warnings.length > 0`, the parse-warnings banner mounts above the stream. The banner is dismissible (component-local React state); re-arrives on row.rowKey change.</p>
+<div class="session-pane-mock">
+  <section class="skim-body" aria-label="Session skim outline">
+    <details class="skim-banner-warnings" open>
+      <summary>3 parse warnings — click to view.</summary>
+      <ul class="skim-warnings-list">
+        <li>line 42 · unrecognized event type "thinking_block"</li>
+        <li>line 87 · invalid timestamp "2025-13-32T99:99:99Z" (clamped)</li>
+        <li>line 156 · oversized tool_result truncated at 2 KB head</li>
+      </ul>
+      <button class="skim-banner-dismiss" type="button">Dismiss</button>
+    </details>
+    <ol class="skim-stream" role="list">
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 0ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">Session that triggered three parse warnings — the warnings cite line ordinals from the raw NDJSON.</div>
+        </article>
+        <details class="skim-agent-reaction">
+          <summary class="skim-agent-reaction-summary">Agent reaction (4 messages)</summary>
+          <div class="skim-agent-reaction-body">
+            <p class="skim-summary-disabled">Summary disabled — generation deferred to a later phase. Use "Expand to raw messages" to read the agent's response inline.</p>
+            <details class="skim-expand-raw">
+              <summary class="skim-expand-raw-summary">Expand to raw messages</summary>
+              <div class="skim-expand-raw-body"><em>(Scoped TranscriptView mounts here.)</em></div>
+            </details>
+          </div>
+        </details>
+      </li>
+    </ol>
+  </section>
+</div>
+
+<!-- ============================================================
+ 4. BOUNDARY MID-STREAM
+============================================================ -->
+<h2 class="proto-section-heading">4. Boundary mid-stream — both subtypes adjacent</h2>
+<p class="proto-scenario-note">A session with two boundary blocks of different subtypes adjacent to user_turns on either side. Demonstrates "SESSION RESUMED" + "CONVERSATION COMPACTED" labels.</p>
+<div class="session-pane-mock">
+  <section class="skim-body" aria-label="Session skim outline">
+    <ol class="skim-stream" role="list">
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 0ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">User message before the chapter break.</div>
+        </article>
+        <details class="skim-agent-reaction">
+          <summary class="skim-agent-reaction-summary">Agent reaction (2 messages)</summary>
+          <div class="skim-agent-reaction-body">
+            <p class="skim-summary-disabled">Summary disabled — generation deferred to a later phase. Use "Expand to raw messages" to read the agent's response inline.</p>
+            <details class="skim-expand-raw">
+              <summary class="skim-expand-raw-summary">Expand to raw messages</summary>
+              <div class="skim-expand-raw-body"><em>(Scoped TranscriptView mounts here.)</em></div>
+            </details>
+          </div>
+        </details>
+      </li>
+      <li class="boundary-row" role="separator" aria-orientation="horizontal" style="animation-delay: 40ms;">
+        <span aria-hidden="true" class="boundary-row-rule boundary-row-rule-start"></span>
+        <span class="boundary-row-label">SESSION RESUMED</span>
+        <span aria-hidden="true" class="boundary-row-rule boundary-row-rule-end"></span>
+      </li>
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 80ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">Returning user picks up the thread after a session resume.</div>
+        </article>
+        <details class="skim-agent-reaction">
+          <summary class="skim-agent-reaction-summary">Agent reaction (3 messages)</summary>
+          <div class="skim-agent-reaction-body">
+            <p class="skim-summary-disabled">Summary disabled — generation deferred to a later phase. Use "Expand to raw messages" to read the agent's response inline.</p>
+            <details class="skim-expand-raw">
+              <summary class="skim-expand-raw-summary">Expand to raw messages</summary>
+              <div class="skim-expand-raw-body"><em>(Scoped TranscriptView mounts here.)</em></div>
+            </details>
+          </div>
+        </details>
+      </li>
+      <li class="boundary-row" role="separator" aria-orientation="horizontal" style="animation-delay: 120ms;">
+        <span aria-hidden="true" class="boundary-row-rule boundary-row-rule-start"></span>
+        <span class="boundary-row-label">CONVERSATION COMPACTED</span>
+        <span aria-hidden="true" class="boundary-row-rule boundary-row-rule-end"></span>
+      </li>
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 160ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">Final user message after a compaction event.</div>
+        </article>
+        <details class="skim-agent-reaction">
+          <summary class="skim-agent-reaction-summary">Agent reaction (1 messages)</summary>
+          <div class="skim-agent-reaction-body">
+            <p class="skim-summary-disabled">Summary disabled — generation deferred to a later phase. Use "Expand to raw messages" to read the agent's response inline.</p>
+            <details class="skim-expand-raw">
+              <summary class="skim-expand-raw-summary">Expand to raw messages</summary>
+              <div class="skim-expand-raw-body"><em>(Scoped TranscriptView mounts here.)</em></div>
+            </details>
+          </div>
+        </details>
+      </li>
+    </ol>
+  </section>
+</div>
+
+<!-- ============================================================
+ 5. user_turn collapsed
+============================================================ -->
+<h2 class="proto-section-heading">5. user_turn collapsed — Agent reaction closed</h2>
+<p class="proto-scenario-note">Default state of every user_turn block: outer "Agent reaction (N messages)" disclosure CLOSED.</p>
+<div class="session-pane-mock">
+  <section class="skim-body" aria-label="Session skim outline">
+    <ol class="skim-stream" role="list">
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 0ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">A short user message — the panel sits on the 5% accent-tinted background, with `--color-ink` body text.</div>
+        </article>
+        <details class="skim-agent-reaction">
+          <summary class="skim-agent-reaction-summary">Agent reaction (3 messages)</summary>
+          <div class="skim-agent-reaction-body">
+            <p class="skim-summary-disabled">Summary disabled — generation deferred to a later phase. Use "Expand to raw messages" to read the agent's response inline.</p>
+            <details class="skim-expand-raw">
+              <summary class="skim-expand-raw-summary">Expand to raw messages</summary>
+              <div class="skim-expand-raw-body"><em>(Scoped TranscriptView mounts here.)</em></div>
+            </details>
+          </div>
+        </details>
+      </li>
+    </ol>
+  </section>
+</div>
+
+<!-- ============================================================
+ 6. user_turn agent reaction expanded
+============================================================ -->
+<h2 class="proto-section-heading">6. user_turn agent reaction expanded — placeholder + closed inner disclosure</h2>
+<p class="proto-scenario-note">Outer "Agent reaction" open; inner "Expand to raw messages" CLOSED. Disabled placeholder visible with 4 px left border in `--color-border` and italic muted prose.</p>
+<div class="session-pane-mock">
+  <section class="skim-body" aria-label="Session skim outline">
+    <ol class="skim-stream" role="list">
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 0ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">User asks for help. Agent reaction is opened so the placeholder is visible — but the user has not yet expanded into the raw messages.</div>
+        </article>
+        <details class="skim-agent-reaction" open>
+          <summary class="skim-agent-reaction-summary">Agent reaction (3 messages)</summary>
+          <div class="skim-agent-reaction-body">
+            <p class="skim-summary-disabled">Summary disabled — generation deferred to a later phase. Use "Expand to raw messages" to read the agent's response inline.</p>
+            <details class="skim-expand-raw">
+              <summary class="skim-expand-raw-summary">Expand to raw messages</summary>
+              <div class="skim-expand-raw-body"><em>(Closed — click to mount scoped TranscriptView.)</em></div>
+            </details>
+          </div>
+        </details>
+      </li>
+    </ol>
+  </section>
+</div>
+
+<!-- ============================================================
+ 7. user_turn fully expanded — Expand to raw messages OPEN
+============================================================ -->
+<h2 class="proto-section-heading">7. user_turn fully expanded — scoped TranscriptView mounted</h2>
+<p class="proto-scenario-note">Outer + inner disclosures open. The scoped TranscriptView mounts with `messageRange={{start: block.start+1, end: block.end}}`, rendering only the agent reaction's messages.</p>
+<div class="session-pane-mock">
+  <section class="skim-body" aria-label="Session skim outline">
+    <ol class="skim-stream" role="list">
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 0ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">Can you give me a quick summary of how the M5 SkimView composes with M4's TranscriptView? I want to confirm the messageRange wiring before reviewing the design artifact.</div>
+        </article>
+        <details class="skim-agent-reaction" open>
+          <summary class="skim-agent-reaction-summary">Agent reaction (3 messages)</summary>
+          <div class="skim-agent-reaction-body">
+            <p class="skim-summary-disabled">Summary disabled — generation deferred to a later phase. Use "Expand to raw messages" to read the agent's response inline.</p>
+            <details class="skim-expand-raw" open>
+              <summary class="skim-expand-raw-summary">Expand to raw messages</summary>
+              <div class="skim-expand-raw-body">
+                <ol class="mock-transcript-stream">
+                  <li>
+                    <article class="mock-msg-panel mock-msg-assistant">
+                      <header class="mock-msg-attr">ASSISTANT · 2 minutes ago</header>
+                      <div class="mock-msg-body">SkimView reuses TranscriptView verbatim, scoped to a messageIndex range via the new `messageRange` prop. The prop is optional — when omitted, behavior is identical to M4's contract.</div>
+                    </article>
+                  </li>
+                  <li>
+                    <article class="mock-msg-panel mock-msg-assistant">
+                      <header class="mock-msg-attr">ASSISTANT · 2 minutes ago</header>
+                      <div class="mock-msg-body">For an Agent reaction disclosure: `messageRange = {start: block.start + 1, end: block.end}` (excludes the user message at block.start). For an agent_only block: `messageRange = {start: block.start, end: block.end}` (full range).</div>
+                    </article>
+                  </li>
+                  <li>
+                    <article class="mock-msg-panel mock-msg-assistant">
+                      <header class="mock-msg-attr">ASSISTANT · 2 minutes ago</header>
+                      <div class="mock-msg-body">Defensive clamping handles out-of-range values: `lo = Math.max(0, start)`, `hi = Math.min(messages.length - 1, end)`. If `hi &lt; lo`, the slice is empty and TranscriptView renders "No messages parsed." (spec line 697 — never silently blank).</div>
+                    </article>
+                  </li>
+                </ol>
+              </div>
+            </details>
+          </div>
+        </details>
+      </li>
+    </ol>
+  </section>
+</div>
+
+<!-- ============================================================
+ 8. agent_only block (collapsed + expanded)
+============================================================ -->
+<h2 class="proto-section-heading">8. agent_only block — collapsed + expanded</h2>
+<p class="proto-scenario-note">Two adjacent agent_only blocks: first CLOSED, second OPEN. Spec line 693: "muted panel with hairline border, no accent tint."</p>
+<div class="session-pane-mock">
+  <section class="skim-body" aria-label="Session skim outline">
+    <ol class="skim-stream" role="list">
+      <li class="skim-block skim-block-agent-only" style="animation-delay: 0ms;">
+        <details class="skim-agent-only">
+          <summary class="skim-agent-only-summary">Agent-only session (8 messages)</summary>
+          <div class="skim-agent-only-body"><em>(Closed — body hidden via native &lt;details&gt;.)</em></div>
+        </details>
+      </li>
+      <li class="skim-block skim-block-agent-only" style="animation-delay: 40ms;">
+        <details class="skim-agent-only" open>
+          <summary class="skim-agent-only-summary">Agent-only session (5 messages)</summary>
+          <div class="skim-agent-only-body">
+            <ol class="mock-transcript-stream">
+              <li>
+                <article class="mock-msg-panel mock-msg-assistant">
+                  <header class="mock-msg-attr">ASSISTANT · 7 minutes ago</header>
+                  <div class="mock-msg-body">Agent-only session here — no user input; the entire stream is assistant-driven (e.g., a CI agent run).</div>
+                </article>
+              </li>
+              <li>
+                <article class="mock-msg-panel mock-msg-assistant">
+                  <header class="mock-msg-attr">ASSISTANT · 7 minutes ago</header>
+                  <div class="mock-msg-body">Continuing the agent's work — five messages total in this block.</div>
+                </article>
+              </li>
+              <li>
+                <article class="mock-msg-panel mock-msg-assistant">
+                  <header class="mock-msg-attr">ASSISTANT · 6 minutes ago</header>
+                  <div class="mock-msg-body">Third assistant message.</div>
+                </article>
+              </li>
+              <li>
+                <article class="mock-msg-panel mock-msg-assistant">
+                  <header class="mock-msg-attr">ASSISTANT · 6 minutes ago</header>
+                  <div class="mock-msg-body">Fourth assistant message.</div>
+                </article>
+              </li>
+              <li>
+                <article class="mock-msg-panel mock-msg-assistant">
+                  <header class="mock-msg-attr">ASSISTANT · 5 minutes ago</header>
+                  <div class="mock-msg-body">Fifth and final assistant message in this agent_only block.</div>
+                </article>
+              </li>
+            </ol>
+          </div>
+        </details>
+      </li>
+    </ol>
+  </section>
+</div>
+
+<!-- ============================================================
+ 9. oversized_user_message — collapsed + expanded
+============================================================ -->
+<h2 class="proto-section-heading">9. oversized_user_message — collapsed + expanded</h2>
+<p class="proto-scenario-note">Two adjacent oversized blocks: first CLOSED, second OPEN. Warn-tinted 4 px left border in `--color-warn`. Verbatim mono `<pre>` body. NEVER summarized.</p>
+<div class="session-pane-mock">
+  <section class="skim-body" aria-label="Session skim outline">
+    <ol class="skim-stream" role="list">
+      <li class="skim-block skim-block-oversized" style="animation-delay: 0ms;">
+        <details class="skim-oversized">
+          <summary class="skim-oversized-summary">Oversized user message (78 KB) — collapsed by default</summary>
+          <div class="skim-oversized-body"><em>(Closed — body hidden via native &lt;details&gt;.)</em></div>
+        </details>
+      </li>
+      <li class="skim-block skim-block-oversized" style="animation-delay: 40ms;">
+        <details class="skim-oversized" open>
+          <summary class="skim-oversized-summary">Oversized user message (102 KB) — collapsed by default</summary>
+          <div class="skim-oversized-body">
+<pre class="skim-oversized-pre">{
+  "session_id": "session-2026-05-10-9f3e8a",
+  "tool": "claude-code",
+  "context": [
+    "----- BEGIN PASTED LOG -----",
+    "[2026-05-10T08:14:22Z] INFO: starting build...",
+    "[2026-05-10T08:14:23Z] INFO: resolving 1247 dependencies",
+    "[2026-05-10T08:14:24Z] WARN: dependency 'foo@1.2.3' has 2 known vulnerabilities",
+    "[2026-05-10T08:14:25Z] INFO: 0 errors, 2 warnings",
+    "[2026-05-10T08:14:26Z] INFO: bundle size: 260.79 kB JS / 28.58 kB CSS",
+    "[2026-05-10T08:14:27Z] INFO: 491 tests passed, 0 failed, 1729 expects",
+    "...",
+    "----- END PASTED LOG -----"
+  ],
+  "request": "Can you summarize this build log and flag any vulnerabilities?"
+}</pre>
+          </div>
+        </details>
+      </li>
+    </ol>
+  </section>
+</div>
+
+<!-- ============================================================
+ 10. EMPTY STREAM — agent_only(0 messages)
+============================================================ -->
+<h2 class="proto-section-heading">10. Empty stream — single agent_only(0 messages) block</h2>
+<p class="proto-scenario-note">When `parsed.messages` is empty, `buildSkim` emits a sentinel `{kind: "agent_only", start: 0, end: -1, meta: {empty: 1}}`. SkimView renders one block with summary "Agent-only session (0 messages)". Spec line 697: "The Skim view NEVER renders silently blank."</p>
+<div class="session-pane-mock">
+  <section class="skim-body" aria-label="Session skim outline">
+    <ol class="skim-stream" role="list">
+      <li class="skim-block skim-block-agent-only" style="animation-delay: 0ms;">
+        <details class="skim-agent-only">
+          <summary class="skim-agent-only-summary">Agent-only session (0 messages)</summary>
+          <div class="skim-agent-only-body">
+            <p class="skim-empty-stream">No messages parsed.</p>
+          </div>
+        </details>
+      </li>
+    </ol>
+  </section>
+</div>
+
+<!-- ============================================================
+ 11. STAGGER ANIMATION DEMO
+============================================================ -->
+<h2 class="proto-section-heading">11. Skim-block stagger animation demo</h2>
+<p class="proto-scenario-note">Reload the page (or click the button below) to replay the stagger. Blocks fade in opacity 0→1 + translateY 4px→0, with 40ms × min(idx, 8) delay. Reduced-motion zeros the animation.</p>
+<div class="session-pane-mock">
+  <button class="proto-btn" data-replay-stagger>Replay stagger</button>
+  <section class="skim-body" aria-label="Session skim outline" id="stagger-demo">
+    <ol class="skim-stream" role="list">
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 0ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">Block 0 — animationDelay: 0ms</div>
+        </article>
+      </li>
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 40ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">Block 1 — animationDelay: 40ms</div>
+        </article>
+      </li>
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 80ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">Block 2 — animationDelay: 80ms</div>
+        </article>
+      </li>
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 120ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">Block 3 — animationDelay: 120ms</div>
+        </article>
+      </li>
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 160ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">Block 4 — animationDelay: 160ms</div>
+        </article>
+      </li>
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 200ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">Block 5 — animationDelay: 200ms</div>
+        </article>
+      </li>
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 240ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">Block 6 — animationDelay: 240ms</div>
+        </article>
+      </li>
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 280ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">Block 7 — animationDelay: 280ms</div>
+        </article>
+      </li>
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 320ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">Block 8 — animationDelay: 320ms (cap)</div>
+        </article>
+      </li>
+      <li class="skim-block skim-block-user-turn" style="animation-delay: 320ms;">
+        <article class="skim-user-panel">
+          <div class="skim-user-body">Block 9 — animationDelay: 320ms (capped)</div>
+        </article>
+      </li>
+    </ol>
+  </section>
+</div>
+
+</div>
+
+<script>
+  // Theme toggle
+  document.querySelector("[data-toggle-theme]").addEventListener("click", () => {
+    const html = document.documentElement;
+    const current = html.getAttribute("data-theme");
+    const next = current === "light" ? "dark" : current === "dark" ? "auto" : "light";
+    html.setAttribute("data-theme", next);
+  });
+
+  // Reduced-motion override
+  document.querySelector("[data-toggle-motion]").addEventListener("click", () => {
+    const html = document.documentElement;
+    const current = html.getAttribute("data-motion");
+    const next = current === "auto" ? "reduce" : "auto";
+    html.setAttribute("data-motion", next);
+  });
+
+  // Replay stagger animation by re-cloning the stagger demo subtree.
+  document.querySelector("[data-replay-stagger]").addEventListener("click", () => {
+    const demo = document.getElementById("stagger-demo");
+    const clone = demo.cloneNode(true);
+    demo.parentNode.replaceChild(clone, demo);
+  });
+</script>
+</body>
+</html>

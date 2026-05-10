@@ -20,8 +20,8 @@
 //     with `hidden`.
 //   - selectedRowKey change resets activeTab + visitedTabs (covered
 //     via `key` change in the harness).
-//   - Skim placeholder copy "Coming in Milestone 5"; Transcript
-//     "Coming in Milestone 4".
+//   - M5 functional state: Skim renders SkimView (no placeholder);
+//     Transcript renders TranscriptView (M4 functional state).
 //   - tabIndex=0 on active Skim/Transcript/Raw panels; NOT on
 //     Metadata.
 //   - Page-turn fade keyframe: `.session-pane` carries the
@@ -252,13 +252,12 @@ test("SessionView ready: visited-tab lazy-mount matrix — Transcript mounts on 
   expect(skimPanel.hasAttribute("hidden")).toBe(false);
 });
 
-test("SessionView ready: Skim placeholder reads 'Coming in Milestone 5'; Transcript renders TranscriptView (M4 functional state)", () => {
+test("M5 functional state: Skim renders SkimView, Transcript renders TranscriptView, no placeholders remain", () => {
   globalThis.fetch = mock(async () =>
     new Response("[]", { status: 200 }),
   ) as unknown as typeof globalThis.fetch;
-  // Source-only row → TranscriptView lands on the "no_raw" branch
-  // (no fetch fired). The panel renders the spec-verbatim
-  // "not-imported" copy from TranscriptView.tsx.
+  // Source-only row → both TranscriptView and SkimView land on the
+  // "no_raw" branch and render the spec-verbatim "not-imported" copy.
   const row = buildRow();
   const { container } = render(
     <SessionView
@@ -271,23 +270,84 @@ test("SessionView ready: Skim placeholder reads 'Coming in Milestone 5'; Transcr
       onTryRescan={NOOP}
     />,
   );
-  // Default tab = Transcript → no placeholder text; renders the
-  // TranscriptView "not-imported" copy because the row has no
-  // storedSessionUid.
+  // Default tab = Transcript → renders the TranscriptView
+  // "not-imported" copy because the row has no storedSessionUid.
   expect(
     container.querySelector("#panel-transcript")?.textContent,
   ).toContain("This session has not been imported yet");
   expect(
     container.querySelector("#panel-transcript")?.textContent,
   ).not.toContain("Coming in Milestone 4");
-  // Activate Skim → "Coming in Milestone 5" copy appears (M5 is the
-  // last remaining placeholder).
+  // Activate Skim → SkimView mounts, NOT a placeholder. Source-only
+  // row lands on the no_raw branch; the same "not yet imported"
+  // copy renders.
   act(() => {
     (container.querySelector("#tab-skim") as HTMLButtonElement).click();
   });
-  expect(container.querySelector("#panel-skim")?.textContent).toContain(
-    "Coming in Milestone 5",
+  const skimPanel = container.querySelector("#panel-skim");
+  expect(skimPanel?.textContent).not.toContain("Coming in Milestone 5");
+  expect(skimPanel?.textContent).toContain(
+    "This session has not been imported yet",
   );
+  // No placeholder copy anywhere in the SessionView tree.
+  expect(container.textContent).not.toContain("Coming in Milestone 5");
+  expect(container.textContent).not.toContain("Coming in Milestone 4");
+});
+
+test("SessionView ready: Skim → Transcript → Skim keeps the SkimView panel React-mounted (M5 keep-mounted regression)", () => {
+  // Activate Skim, then switch to Transcript, then back to Skim. The
+  // SkimView panel's element reference must be stable — proving the
+  // M5 keep-mounted contract holds for SkimView the way M2b's test
+  // proved it for the Raw panel and M4's for Transcript.
+  suppressActWarnings();
+  try {
+    globalThis.fetch = mock(async () =>
+      new Response("", { status: 200 }),
+    ) as unknown as typeof globalThis.fetch;
+    const row = buildRow({ storedSessionUid: null });
+    const { container } = render(
+      <SessionView
+        state="ready"
+        now={NOW}
+        row={row}
+        showBackToList={false}
+        onBackToList={NOOP}
+        onClearSelection={NOOP}
+        onTryRescan={NOOP}
+      />,
+    );
+    // Activate Skim.
+    act(() => {
+      (container.querySelector("#tab-skim") as HTMLButtonElement).click();
+    });
+    const skimPanelFirst = container.querySelector(
+      "#panel-skim",
+    ) as HTMLElement;
+    expect(skimPanelFirst).not.toBeNull();
+    const initialMarker = skimPanelFirst;
+    // Switch to Transcript.
+    act(() => {
+      (
+        container.querySelector("#tab-transcript") as HTMLButtonElement
+      ).click();
+    });
+    const skimStillThere = container.querySelector(
+      "#panel-skim",
+    ) as HTMLElement;
+    expect(skimStillThere).toBe(initialMarker);
+    expect(skimStillThere.hasAttribute("hidden")).toBe(true);
+    // Switch back to Skim.
+    act(() => {
+      (container.querySelector("#tab-skim") as HTMLButtonElement).click();
+    });
+    const skimPanelSecond = container.querySelector(
+      "#panel-skim",
+    ) as HTMLElement;
+    expect(skimPanelSecond).toBe(initialMarker);
+    expect(skimPanelSecond.hasAttribute("hidden")).toBe(false);
+  } finally {
+    restoreActWarnings();
+  }
 });
 
 test("SessionView ready: tabIndex=0 on active Skim/Transcript/Raw panels; NOT on Metadata", () => {

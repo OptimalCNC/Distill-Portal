@@ -1,0 +1,511 @@
+Reading prompt from stdin...
+OpenAI Codex v0.130.0
+--------
+workdir: /home/huwei/ai_codings/distill-portal
+model: gpt-5.5
+provider: OpenAI
+approval: never
+sandbox: workspace-write [workdir, /tmp, /home/huwei/.codex/memories]
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019e12ca-0da1-7c01-81b1-c914888d6cc8
+--------
+user
+External non-Claude reviewer for distill-portal Phase 5 M5 implementation (round 2 — fix-up confirmation).
+
+## Round 1 result
+
+You returned `needs changes` with one BLOCKING finding + one nit:
+
+1. **BLOCKING** — `apps/frontend/src/features/sessions/BoundaryRow.test.tsx:20-21`: JSDoc comment contained the literal forbidden tokens `jest.fn()`, `node:fs`, `child_process` (used to document the Bun-first prohibition). The grep gate matches them in the comment.
+2. **NIT** — `apps/frontend/e2e/inspection.spec.ts:183`: stale comment text said Skim shows placeholder copy.
+
+## Fixes applied
+
+- `apps/frontend/src/features/sessions/BoundaryRow.test.tsx:20-21` — comment rewritten to "Bun-first: imports from \"bun:test\"; no Jest-style mocks or Node process helpers." (no longer contains the forbidden tokens).
+- `apps/frontend/e2e/inspection.spec.ts:183` — comment updated to reflect that Skim now renders the SkimView no_raw branch and Transcript renders the M4 TranscriptView (not placeholder).
+
+No other code changes were made. Test count remains 557/0/1860/32; build size unchanged; tsc still clean.
+
+## YOU MUST EXECUTE these confirmation commands
+
+```bash
+cd /home/huwei/ai_codings/distill-portal
+
+# Bun-first grep gate — must now be EMPTY across M5 sources
+grep -rn 'jest\.fn\|child_process\|node:fs' apps/frontend/src/features/sessions/SkimView.tsx apps/frontend/src/features/sessions/SkimView.test.tsx apps/frontend/src/features/sessions/BoundaryRow.tsx apps/frontend/src/features/sessions/BoundaryRow.test.tsx
+
+# Verify the comment update at BoundaryRow.test.tsx
+sed -n '18,22p' apps/frontend/src/features/sessions/BoundaryRow.test.tsx
+
+# Verify the comment update at inspection.spec.ts
+sed -n '178,190p' apps/frontend/e2e/inspection.spec.ts
+
+# Re-confirm test gates (should be unchanged from r1)
+cd apps/frontend && bun run test 2>&1 | tail -5
+cd apps/frontend && bunx tsc --noEmit 2>&1 | tail -3
+
+# Re-confirm hex / token invariants
+cd /home/huwei/ai_codings/distill-portal
+rg -n '#[0-9a-fA-F]{3,8}' apps/frontend/src/ | wc -l   # MUST equal 24
+rg -c '^\s*--' apps/frontend/src/styles/tokens.css     # MUST equal 83
+
+# Protected paths still untouched
+git diff --stat HEAD -- apps/backend/ components/ tests/e2e/ Cargo.toml Cargo.lock apps/frontend/package.json apps/frontend/bun.lock
+# Expected: empty output
+```
+
+## Round 2 review tasks
+
+Verify both fix-ups landed at file:line. If both are clean, return `approved`. If either fix is incomplete or introduced regression, return `needs changes` with precise file:line + before/after.
+
+## Output exactly
+
+- Verdict: approved | approved with nits | needs changes | needs more evidence
+- Findings: bullets with file:line, or none
+- Missing Evidence: required missing evidence, or none
+- Required Changes: precise file:line + before/after, or none
+- Notes: optional improvements, or none
+
+Begin review now.
+
+codex
+I’ll verify the repo rules first, then run the requested confirmation commands exactly in the relevant working directories and base the verdict on that evidence.
+exec
+/bin/bash -lc "sed -n '1,220p' README.md" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+# Distill Portal
+
+Distill Portal is a local-first portal for collecting, storing, and analyzing coding sessions produced by AI coding tools.
+
+Read [PRD.md](PRD.md) for the product summary and functional requirements.
+
+For developers, please read [docs/README.md](docs/README.md) for documentation on the repository structure, component ownership, features, and development commands.
+
+## Contributing
+
+- Read [PRD.md](PRD.md) for the product summary and functional requirements.
+- Read [ARCHITECTURE.md](ARCHITECTURE.md) for the architecture.
+- Read [docs/README.md](docs/README.md) for the repository structure, component ownership, features, and development commands.
+
+### Hard Rules
+
+- Backend owns machine-consumable HTTP routes; do not reintroduce backend-owned end-user HTML.
+- Frontend talks to the backend only over HTTP and only consumes generated contract types from `components/ui-api-contracts/bindings/*.ts`.
+- `apps/frontend` must not import from `components/collector-runtime`, `components/ingest-service`, or `components/raw-session-store`.
+- HTTP payload changes must update `components/ui-api-contracts`, the Rust and TS sides of both apps, and relevant tests together.
+- Keep docs aligned with any layout, command, dependency, or payload-shape change.
+
+### Quick Checks
+
+Fast checks to run before committing:
+
+```bash
+cargo check --workspace
+cargo test --workspace
+```
+
+From `apps/frontend/`:
+
+```bash
+bun run test
+```
+
+See [docs/dev-commands.md](docs/dev-commands.md) for the full reference, including targeted Rust suites, the TypeScript contract-drift check, and the browser e2e suite.
+
+## Quick Start
+
+Run the backend:
+
+```bash
+cargo run -p distill-portal-backend
+```
+
+Run the frontend (from `apps/frontend/`):
+
+```bash
+bun install
+bun run dev
+```
+
+Then open the frontend address. By default:
+
+- backend: `http://127.0.0.1:4000`
+- frontend (Vite dev server): `http://127.0.0.1:4100`
+
+See `docs/dev-commands.md` for the full list of frontend and test commands.
+
+exec
+/bin/bash -lc "sed -n '1,220p' docs/dependency-rules.md" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+# Dependency Rules
+
+## Allowed Directions
+
+- `apps/backend` may depend on:
+  - `components/collector-runtime`
+  - `components/configuration`
+  - `components/ingest-service`
+  - `components/observability`
+  - `components/raw-session-store`
+  - `components/ui-api-contracts`
+- `apps/frontend` (Bun + Vite + React + TypeScript) may depend on:
+  - `components/ui-api-contracts/bindings/*.ts` (generated TypeScript types; one-way import only)
+  - external npm packages managed via Bun for UI, HTTP fetch, and test tooling. Phase 4 adopted a strict 2-package escape-hatch budget for browser-only concerns native APIs cannot meet; one slot is consumed (`focus-trap-react@^11`, fixing a native `<dialog>` Tab-cycling gap), one slot remains reserved (`@tanstack/react-virtual`, gated on documented evidence that pagination plus `useMemo` cannot keep render time bounded). Adding a third escape-hatch package requires a fresh planning round.
+  - all backend communication is over HTTP to `apps/backend`
+- `components/ingest-service` may depend on:
+  - `components/collector-runtime`
+  - `components/raw-session-store`
+- `components/raw-session-store` may depend on:
+  - `components/ui-api-contracts`
+- `components/collector-runtime` may depend on:
+  - `components/ui-api-contracts`
+- `components/configuration`, `components/observability`, and `components/ui-api-contracts` should not depend on app crates
+
+## Forbidden Directions
+
+- `apps/frontend` must not depend on:
+  - `components/collector-runtime`
+  - `components/ingest-service`
+  - `components/raw-session-store`
+- No component crate may depend on `apps/backend` or `apps/frontend`
+- `apps/backend` must not render end-user HTML
+- `apps/frontend` must not reach into storage or ingest internals directly
+
+## Contract Handling
+
+- Shared page and JSON payloads live in `components/ui-api-contracts`
+- `components/ui-api-contracts/src/lib.rs` is the single source of truth for the contract. The TypeScript declarations under `components/ui-api-contracts/bindings/` are checked-in generated artifacts derived from `src/lib.rs` by the `ts-bindings` cargo feature — they are the canonical downstream output and must stay in sync with the Rust source: regenerate and commit them together with any Rust contract change, never hand-edited
+- The Bun frontend consumes contract types via one-way TypeScript imports from `components/ui-api-contracts/bindings/*.ts`, using the `@contracts/*` path alias wired in `apps/frontend/tsconfig.json` (or a direct relative path). The frontend MUST NOT re-declare contract types by hand; the thin barrel at `apps/frontend/src/lib/contracts.ts` re-exports the generated types for internal consumption
+- If a backend JSON shape changes, update:
+  - `components/ui-api-contracts/src/lib.rs`
+  - `components/ui-api-contracts/bindings/*.ts` (regenerate via `cargo test -p distill-portal-ui-api-contracts --features ts-bindings -- --ignored regenerate_ts_bindings`; see `docs/dev-commands.md`)
+  - `apps/backend/src/http_api.rs`
+  - the typed API layer in `apps/frontend/src/lib/` (`api.ts`, `contracts.ts`)
+  - any impacted frontend rendering under `apps/frontend/src/App.tsx`, the unified session feature at `apps/frontend/src/features/sessions/`, or the shared React primitives under `apps/frontend/src/components/`
+  - the relevant tests in `apps/backend/tests/http_api.rs`, `apps/frontend/src/App.test.tsx`, `apps/frontend/e2e/inspection.spec.ts`, and `tests/e2e/tests/inspection_surface.rs`
+
+## Layer Ownership
+
+- Storage writes and reads belong to `components/raw-session-store`
+- Replace-on-sync ingest rules belong to `components/ingest-service`
+- Source discovery and parsing belong to `components/collector-runtime`
+- Environment variable mapping belongs to `components/configuration`
+- HTTP routes belong to the app crates only
+
+## Frontend Dev-Time Topology
+
+- `apps/frontend/` is a Bun-managed package (`package.json`, `bun.lock`, `vite.config.ts`, `index.html`, `src/*.tsx`).
+- Frontend dev-time proxying of `/api/v1/**` and `/health` to the backend belongs in `apps/frontend/vite.config.ts`, not in any application code path.
+- The Bun app must continue to honor the frontend-boundary rules above: no direct dependency on `components/collector-runtime`, `components/ingest-service`, or `components/raw-session-store`; all backend communication goes over HTTP to the Rust backend.
+
+### Phase 5 M2a notes — Fraunces self-hosted as static asset
+
+Phase 5 introduces a single self-hosted variable serif (Fraunces) for the Archive-room display layer (empty-pane preface, future M5 chapter-break labels, future app title). The font ships as two `.woff2` files at `apps/frontend/public/fonts/Fraunces-subset.woff2` (Roman) and `apps/frontend/public/fonts/Fraunces-Italic-subset.woff2` (Italic), referenced by two `@font-face` blocks in `apps/frontend/src/styles/tokens.css`. Per Phase 5 §Resolved Decision #15, **a self-hosted font file is a static asset, not a runtime dependency** — the 2-package escape-hatch budget (currently 1/2 consumed by `focus-trap-react@^11`) is **not affected**. No bundler plugin, font-loading library, or JS dep is involved; Vite serves the woff2 files directly from `public/`. To regenerate (only when upstream Fraunces revs, ~yearly per Google Fonts cadence): download both variable fonts from `https://github.com/undercasetype/Fraunces` (`fonts/variable/Fraunces[SOFT,WONK,opsz,wght].ttf` + the Italic counterpart), run `fonttools varLib.instancer <input.ttf> SOFT=50 WONK=0 -o <pinned.ttf>` to drop the design-time-only SOFT and WONK axes (saves ~70 KB per file), then `pyftsubset <pinned.ttf> --output-file=apps/frontend/public/fonts/Fraunces-subset.woff2 --unicodes='U+0020-007E,U+00A0-00FF,U+2010-2027,U+2030-2052' --layout-features='kern,liga,smcp,onum' --flavor=woff2 --desubroutinize`. Target file size: ~80 KB per file. Reversibility: deleting both `@font-face` blocks AND both woff2 files yields a still-cohesive system-serif aesthetic (Charter / Iowan Old Style / Georgia at ~99% of Fraunces's visual size via the `size-adjust` override, no broken layout).
+
+exec
+/bin/bash -lc "sed -n '1,220p' docs/README.md" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+# Distill Portal Docs
+
+Start here when you need to orient yourself in the Distill Portal workspace. The backend is Rust under `apps/backend`; the frontend is Bun + Vite + React + TypeScript under `apps/frontend`.
+
+This file is both the docs entry point and the repo map.
+
+## Start With Your Task
+
+| I want to... | Start here |
+| --- | --- |
+| Modify the inspection UI | [`playbooks/modify-frontend-page.md`](playbooks/modify-frontend-page.md), [`../apps/frontend/README.md`](../apps/frontend/README.md) |
+| Change a backend API or JSON payload | [`playbooks/modify-backend-api.md`](playbooks/modify-backend-api.md), [`dependency-rules.md`](dependency-rules.md) |
+| Change session storage behavior | [`playbooks/modify-session-store.md`](playbooks/modify-session-store.md) |
+| Run or test locally | [`dev-commands.md`](dev-commands.md) |
+| Check dependency boundaries | [`dependency-rules.md`](dependency-rules.md) |
+| Understand a feature | [`features/inspection-surface.md`](features/inspection-surface.md), [`features/session-store.md`](features/session-store.md) |
+| Understand product + architecture intent | [`../PRD.md`](../PRD.md), [`../ARCHITECTURE.md`](../ARCHITECTURE.md) |
+| Audit historical planning or delivery | [`../working/README.md`](../working/README.md), [`../progress/README.md`](../progress/README.md) |
+
+## Apps
+
+- `apps/backend` — Rust backend binary: runtime wiring, scan/ingest/store orchestration, machine-consumable HTTP routes. See [`../apps/backend/README.md`](../apps/backend/README.md).
+- `apps/frontend` — Bun + Vite + React + TypeScript inspection UI. The unified session list (table, filters, view, drawer body, merge / filter / sort / paginate / persistence helpers) lives under `apps/frontend/src/features/sessions/`; shared React primitives (action bar, scan-errors callout, native-`<dialog>`-backed drawer shell, pagination strip, toast) live under `apps/frontend/src/components/`. CSS is co-located: each `.tsx`/`.ts` imports its sibling `.css` (no CSS Modules, no CSS-in-JS, no Tailwind); `src/styles/` carries only the three global sheets `reset.css`, `tokens.css`, `global.css`. See [`../apps/frontend/README.md`](../apps/frontend/README.md).
+
+## Components
+
+Reusable, app-independent crates. Each owns its own README:
+
+- [`collector-runtime`](../components/collector-runtime/README.md) — source discovery, safe JSONL reads, tool-specific parsers (Claude Code, Codex)
+- [`configuration`](../components/configuration/README.md) — backend runtime config loading
+- [`ingest-service`](../components/ingest-service/README.md) — content-addressed ingest decisions, replace-on-sync
+- [`observability`](../components/observability/README.md) — tracing subscriber bootstrap
+- [`raw-session-store`](../components/raw-session-store/README.md) — SQLite metadata + blob-store persistence
+- [`ui-api-contracts`](../components/ui-api-contracts/README.md) — shared HTTP payload types; source of truth for the Rust → TS bindings
+
+## Feature Guides
+
+- [`features/inspection-surface.md`](features/inspection-surface.md) — page ownership, API touchpoints, and tests for the inspection workflow
+- [`features/session-store.md`](features/session-store.md) — storage ownership, backend touchpoints, and tests for persisted session behavior
+
+## Playbooks
+
+Short recipes for common changes:
+
+- [`playbooks/modify-frontend-page.md`](playbooks/modify-frontend-page.md) — shortest safe path for UI changes
+- [`playbooks/modify-backend-api.md`](playbooks/modify-backend-api.md) — shortest safe path for backend API changes
+- [`playbooks/modify-session-store.md`](playbooks/modify-session-store.md) — shortest safe path for storage changes
+
+## Verification Map
+
+| Surface | Command |
+| --- | --- |
+| Workspace compile | `cargo check --workspace` |
+| Full Rust test suite | `cargo test --workspace` |
+| Backend HTTP API | `cargo test -p distill-portal-backend --test http_api` |
+| Collector parsers | `cargo test -p distill-portal-collector-runtime --test parsers` |
+| Typed Rust-client HTTP smoke | `cargo test -p distill-portal-e2e --test inspection_surface` |
+| TypeScript contract bindings freshness | `cargo test -p distill-portal-ui-api-contracts --features ts-bindings` |
+| Frontend unit tests | `bun run test` (from `apps/frontend/`) |
+| Browser e2e (Playwright) | `bun run test:e2e` (from `apps/frontend/`) |
+
+## Repo Map
+
+- `apps/backend` — backend binary and its tests
+- `apps/frontend` — Bun/React frontend
+- `components/*` — reusable implementation crates
+- `docs/` — this tree (dependency rules, commands, features, playbooks)
+- `tests/e2e` — real HTTP-boundary Rust integration tests
+- `tests/fixtures` — sample Claude Code and Codex sessions used by parser and backend tests
+- `working/` — historical planning specs for completed phases (see [`../working/README.md`](../working/README.md))
+- `progress/` — historical delivery logs for completed phases (see [`../progress/README.md`](../progress/README.md))
+
+## Historical Material
+
+- [`../working/`](../working/) — frozen planning specs. Not current-state instructions. See [`working/README.md`](../working/README.md).
+- [`../progress/`](../progress/) — frozen delivery logs. Not current-state instructions. See [`progress/README.md`](../progress/README.md).
+
+exec
+/bin/bash -lc "sed -n '1,220p' docs/dev-commands.md" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+# Dev Commands
+
+## Run The Backend
+
+```bash
+cargo run -p distill-portal-backend
+```
+
+Useful backend env vars:
+
+- `DISTILL_PORTAL_BACKEND_BIND` or `DISTILL_PORTAL_BIND`
+- `DISTILL_PORTAL_DATA_DIR`
+- `DISTILL_PORTAL_POLL_INTERVAL_SECS`
+- `DISTILL_PORTAL_CLAUDE_ROOTS`
+- `DISTILL_PORTAL_CODEX_ROOTS`
+
+## Run The Frontend
+
+The frontend lives under `apps/frontend/` as a Bun-managed package (`package.json`, `bun.lock`, `vite.config.ts`, `index.html`, `src/*.tsx`).
+
+Commands (run from `apps/frontend/`):
+
+```bash
+bun install
+bun run dev
+bun run build
+bun run test
+```
+
+- `bun run dev` starts the Vite dev server on `http://127.0.0.1:4100` with `strictPort: true` so a port collision fails fast.
+- `bun run build` writes static assets to `apps/frontend/dist/`.
+- `bun run test` runs `bun test src` (the unit suite; browser e2e is `bun run test:e2e`, documented below). After Phase 4 the unit suite is 231 tests / 891 expect calls across 17 files covering the unified session list, the session detail drawer, pagination, the toast queue, and the shared React primitives:
+  - **Mounted-`App` integration** — `apps/frontend/src/App.test.tsx`: the read-only unified-list render against three `Promise.allSettled` GETs, the rescan and import mutation flows (including an explicit race-window reproducer for the stale-selection bug), per-panel independent-error behavior, the four documented empty-state branches, the click-time intersection rule under filter and pagination races, the toast queue replacing the old inline `lastReport`, and the cross-page bulk-select / retry-after-intervening-rescan invariants.
+  - **Unified session feature** — `apps/frontend/src/features/sessions/`: `SessionsTable.test.tsx`, `SessionFilters.test.tsx`, `SessionDetail.test.tsx` (component-level integration), and pure helpers `mergeSessions.test.ts`, `filterSessions.test.ts`, `applyPagination.test.ts`, `relativeTime.test.ts`, `useSessionFilters.test.ts` (incl. 12+ corrupt-input fallbacks), `useToastQueue.test.ts`, `lastRescan.test.ts`, and the streaming `rawPreview.test.ts` (line-cap + byte-cap + abort + non-JSON fallback).
+  - **Shared React primitives** — `apps/frontend/src/components/`: `ActionBar.test.tsx` (idle zero/non-zero selection, pending rescan/import disabled states, sticky modifier, last-rescan caption, hidden-by-filter caption + clear affordances), `Drawer.test.tsx` (native `<dialog>` shell, focus restoration, Esc-close, backdrop close), `Pagination.test.tsx` (page-size selector + Prev/Next + caption + clamp), `Toast.test.tsx` (kind variants + Retry + Dismiss roles), `ScanErrorsCallout.test.tsx` (renders nothing when empty).
+  - The variant-matrix `StatusBadge.test.tsx` from M2 was retired in M6 (Chunk G); the four-variant DOM-shape contract is preserved by a dedicated test in `SessionsTable.test.tsx` (`SessionsTable: inlined status badge renders all 4 variants ...`) that iterates over `up_to_date / not_stored / outdated / source_missing` and asserts the inlined `<span class="badge {variant}">{label}</span>` markup byte-for-byte for each variant. `App.test.tsx` continues to assert the `up-to-date` variant at the integration level.
+
+## Dev Topology
+
+```
+browser
+   |
+   v
+http://127.0.0.1:4100  <-- Vite dev server (bun run dev)
+   |
+   |  /api/v1/**  and  /health   proxied by Vite
+   v
+http://127.0.0.1:4000  <-- Rust backend (cargo run -p distill-portal-backend)
+```
+
+- Backend: `127.0.0.1:4000` (Rust, `cargo run -p distill-portal-backend`).
+- Frontend dev server: `127.0.0.1:4100` (Bun + Vite, `bun run dev` under `apps/frontend/`).
+- Vite proxies `/api/v1/**` and `/health` to the backend so browser code can use same-origin paths without ad hoc CORS setup. Dev-time proxy config lives in `apps/frontend/vite.config.ts`, not in application code.
+
+## Run Both Together
+
+Terminal 1:
+
+```bash
+cargo run -p distill-portal-backend
+```
+
+Terminal 2 (from `apps/frontend/`):
+
+```bash
+bun run dev
+```
+
+Then open `http://127.0.0.1:4100/` in the browser. The Rust backend must be running for `/health` and `/api/v1/**` to resolve through the Vite proxy.
+
+## Browser E2E (Playwright)
+
+The inspection-surface browser e2e lives under `apps/frontend/e2e/` and
+drives Chromium against the Bun + Vite dev server, which proxies to a
+real Rust backend spawned inside the harness (`e2e/harness/backend.ts`).
+The harness uses `Bun.spawn` per the Bun-first rule, so the suite must
+be run with Bun as the runtime (`bun --bun x playwright test`, wired
+into the `test:e2e` script below).
+
+Commands (run from `apps/frontend/`):
+
+```bash
+bun run test:e2e:install   # one-time: install Chromium via Playwright
+bun run test:e2e           # spawns the backend, starts Vite, runs Chromium
+```
+
+The harness binds the backend to `127.0.0.1:4000` because
+`vite.config.ts` proxies `/api/v1/**` and `/health` to that address;
+tests run serially (`workers: 1`) so the port is never double-bound.
+See `playwright.config.ts` for the full configuration.
+
+## Targeted Tests
+
+```bash
+cargo test -p distill-portal-collector-runtime --test parsers
+cargo test -p distill-portal-backend --test http_api
+cargo test -p distill-portal-e2e --test inspection_surface
+```
+
+## TypeScript Contract Bindings
+
+The Rust contract types in `components/ui-api-contracts/src/lib.rs` are the source of truth. TypeScript declarations under `components/ui-api-contracts/bindings/` are generated from them via the `ts-bindings` cargo feature (off by default) and must be regenerated whenever the Rust contract changes.
+
+Verify the checked-in TS files match the current Rust source (fails on drift):
+
+```bash
+cargo test -p distill-portal-ui-api-contracts --features ts-bindings
+```
+
+Regenerate the checked-in TS files after a contract change:
+
+```bash
+cargo test -p distill-portal-ui-api-contracts --features ts-bindings -- --ignored regenerate_ts_bindings
+```
+
+See `components/ui-api-contracts/README.md` for the tool-choice rationale and the full list of generated files.
+
+## Workspace Verification
+
+```bash
+cargo check --workspace
+cargo test --workspace
+```
+
+codex
+The repo instructions match the requested review scope: frontend-only confirmation plus protected-path diff checks. I’m running the grep, comment, test, typecheck, token, and diff gates now.
+exec
+/bin/bash -lc "grep -rn 'jest\\.fn\\|child_process\\|node:fs' apps/frontend/src/features/sessions/SkimView.tsx apps/frontend/src/features/sessions/SkimView.test.tsx apps/frontend/src/features/sessions/BoundaryRow.tsx apps/frontend/src/features/sessions/BoundaryRow.test.tsx" in /home/huwei/ai_codings/distill-portal
+ exited 1 in 0ms:
+exec
+/bin/bash -lc 'git diff --stat HEAD -- apps/backend/ components/ tests/e2e/ Cargo.toml Cargo.lock apps/frontend/package.json apps/frontend/bun.lock' in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+exec
+/bin/bash -lc "sed -n '18,22p' apps/frontend/src/features/sessions/BoundaryRow.test.tsx" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+//     both Transcript and Skim contexts).
+//
+// Bun-first: imports from "bun:test"; no Jest-style mocks or Node
+// process helpers.
+
+
+exec
+/bin/bash -lc "sed -n '178,190p' apps/frontend/e2e/inspection.spec.ts" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+
+    // 9. M2b tab strip e2e (replaces the M1b drawer focus-trap walk).
+    //    Sub-steps:
+    //      (a) Click each tab → verify aria-selected + the right
+    //          panel is active.
+    //      (b) Skim renders the SkimView no_raw branch (M5);
+    //          Transcript renders the TranscriptView (M4); Metadata
+    //          shows the <dl>; Raw shows preview.
+    //      (c) Keyboard nav: ArrowLeft / ArrowRight cycle with
+    //          wrap; Home / End jump to first / last.
+    //
+    //    The original M1b focus-trap walk is grounded in the
+    //    JSDoc reproducer at `Drawer.tsx` (still on disk through
+
+exec
+/bin/bash -lc "rg -n '#[0-9a-fA-F]{3,8}' apps/frontend/src/ | wc -l" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+24
+
+exec
+/bin/bash -lc "rg -c '"'^'"\\s*--' apps/frontend/src/styles/tokens.css" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+83
+
+codex
+The static checks are clean so far: forbidden-token grep produced no output, the two comments show the expected updated text, token counts are `24` and `83`, and protected-path diff stat is empty. I’m waiting on the frontend test and typecheck gates next.
+exec
+/bin/bash -lc 'cd apps/frontend && bun run test 2>&1 | tail -5' in /home/huwei/ai_codings/distill-portal
+exec
+/bin/bash -lc 'cd apps/frontend && bunx tsc --noEmit 2>&1 | tail -3' in /home/huwei/ai_codings/distill-portal
+ succeeded in 1716ms:
+
+ 557 pass
+ 0 fail
+ 1860 expect() calls
+Ran 557 tests across 32 files. [1.73s]
+
+ succeeded in 1607ms:
+codex
+The frontend unit suite passed with `557 pass / 0 fail / 1860 expect() calls / 32 files`; `bunx tsc --noEmit` exited cleanly with no output. I’m checking exact line numbers for the final review notation.
+exec
+/bin/bash -lc "nl -ba apps/frontend/src/features/sessions/BoundaryRow.test.tsx | sed -n '18,22p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+    18	//     both Transcript and Skim contexts).
+    19	//
+    20	// Bun-first: imports from "bun:test"; no Jest-style mocks or Node
+    21	// process helpers.
+    22	
+
+exec
+/bin/bash -lc "nl -ba apps/frontend/e2e/inspection.spec.ts | sed -n '178,190p'" in /home/huwei/ai_codings/distill-portal
+ succeeded in 0ms:
+   178	
+   179	    // 9. M2b tab strip e2e (replaces the M1b drawer focus-trap walk).
+   180	    //    Sub-steps:
+   181	    //      (a) Click each tab → verify aria-selected + the right
+   182	    //          panel is active.
+   183	    //      (b) Skim renders the SkimView no_raw branch (M5);
+   184	    //          Transcript renders the TranscriptView (M4); Metadata
+   185	    //          shows the <dl>; Raw shows preview.
+   186	    //      (c) Keyboard nav: ArrowLeft / ArrowRight cycle with
+   187	    //          wrap; Home / End jump to first / last.
+   188	    //
+   189	    //    The original M1b focus-trap walk is grounded in the
+   190	    //    JSDoc reproducer at `Drawer.tsx` (still on disk through
+
+codex
+Verdict: approved
+Findings: none
+Missing Evidence: none
+Required Changes: none
+Notes: Confirmed fix-ups at `BoundaryRow.test.tsx:20-21` and `inspection.spec.ts:183-185`; grep was empty, tests passed `557/0/1860/32`, `tsc` was clean, invariants were `24` and `83`, and protected diff stat was empty.
+tokens used
+23,255
+Verdict: approved
+Findings: none
+Missing Evidence: none
+Required Changes: none
+Notes: Confirmed fix-ups at `BoundaryRow.test.tsx:20-21` and `inspection.spec.ts:183-185`; grep was empty, tests passed `557/0/1860/32`, `tsc` was clean, invariants were `24` and `83`, and protected diff stat was empty.

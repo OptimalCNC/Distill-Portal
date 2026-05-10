@@ -1,0 +1,88 @@
+M5 — Wireframe 09 — oversized_user_message expanded (verbatim mono dump)
+==========================================================================
+
+Scenario: an oversized_user_message block, OPEN. The verbatim message
+text renders inside a `<pre>` at `--font-mono`, with the warn-tinted
+left border visible on the outer `<li>` shell. NEVER summarized
+(spec line 695 + PRD line 257).
+
+  +-----------------------------------------------------------------------+
+  | Pasted log analysis                                 [Open raw] [...]  |
+  | Transcript  Skim  Raw  Metadata                                       |
+  | -------                                                               |
+  |                                                                       |
+  | │ ▾ Oversized user message (102 KB) — collapsed by default            |  <- .skim-block-oversized
+  | │                                                                     |     border-inline-start: 4px solid --color-warn
+  | │ +---------------------------------------------------------------+   |     padding-inline-start: --space-4
+  | │ | {                                                             |   |  <- .skim-oversized-pre
+  | │ |   "session_id": "session-2026-05-10-9f3e8a",                  |   |     --font-mono --text-sm
+  | │ |   "tool": "claude-code",                                      |   |     background: --color-surface-raised
+  | │ |   "context": [                                                |   |     padding: --space-3 --space-4
+  | │ |     "----- BEGIN PASTED LOG -----",                           |   |     border-radius: --radius-sm
+  | │ |     "[2026-05-10T08:14:22Z] INFO: starting build...",         |   |     white-space: pre
+  | │ |     "[2026-05-10T08:14:23Z] INFO: resolving 1247 deps",       |   |     overflow-x: auto
+  | │ |     "[2026-05-10T08:14:24Z] WARN: dependency 'foo@1.2.3' has  |   |
+  | │ |       2 known vulnerabilities",                               |   |
+  | │ |     "[2026-05-10T08:14:25Z] INFO: 0 errors, 2 warnings",      |   |
+  | │ |     "[2026-05-10T08:14:26Z] INFO: bundle: 260.79kB / 28.58kB",|   |
+  | │ |     "[2026-05-10T08:14:27Z] INFO: 491 tests passed",          |   |
+  | │ |     "...",                                                    |   |
+  | │ |     "----- END PASTED LOG -----"                              |   |
+  | │ |   ],                                                          |   |
+  | │ |   "request": "Can you summarize this build log?"              |   |
+  | │ | }                                                             |   |
+  | │ +---------------------------------------------------------------+   |
+  |   ^                                                                   |
+  |   |                                                                   |
+  |   The 4 px warn left border continues full height of the block.       |
+  |                                                                       |
+  +-----------------------------------------------------------------------+
+
+DOM tree:
+
+  <li class="skim-block skim-block-oversized">
+    <details class="skim-oversized" open>
+      <summary class="skim-oversized-summary">Oversized user message (102 KB) — collapsed by default</summary>
+      <div class="skim-oversized-body">
+        <pre class="skim-oversized-pre">{verbatim message text}</pre>
+      </div>
+    </details>
+  </li>
+
+Notes
+-----
+- Spec line 695: "Visual treatment: warning-tinted left border (status
+  warning color) so the user notices the size signal." 4 px solid
+  --color-warn left border on the outer `<li>` shell.
+
+- Spec line 695: "NEVER summarized." PRD line 257 reinforces. The full
+  `parsed.messages[block.start].text` is rendered verbatim in the
+  `<pre>`; NO truncation marker, NO ellipsis, NO summary.
+
+- Spec line 695 KB rounding: `Math.round(meta.sizeBytes / 1024)`.
+  - 65 537 bytes -> 64 KB.
+  - 70 000 bytes -> 68 KB.
+  - 104 858 bytes -> 102 KB (this wireframe).
+
+- Em-dash in summary: U+2014 EM DASH single character.
+  Verbatim: "Oversized user message (102 KB) — collapsed by default".
+
+- The `<pre>` body is rendered at `--font-mono --text-sm` on
+  `--color-surface-raised`. Same recipe as M4's tool `<pre>` body
+  (T06 in M4 colors.md).
+
+- `overflow-x: auto` handles wide lines (e.g., a single 200-character
+  line in the pasted log scrolls horizontally inside the `<pre>` rather
+  than forcing the panel wider).
+
+- a11y:
+  - `<details>` summary is the accessible label.
+  - The `<pre>` body is announced as preformatted text by screen
+    readers (preserves line breaks).
+
+- Spacing: 32 px (kind-change) above and below adjacent skim blocks
+  if the oversized block sits next to user_turn / agent_only kinds.
+
+- WCAG: S14 (warn left border) at 4.21:1 light / 7.68:1 dark — both
+  pass SC 1.4.11 3:1 by margin. S15 (verbatim body ink-on-surface-raised)
+  at 16.13:1 / 14.84:1 — AAA.
