@@ -247,6 +247,30 @@
   border-color: color-mix(in srgb, var(--color-warn) 35%, var(--color-surface));
 }
 
+/* "Open raw" header anchor (M4 / design.md §6.1.1). Renders only
+ * when `row.storedSessionUid !== null` (source-only rows would 404
+ * on the raw URL). Position: right-side action group, AFTER the
+ * conflict badge. Reuses the typography + accent recipe from
+ * SessionMetadata's "View raw" anchor for consistency. */
+.session-open-raw {
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-accent);
+  text-decoration: none;
+  /* Push to the inline-end so it sits after the conflict badge in
+   * the flex row. */
+  margin-inline-start: auto;
+}
+
+.session-open-raw:hover {
+  text-decoration: underline;
+}
+
+.session-open-raw:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 /* Wrapper around the four <TabPanel> elements. */
 .session-pane-tabs {
   /* No padding — each panel body owns its own inset. */

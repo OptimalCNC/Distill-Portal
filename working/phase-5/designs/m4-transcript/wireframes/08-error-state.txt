@@ -1,0 +1,38 @@
+M4 — Wireframe 08 — Error state
+================================
+
+Scenario: useParsedSession returned state === "error". Could be a fetch
+failure (HTTP non-2xx, network error) or a parser non-recovery (the parsers
+are total — non-recovery is rare; usually means streamRawText failed).
+
+  +----------------------------------------------------------------------+
+  | Failed to load                                       [claude-code]   |
+  | Transcript  Skim  Raw  Metadata                                      |
+  | ----------                                                           |
+  |                                                                      |
+  |                                                                      |
+  |  Could not load session: HTTP 503 — backend temporarily unavailable. |  <- text-sm error color
+  |                                                                      |     no italic (error color
+  |                                                                      |     IS the cue)
+  |                                                                      |
+  |  +-----------+                                                       |
+  |  |  Retry    |                                                       |  <- quiet button
+  |  +-----------+                                                       |     border-strong
+  |                                                                      |     focus-visible: accent
+  |                                                                      |
+  |                                                                      |
+  +----------------------------------------------------------------------+
+
+Notes
+-----
+- Copy: "Could not load session: {error.message}." per spec line 673. The
+  error.message comes from useParsedSession's discriminated state union.
+- Color: --color-error on --color-surface. Light 4.93:1; dark 5.16:1. AA
+  passes (colors.md T23). NOT italic — the error color IS the visual cue.
+- Retry button: same recipe as RawTab's `.raw-retry` (M2b).
+  - Click → state.retry() → useParsedSession bumps retryNonce → fresh fetch
+    skipping cache.
+- Error states do NOT mount the truncation banner or warnings banner.
+  Those banners require parsed.truncated / parsed.warnings to exist;
+  state==="error" has no parsed object.
+- The Retry button is keyboard-accessible (Tab from the active tabpanel).

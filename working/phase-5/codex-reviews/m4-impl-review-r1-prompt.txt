@@ -1,0 +1,129 @@
+External non-Claude reviewer for distill-portal Phase 5 M4 implementation (round 1).
+
+## What M4 ships
+
+**TranscriptView**: chronological message list rendering parsed sessions on the Transcript tab. First visible UI surface in Phase 5 that consumes parsed data. Mounts inside the M2b Tabs primitive.
+
+## M4 implementation under review
+
+Files (NEW):
+- `apps/frontend/src/features/sessions/TranscriptView.tsx` (566 lines)
+- `apps/frontend/src/features/sessions/TranscriptView.css` (471 lines, 27 tokens consumed, ZERO new tokens, ZERO hex literals)
+- `apps/frontend/src/features/sessions/TranscriptView.test.tsx` (931 lines, 44 tests)
+- `apps/frontend/tests/fixtures/transcript-5k.builder.ts` (209 lines, deterministic LCG fixture builder)
+- `apps/frontend/e2e/transcript-perf.spec.ts` (154 lines, Playwright frame-timing capture)
+
+Files (MODIFIED):
+- `apps/frontend/src/features/sessions/SessionView.tsx` — DEFAULT_TAB_ON_SELECTION shifted "metadata" → "transcript"; <TranscriptView row={row} now={now} /> replaces <TranscriptPlaceholder />; "Open raw" anchor added to header right-side action group.
+- `apps/frontend/src/features/sessions/SessionView.css` — `.session-open-raw` rule (font-chrome / text-sm / accent / hover underline / focus-visible 2 px outline; `margin-inline-start: auto`).
+- `apps/frontend/src/features/sessions/SessionView.test.tsx` — default-tab assertion updated; new tests for "Open raw" anchor visibility/href/attributes; keep-mounted Transcript→Metadata→Transcript regression.
+- `apps/frontend/src/App.test.tsx` — two M2b tests updated to assert default tab is now Transcript.
+- `apps/frontend/e2e/inspection.spec.ts` — default-tab change reflected; Metadata explicitly activated for "View raw" anchor assertion; M4 `<section aria-label="Session transcript">` landmark + `.session-open-raw` anchor assertions added.
+- `apps/frontend/src/features/sessions/useParsedSession.ts` — **bug fix surfaced by M4**: in-flight coalescing `.catch` branch now bumps `retryNonce` on AbortError (instead of silent return). Without this, React 18 StrictMode's double-mount caused the second-mount consumer to coalesce onto the first-mount's already-aborted promise and stay in `"loading"` forever.
+
+## Spec source-of-truth
+
+- `working/phase-5.md` lines 699-717 (Transcript tab spec)
+- `working/phase-5.md` lines 84-95 (motion budget)
+- `working/phase-5.md` lines 1027-1040 (M4 DoD)
+- `working/phase-5.md` lines 62-78 (signature details — esp. #1 chapter-break)
+- `working/phase-5.md` lines 233-348 (Data Model)
+- Resolved Decisions #11, #12, #16, #18
+
+Spec frozen at commit `05467ad` on `main`.
+
+## Round 1 review tasks
+
+Block if you find:
+
+### Spec literal compliance (codex M3a r1 + r4 precedent — paraphrase = false positive)
+- Truncation banner copy verbatim per spec line 715: "Truncated at 5 MB — full payload not parsed. Use the **Open raw** anchor in the session header to inspect the full payload." Verify the `**Open raw**` markdown bold renders as `<strong>Open raw</strong>`.
+- Parse-warnings banner copy verbatim per spec line 717: "{N} parse warnings — click to view." for ALL N (including N=1 reading "1 parse warnings"; this is intentional per design.md §7.1).
+- Boundary copy verbatim per spec line 710: "SESSION RESUMED" or "CONVERSATION COMPACTED" (uppercase; small-caps via Fraunces font-feature-settings).
+- Per-kind rendering rules per spec lines 705-711.
+- Timestamp behavior per spec line 713 (relative visible label, absolute via `<time dateTime="...">` + `title=`, "—" for null).
+- Tool result threshold per spec line 708 (first 2 KB body + "Expand ({N more bytes})" text-link if larger; `<details>` wraps overflow).
+- Unknown line per spec line 711: "Unrecognized line: {first 80 chars}…". Verify slice-before-ellipsis: payload ≤ 80 chars has NO trailing ellipsis.
+
+### Spacing rhythm
+- 16 px default (--space-4) between `.msg + .msg`.
+- 24 px same-kind override (--space-6) between `.msg-X + .msg-X`.
+- 32 px boundary (--space-8) for `.msg-boundary + .msg` and `.msg + .msg-boundary`.
+- max-inline-size: var(--measure) (= 70ch).
+- The implementation uses `:has()` selectors for the same-kind override (developer note Q3) — verify browser support claim (oklch + :has() ship in same browser baseline) and that the rhythm rule applies correctly across Chromium/Firefox/Safari.
+
+### Token discipline (codex M2b r1 #3 precedent)
+- Run `rg -nE 'var\(--[a-z-]+\)' apps/frontend/src/features/sessions/TranscriptView.css | sort -u` and cross-check each against `apps/frontend/src/styles/tokens.css`.
+- ZERO new tokens (M4 introduces zero per plan §10).
+- Hex isolation invariant: `rg -n '#[0-9a-fA-F]{3,8}' apps/frontend/src/ | wc -l` MUST equal 24.
+- Token count invariant: `rg -c '^\s*--' apps/frontend/src/styles/tokens.css` MUST equal 83.
+
+### Motion budget (codex M2b r1 #2 precedent)
+- ONLY animate transform / opacity / background-color (latter only on enumerated surfaces — row hover/selection/deep-link pulse, NOT message panels).
+- NO animated color, border-color, width, height, top, padding, transform on message panels, background-color on message panels.
+- Truncation banner uses opacity entrance via --motion-base 120ms --ease-out.
+- `<details>` block-size exemption is the only authorized layout-touching animation.
+- Reduced-motion zero-out via prefers-reduced-motion: reduce.
+
+### Keep-mounted contract (codex M2b r1 #4 precedent)
+- TranscriptView's component-local state (warnings-banner-dismissed, expanded `<details>` of long tool_result) MUST persist across tab switches.
+- Cleanup ONLY on selectedRowKey change / row identity change / component unmount, NEVER on tab switch.
+- NO `key=` on TranscriptView root or children that would remount on tab switch.
+
+### a11y (codex M2b r1 #5 + r2 #1 precedent)
+- Active Transcript tabpanel ships `tabIndex={0}` unconditionally per M2b Option-A consistency, even though it has focusable descendants.
+- Boundary blocks: `<li class="msg msg-boundary" role="separator" aria-orientation="horizontal">` flat shape.
+- Truncation banner: appropriate ARIA role/live-region treatment.
+- Parse-warnings banner: dismissible via button; expand `<details>` summary readable.
+- Retry button (error state): focusable, accessible-name "Retry".
+
+### useParsedSession AbortError-coalescing fix
+The M3b useParsedSession.ts modification: in-flight coalescing `.catch` branch bumps `retryNonce` on AbortError (instead of silent return). Verify:
+- The fix is correct (StrictMode double-mount race resolved).
+- All 18 existing useParsedSession tests still pass.
+- The fix doesn't introduce new failure modes (e.g., infinite retry loops).
+- Open question: is this in M4 scope or should it be carved out as M3b retro-fix-up? Coordinator currently keeping in M4.
+
+### Performance acceptance criterion
+- 5k-message synthetic fixture; Playwright e2e captures rAF frame timing during scroll.
+- Developer's measurement: median 16.7 ms (60 Hz rAF cadence floor); p95 16.8 ms; dropped frames (>25 ms) = 0.
+- Spec line 1032 says "> 16 ms per frame for scroll" triggers escape-hatch slot 2. Developer re-interprets operationally as "no dropped frames (>25 ms)" because rAF at 60 Hz floors at 16.67 ms.
+- Coordinator question for trio: is the operational re-interpretation acceptable, or does the spec literal `p95 < 16` require slot 2 firing?
+
+### Test count delta
+- Baseline: 447 pass / 0 fail / 1619 expects across 29 files.
+- M4: 491 pass / 0 fail / 1729 expects across 30 files (+44 tests / +110 expects / +1 file).
+- bun run build: CSS 21.34 → 28.58 kB (+7.24); JS 239.91 → 260.79 kB (+20.88); time 470 ms.
+- bunx tsc --noEmit clean.
+
+### Protected paths
+- No edits under apps/backend/, components/, tests/e2e/ (Rust e2e), root Cargo.{toml,lock}.
+
+## Files to inspect
+
+- `/home/huwei/ai_codings/distill-portal/apps/frontend/src/features/sessions/TranscriptView.tsx`
+- `/home/huwei/ai_codings/distill-portal/apps/frontend/src/features/sessions/TranscriptView.css`
+- `/home/huwei/ai_codings/distill-portal/apps/frontend/src/features/sessions/TranscriptView.test.tsx`
+- `/home/huwei/ai_codings/distill-portal/apps/frontend/tests/fixtures/transcript-5k.builder.ts`
+- `/home/huwei/ai_codings/distill-portal/apps/frontend/e2e/transcript-perf.spec.ts`
+- `/home/huwei/ai_codings/distill-portal/apps/frontend/src/features/sessions/SessionView.tsx`
+- `/home/huwei/ai_codings/distill-portal/apps/frontend/src/features/sessions/SessionView.css`
+- `/home/huwei/ai_codings/distill-portal/apps/frontend/src/features/sessions/SessionView.test.tsx`
+- `/home/huwei/ai_codings/distill-portal/apps/frontend/src/features/sessions/useParsedSession.ts` (bug-fix)
+- `/home/huwei/ai_codings/distill-portal/apps/frontend/src/App.test.tsx`
+- `/home/huwei/ai_codings/distill-portal/apps/frontend/e2e/inspection.spec.ts`
+- `/home/huwei/ai_codings/distill-portal/working/phase-5.md` lines 699-717 + 84-95 + 1027-1040 + 62-78 + 233-348
+- `/home/huwei/ai_codings/distill-portal/working/phase-5/m4-plan.md`
+- `/home/huwei/ai_codings/distill-portal/working/phase-5/designs/m4-transcript/*` (the design contract M4 implements)
+
+EXECUTE the code in your sandbox if needed (e.g., to verify the byte-cap of unknown ellipsis slicing, the parse-warnings copy for N=1 — codex r3 of M3a precedent ran `bun -e` to demonstrate runtime shape).
+
+## Output exactly
+
+- Verdict: approved | approved with nits | needs changes | needs more evidence
+- Findings: bullets with file:line, or none
+- Missing Evidence: required missing evidence, or none
+- Required Changes: precise file:line + before/after, or none
+- Notes: optional improvements, or none
+
+Begin review now.

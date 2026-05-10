@@ -1,0 +1,51 @@
+External non-Claude design reviewer for distill-portal Phase 5 M4 design artifact (round 2).
+
+Path: /home/huwei/ai_codings/distill-portal/working/phase-5/designs/m4-transcript/
+
+Files round 2: design.md (1563), prototype.html (1308), colors.md (414, 30 WCAG-AA pairs), motion.md (351), wcag_m4.py (NEW, 200 lines pure stdlib), wireframes/{01..09}.txt.
+
+Round 1: Claude UI/UX reviewer returned needs changes with 2 BLOCKING + 3 IMPORTANT + 4 NIT findings. Round 2: coordinator fixes + Claude reviewer returned approved with nits — all 5 round-1 BLOCKING/IMPORTANT findings verified resolved at file:line.
+
+Round-2 fixes applied:
+- BLOCKING-1 (spacing rhythm): three-magnitude rule (16 / 24 / 32) all artifacts aligned.
+- BLOCKING-2 (Open raw anchor): expanded into M4 scope. design.md sec 6.1.1 lines 652-718 specifies all 7 anchor pieces.
+- IMPORTANT-3 (plural copy): spec-literal "{N} parse warnings — click to view." for all N including N=1.
+- IMPORTANT-4 (unknown ellipsis): three-case rule in design.md sec 3.7.
+- IMPORTANT-5 (tabIndex 0): unconditional per M2b Option-A.
+- NIT colors.md T11/T13 dark: 11.61 to 13.74 corrected.
+- NIT T12 derivation: line-by-line math added.
+- NIT Q-DESIGN-3 boundary kind shell: flat li role separator.
+- NIT Q-DESIGN-4 code-fence: 6 cases.
+
+CRITICAL: your tasks for round 2:
+
+1. EXECUTE python3 working/phase-5/designs/m4-transcript/wcag_m4.py. Designer committed but never ran the script due to classifier outage. You are the FIRST to run it. Compare every output ratio to colors.md table values. Flag any drift.
+
+2. Verify wcag_m4.py implementation correctness: oklch to oklab (inverse Björn Ottosson M2) to linear sRGB to nonlinear sRGB to relative luminance per CSS Color L4 §10 + WCAG 2.1 §1.4.3.
+
+3. Spot-check at least 5 ratios independently: T01 (16.42:1 light), T02 (17.10:1 light), T11 dark (13.74:1), T12 (3.39 / 5.49), T17b (2.85 dark cusp).
+
+4. Re-verify spacing rhythm consistency.
+
+5. Re-verify Open raw anchor at design.md sec 6.1.1.
+
+6. Re-verify spec-literal parse-warnings copy.
+
+7. Re-verify boundary kind shell flat li.
+
+8. Token discipline: every var(--*) must exist in apps/frontend/src/styles/tokens.css. ZERO new tokens.
+
+9. Motion budget: motion.md PROHIBITED list comprehensive.
+
+10. NEW issues introduced by round 2.
+
+Files: /home/huwei/ai_codings/distill-portal/working/phase-5/designs/m4-transcript/* + working/phase-5.md lines 699-717 + 84-95 + 1027-1040 + 626 + apps/frontend/src/styles/tokens.css + working/phase-5/m4-plan.md.
+
+Output exactly:
+- Verdict: approved | approved with nits | needs changes | needs more evidence
+- Findings: bullets with file:line, or none
+- Missing Evidence: required missing evidence, or none
+- Required Changes: precise file:line + before/after, or none
+- Notes: optional improvements, or none
+
+Begin review now.

@@ -1,0 +1,90 @@
+M4 — Wireframe 03 — Parse-warnings present
+==========================================
+
+Scenario: parsed.warnings.length > 0. Native <details> banner; expanded shows
+the warnings list and a Dismiss button. Dismiss is component-local state;
+re-arrives on next session selection.
+
+State A: banner closed (default if warnings exist)
+--------------------------------------------------
+
+  +----------------------------------------------------------------------+
+  | Mixed-tool session with parse anomalies              [codex]         |
+  | Transcript  Skim  Raw  Metadata                                      |
+  | ----------                                                           |
+  |                                                                      |
+  |  +-------------------------------------------------------------+     |
+  |  | ▸ 3 parse warnings — click to view.                         |     |  <- <details closed>
+  |  +-------------------------------------------------------------+     |     surface-raised bg
+  |                                                                      |     hairline border
+  |  +----------------------------------------------------------+        |
+  |  | USER · 2 hours ago                                       |        |
+  |  | Introduce omx and its subcommands.                       |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |
+  |  ... (rest of stream)                                                |
+  |                                                                      |
+  +----------------------------------------------------------------------+
+
+
+State B: banner open
+--------------------
+
+  +----------------------------------------------------------------------+
+  | Mixed-tool session with parse anomalies              [codex]         |
+  | Transcript  Skim  Raw  Metadata                                      |
+  | ----------                                                           |
+  |                                                                      |
+  |  +-------------------------------------------------------------+     |
+  |  | ▾ 3 parse warnings — click to view.                         |     |  <- summary
+  |  |                                                             |     |
+  |  |  • line 42 · unrecognized payload type "agent_thinking" …   |     |  <- mono, text-xs
+  |  |  • line 87 · invalid JSON: SyntaxError at column 18 …       |     |     muted ink
+  |  |  • line 113 · top-level type mismatch (record was emitted …)|     |
+  |  |                                                             |     |
+  |  | [ Dismiss ]                                                 |     |  <- quiet button
+  |  +-------------------------------------------------------------+     |
+  |                                                                      |
+  |  +----------------------------------------------------------+        |
+  |  | USER · 2 hours ago                                       |        |
+  |  | Introduce omx and its subcommands.                       |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |
+  |  ... (rest of stream)                                                |
+  |                                                                      |
+  +----------------------------------------------------------------------+
+
+
+State C: banner dismissed
+-------------------------
+
+  +----------------------------------------------------------------------+
+  | Mixed-tool session with parse anomalies              [codex]         |
+  | Transcript  Skim  Raw  Metadata                                      |
+  | ----------                                                           |
+  |                                                                      |
+  |  +----------------------------------------------------------+        |
+  |  | USER · 2 hours ago                                       |        |  <- banner gone;
+  |  | Introduce omx and its subcommands.                       |        |     stream renders
+  |  +----------------------------------------------------------+        |     normally
+  |                                                                      |
+  |  ... (rest of stream)                                                |
+  |                                                                      |
+  +----------------------------------------------------------------------+
+
+  After selecting a different session AND coming back to this one:
+  → component remounts via SessionView key={selectedRowKey}
+  → warningsBannerDismissed resets to false
+  → State A (closed banner) re-arrives.
+
+Notes
+-----
+- Banner is a native <details> element. Expand/collapse uses the M2b
+  block-size animation exemption (200 ms ease-in-out).
+- List rendering: `line {N} · {reason}` per warning, in --font-mono
+  --text-xs --color-ink-muted.
+- Banner background is --color-surface-raised (NOT warn-tinted). Warnings
+  are diagnostic, not capacity. The raised surface marks them as machinery.
+- Dismiss button: hairline border, 4 px radius, focus-visible at accent.
+- ARIA: <details> is browser-native; Enter/Space toggles via the <summary>;
+  arrow keys navigate naturally.

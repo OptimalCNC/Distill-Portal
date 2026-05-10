@@ -1,0 +1,58 @@
+M4 — Wireframe 02 — Truncated transcript
+=========================================
+
+Scenario: parsed.truncated === true. The 5 MB cap fired during fetch.
+Banner appears at top with warn stripe; trailing marker indicates the cap.
+
+  +----------------------------------------------------------------------+
+  | Long debug session — 47 MB raw payload              [claude-code]    |
+  | Transcript  Skim  Raw  Metadata                                      |
+  | ----------                                                           |
+  |                                                                      |
+  |  ┃                                                                   |  <- 3px warn stripe
+  |  ┃ Truncated at 5 MB — full payload not parsed. Use the **Open       |     border-inline-start
+  |  ┃ raw** anchor in the session header to inspect the full payload.   |     warn 8% mix bg
+  |                                                                      |     opacity entrance 120ms
+  |                                                                      |  <- 24px gap to first message
+  |  +----------------------------------------------------------+        |
+  |  | USER · a day ago                                         |        |
+  |  | Let's start by walking through every test failure…       |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |
+  |  +----------------------------------------------------------+        |
+  |  | ASSISTANT · a day ago                                    |        |
+  |  | I'll run the full test suite and categorize…             |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |
+  |  +----------------------------------------------------------+        |
+  |  | TOOL · Bash                                              |        |
+  |  | ▸ Arguments                                              |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |
+  |  +----------------------------------------------------------+        |
+  |  | TOOL RESULT · Bash                                       |        |
+  |  | +------------------------------------------------------+ |        |
+  |  | | 447 pass / 0 fail / 1619 expects across 29 files     | |        |
+  |  | +------------------------------------------------------+ |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |
+  |  ... (8 more messages) ...                                           |
+  |                                                                      |
+  |                          · · ·                                       |  <- truncated marker
+  |                                                                      |     (mono, ink-muted, 3
+  |                                                                      |      letterspaced dots)
+  |                                                                      |
+  +----------------------------------------------------------------------+
+
+Notes
+-----
+- Banner copy is verbatim from spec line 715. "Open raw" is bolded TEXT,
+  not a hyperlink — the actual link lives in the session header.
+- Banner uses warn 8% mix background + 3 px solid warn stripe on the
+  inline-start edge. NO icon, NO close button. The capacity fact persists;
+  dismissing the banner without dismissing the truncation would mislead.
+- Banner mounts with opacity 0 → 1 over --motion-base (120ms) ease-out.
+  STATIC color-mix background — only opacity animates.
+- Trailing "· · ·" marker is purely a visual cue that the stream stopped at
+  the cap. Decorative; aria-hidden.
+- ARIA: role="status" on the banner; screen readers announce politely.

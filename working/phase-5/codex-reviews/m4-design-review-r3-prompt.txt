@@ -1,0 +1,73 @@
+External non-Claude design reviewer for distill-portal Phase 5 M4 design artifact (round 3).
+
+Path: /home/huwei/ai_codings/distill-portal/working/phase-5/designs/m4-transcript/
+
+## Round history
+
+- Round 1 (Claude UI/UX): needs changes — 2 BLOCKING + 3 IMPORTANT + 4 NIT.
+- Round 2 (codex r1): needs changes — 4 numerical drift pairs (T01 light 16.42 vs script 16.00; T11 dark 13.74 vs 14.15; T12 3.39/5.49 vs 4.21/7.68; T17b dark 2.85 vs 2.87) + token-discipline audit unproven + missing line-cited evidence for spacing/Open-raw/parse-warning/boundary/motion checks.
+- Round 3 (just landed, coordinator-applied): colors.md updated to match codex r2 script execution log VERBATIM. All drift resolved. Designer note: classifier outage prevented designer from re-running python3 wcag_m4.py — designer adopted codex r2 script output (m4-design-review-r2.txt:71-102) as the authoritative source of truth. Designer says "Codex round-3 reviewer must re-run the script themselves to confirm zero drift" — this is your task #1 below.
+
+## Round-3 fixes applied (designer self-reports)
+
+- colors.md: 414 → 536 lines.
+- All drifted T01/T11/T12/T17b values replaced with script output. T12 verdict reframed: T12 is a non-text 3-px stripe (SC 1.4.11 3:1 threshold, not 4.5:1 AA text); 4.21 light passes 3:1 by 1.21 margin. No design remediation needed.
+- Methodology block rewritten; /tmp/wcag_check.py stale reference removed.
+- New "missing-evidence" section at colors.md:415-475 with explicit file:line citations for: spacing rhythm three-magnitude (design.md:34-37, 485-491, 497-518, 520-547, 1268-1295); Open raw anchor 7 pieces (design.md:652-718); parse-warning spec literal (design.md:786-810, 825-846); boundary kind shell flat li (design.md:153, 384-406, 1146-1170, 1131-1136); motion PROHIBITED list (motion.md:127-149, 151-166, 168-183, 185-197, 199-208, 209-).
+- Token-discipline audit at colors.md:476-535: all 31 tokens in prototype.html present in apps/frontend/src/styles/tokens.css. ZERO missing.
+
+Authoritative ratios from codex r2 script execution (now in colors.md verbatim):
+
+T01 16.00/14.87  T02 17.10/15.52  T03 6.58/7.05  T04 7.04/7.36
+T05 7.04/7.36   T06 16.13/14.84  T07 4.84/5.78  T29 1.49/1.35
+T08 7.04/7.36   T09 7.04/7.36   T10 3.06/3.00  T11 15.49/14.15
+T12 4.21/7.68   T13 15.49/14.15 T14 16.13/14.84 T15 6.64/7.03
+T16 16.13/14.84 T17 1.41/1.29   T17b 2.88/2.87 T17c 4.57/5.52
+T18 7.04/7.36   T19 16.13/14.84 T20 16.13/14.84 T22 7.04/7.36
+T23 5.70/6.36   T24 17.10/15.52 T25 3.06/3.00  T26 7.04/7.36
+T27 7.04/7.36   T28 4.84/5.78
+
+## Round 3 review tasks
+
+### CRITICAL: re-run wcag_m4.py and confirm zero drift
+
+```bash
+python3 /home/huwei/ai_codings/distill-portal/working/phase-5/designs/m4-transcript/wcag_m4.py
+```
+
+Compare every output ratio to the colors.md table at lines 86-260. Flag any drift. The coordinator's expectation is ZERO drift since the designer copied your r2 script output verbatim.
+
+### Additional checks
+
+1. **Token discipline audit**: cross-check the 31 tokens listed in colors.md:476-535 against `apps/frontend/src/styles/tokens.css`. Report any missing.
+
+2. **Spacing rhythm**: confirm design.md §4 + §13 + prototype.html CSS + wireframes 01/04/09 all agree on 16/24/32 px three-magnitude rule.
+
+3. **Open raw anchor**: confirm design.md §6.1.1 lines 652-718 specifies all 7 pieces (visibility, copy, URL, attributes, position, typography, state variants).
+
+4. **Parse-warning spec literal**: confirm design.md §7.1 + prototype.html N=1 demo ship "{N} parse warnings — click to view." for all N.
+
+5. **Boundary kind shell**: confirm design.md §3.6 + §12.2 + prototype.html + wireframes/04 all use flat <li class="msg msg-boundary" role="separator" aria-orientation="horizontal">.
+
+6. **Motion budget**: motion.md PROHIBITED list comprehensive (color, border-color, width, height, top, padding, transform on message panels, background-color on message panels).
+
+7. **NEW issues introduced by round 3**.
+
+## Files
+
+- /home/huwei/ai_codings/distill-portal/working/phase-5/designs/m4-transcript/{design.md, prototype.html, motion.md, colors.md, wcag_m4.py}
+- /home/huwei/ai_codings/distill-portal/working/phase-5/designs/m4-transcript/wireframes/*
+- /home/huwei/ai_codings/distill-portal/working/phase-5.md lines 699-717 + 84-95 + 1027-1040 + 626
+- /home/huwei/ai_codings/distill-portal/apps/frontend/src/styles/tokens.css
+- /home/huwei/ai_codings/distill-portal/working/phase-5/m4-plan.md
+- /home/huwei/ai_codings/distill-portal/working/phase-5/codex-reviews/m4-design-review-r2.txt (your previous review output)
+
+## Output exactly
+
+- Verdict: approved | approved with nits | needs changes | needs more evidence
+- Findings: bullets with file:line, or none
+- Missing Evidence: required missing evidence, or none
+- Required Changes: precise file:line + before/after, or none
+- Notes: optional improvements, or none
+
+Begin review now.

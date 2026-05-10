@@ -1,0 +1,108 @@
+M4 — Wireframe 04 — Boundary chapter-break (signature detail #1)
+================================================================
+
+Scenario: boundary message appears between two turns. Could be a session-resume
+boundary (codex /resume) or a compaction boundary (claude-code conversation
+compaction). NEVER merged with neighbors.
+
+Recipe: full-width 1 px hairline at --color-border-strong, centered Fraunces
+italic small-caps label at --text-sm --color-ink-muted, 32 px breathing top
+and bottom. SHARED with M5's Skim view boundary block.
+
+  +----------------------------------------------------------------------+
+  | Resumed from /resume — two sub-sessions               [codex]        |
+  | Transcript  Skim  Raw  Metadata                                      |
+  | ----------                                                           |
+  |                                                                      |
+  |  +----------------------------------------------------------+        |
+  |  | ASSISTANT · a day ago                                    |        |
+  |  | I've finished the M3a chunk. Recording the progress log… |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |  <- 24px gap (same kind)
+  |  +----------------------------------------------------------+        |
+  |  | ASSISTANT · a day ago                                    |        |
+  |  | Done. The session ends here.                             |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |
+  |                                                                      |  <- 32px breathing above
+  |                                                                      |
+  | ──────────────  𝓢𝐸𝓢𝓢𝐼𝒪𝒩  𝓡𝐸𝓢𝒰𝓜𝐸𝒟  ───────────────  |  <- chapter break
+  |                                                                      |     1px hairline at
+  |                                                                      |     --color-border-strong
+  |                                                                      |     centered Fraunces
+  |                                                                      |     italic small-caps
+  |                                                                      |     letter-spacing 0.18em
+  |                                                                      |
+  |                                                                      |  <- 32px breathing below
+  |                                                                      |
+  |  +----------------------------------------------------------+        |
+  |  | USER · a day ago                                         |        |
+  |  | Resuming with M3b — let's wire useParsedSession.         |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |  <- 16px gap (default; user→assistant kind-change)
+  |  +----------------------------------------------------------+        |
+  |  | ASSISTANT · a day ago                                    |        |
+  |  | Right. The M3a parsers are landed; M3b adds the React…   |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |
+  |                                                                      |  <- 32px breathing
+  |                                                                      |
+  | ────────  𝒞𝒪𝒩𝒱𝐸𝓡𝓢𝒜𝒯𝐼𝒪𝒩  𝒞𝒪𝓜𝒫𝒜𝒞𝒯𝐸𝒟  ────────  |  <- compacted
+  |                                                                      |     (same recipe; different
+  |                                                                      |      label string)
+  |                                                                      |
+  |                                                                      |  <- 32px breathing
+  |                                                                      |
+  |  +----------------------------------------------------------+        |
+  |  | USER · a day ago                                         |        |
+  |  | Continuing from compacted summary…                       |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |
+  +----------------------------------------------------------------------+
+
+Implementation
+--------------
+
+  HTML:
+    <li class="msg msg-boundary" role="separator" aria-orientation="horizontal">
+      <span class="msg-boundary-rule msg-boundary-rule-start" aria-hidden="true"></span>
+      <span class="msg-boundary-label">SESSION RESUMED</span>
+      <span class="msg-boundary-rule msg-boundary-rule-end" aria-hidden="true"></span>
+    </li>
+
+  CSS:
+    .msg-boundary {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: var(--space-4);
+      align-items: center;
+      margin-block: var(--space-8);
+      max-inline-size: none;        /* expand past the 70ch reading column */
+    }
+    .msg-boundary-rule {
+      block-size: 1px;
+      inline-size: 100%;
+      background: var(--color-border-strong);
+    }
+    .msg-boundary-label {
+      font-family: var(--font-display);
+      font-style: italic;
+      font-variant: small-caps;
+      font-size: var(--text-sm);
+      color: var(--color-ink-muted);
+      letter-spacing: 0.18em;
+      padding: 0 var(--space-3);
+    }
+
+Notes
+-----
+- The chapter break NEVER carries a timestamp. It is editorial, not
+  chronological. The next user message after the boundary carries its own
+  timestamp.
+- The wrapper has role="separator". The label is in DOM order so screen
+  readers announce "separator: SESSION RESUMED".
+- Same recipe MUST be reused by M5's SkimView boundary block. Any drift
+  is a regression against signature detail #1.
+- Copy strings: "SESSION RESUMED" (boundarySubtype === "session_resumed")
+  / "CONVERSATION COMPACTED" (boundarySubtype === "compacted"). Uppercase
+  in source — Fraunces small-caps glyph set is exercised on uppercase input.

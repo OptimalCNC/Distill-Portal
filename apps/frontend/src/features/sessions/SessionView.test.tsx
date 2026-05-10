@@ -160,11 +160,12 @@ test("SessionView session_not_found: heading + hint + two buttons (Clear selecti
   expect(container.querySelector('[role="tablist"]')).toBeNull();
 });
 
-test("SessionView ready: renders minimal header + Tabs primitive (4 tabs) + default tab = 'metadata'", () => {
-  // Stub fetch so RawTab's effect (when activated) does not crash on
-  // an undefined global. The default tab is metadata, so RawTab does
-  // NOT mount on first render — but the harness must remain
-  // resilient if it ever does.
+test("SessionView ready: renders minimal header + Tabs primitive (4 tabs) + default tab = 'transcript'", () => {
+  // Stub fetch so TranscriptView's effect (mounting on the default
+  // tab in M4) does not crash on an undefined global. The
+  // useParsedSession hook for a source-only row short-circuits
+  // before any fetch — the test row has no storedSessionUid, so
+  // TranscriptView renders the "no_raw" branch without I/O.
   globalThis.fetch = mock(async () =>
     new Response("[]", { status: 200, headers: { "Content-Type": "application/x-ndjson" } }),
   ) as unknown as typeof globalThis.fetch;
@@ -199,15 +200,15 @@ test("SessionView ready: renders minimal header + Tabs primitive (4 tabs) + defa
     "tab-raw",
     "tab-metadata",
   ]);
-  // Default tab = Metadata.
-  const metadataTab = container.querySelector("#tab-metadata");
-  expect(metadataTab?.getAttribute("aria-selected")).toBe("true");
+  // Default tab = Transcript (M4 shifted from "metadata").
+  const transcriptTab = container.querySelector("#tab-transcript");
+  expect(transcriptTab?.getAttribute("aria-selected")).toBe("true");
   // data-state reflects the new "ready" value.
   const article = container.querySelector("article.session-pane");
   expect(article?.getAttribute("data-state")).toBe("ready");
 });
 
-test("SessionView ready: visited-tab lazy-mount matrix — Metadata mounts on first render; Skim does NOT mount until activated", () => {
+test("SessionView ready: visited-tab lazy-mount matrix — Transcript mounts on first render; Skim does NOT mount until activated", () => {
   globalThis.fetch = mock(async () =>
     new Response("[]", { status: 200 }),
   ) as unknown as typeof globalThis.fetch;
@@ -223,12 +224,13 @@ test("SessionView ready: visited-tab lazy-mount matrix — Metadata mounts on fi
       onTryRescan={NOOP}
     />,
   );
-  // Initial: only the metadata panel is in the DOM.
-  expect(container.querySelector("#panel-metadata")).not.toBeNull();
+  // Initial (M4): only the transcript panel is in the DOM (default
+  // tab shifted from "metadata" to "transcript").
+  expect(container.querySelector("#panel-transcript")).not.toBeNull();
   expect(container.querySelector("#panel-skim")).toBeNull();
-  expect(container.querySelector("#panel-transcript")).toBeNull();
+  expect(container.querySelector("#panel-metadata")).toBeNull();
   expect(container.querySelector("#panel-raw")).toBeNull();
-  // Click Skim → Skim panel mounts. Metadata panel is still in the
+  // Click Skim → Skim panel mounts. Transcript panel is still in the
   // DOM (visited-but-inactive) and carries `hidden`.
   const skimTab = container.querySelector(
     "#tab-skim",
@@ -237,12 +239,12 @@ test("SessionView ready: visited-tab lazy-mount matrix — Metadata mounts on fi
     skimTab.click();
   });
   expect(container.querySelector("#panel-skim")).not.toBeNull();
-  expect(container.querySelector("#panel-metadata")).not.toBeNull();
-  // Metadata is now hidden.
-  const metadataPanel = container.querySelector(
-    "#panel-metadata",
+  expect(container.querySelector("#panel-transcript")).not.toBeNull();
+  // Transcript is now hidden.
+  const transcriptPanel = container.querySelector(
+    "#panel-transcript",
   ) as HTMLElement;
-  expect(metadataPanel.hasAttribute("hidden")).toBe(true);
+  expect(transcriptPanel.hasAttribute("hidden")).toBe(true);
   // Skim is the active panel.
   const skimPanel = container.querySelector(
     "#panel-skim",
@@ -250,10 +252,13 @@ test("SessionView ready: visited-tab lazy-mount matrix — Metadata mounts on fi
   expect(skimPanel.hasAttribute("hidden")).toBe(false);
 });
 
-test("SessionView ready: Skim placeholder reads 'Coming in Milestone 5'; Transcript 'Coming in Milestone 4'", () => {
+test("SessionView ready: Skim placeholder reads 'Coming in Milestone 5'; Transcript renders TranscriptView (M4 functional state)", () => {
   globalThis.fetch = mock(async () =>
     new Response("[]", { status: 200 }),
   ) as unknown as typeof globalThis.fetch;
+  // Source-only row → TranscriptView lands on the "no_raw" branch
+  // (no fetch fired). The panel renders the spec-verbatim
+  // "not-imported" copy from TranscriptView.tsx.
   const row = buildRow();
   const { container } = render(
     <SessionView
@@ -266,22 +271,23 @@ test("SessionView ready: Skim placeholder reads 'Coming in Milestone 5'; Transcr
       onTryRescan={NOOP}
     />,
   );
-  // Activate Skim → "Coming in Milestone 5" copy appears.
+  // Default tab = Transcript → no placeholder text; renders the
+  // TranscriptView "not-imported" copy because the row has no
+  // storedSessionUid.
+  expect(
+    container.querySelector("#panel-transcript")?.textContent,
+  ).toContain("This session has not been imported yet");
+  expect(
+    container.querySelector("#panel-transcript")?.textContent,
+  ).not.toContain("Coming in Milestone 4");
+  // Activate Skim → "Coming in Milestone 5" copy appears (M5 is the
+  // last remaining placeholder).
   act(() => {
     (container.querySelector("#tab-skim") as HTMLButtonElement).click();
   });
   expect(container.querySelector("#panel-skim")?.textContent).toContain(
     "Coming in Milestone 5",
   );
-  // Activate Transcript → "Coming in Milestone 4" copy appears.
-  act(() => {
-    (
-      container.querySelector("#tab-transcript") as HTMLButtonElement
-    ).click();
-  });
-  expect(
-    container.querySelector("#panel-transcript")?.textContent,
-  ).toContain("Coming in Milestone 4");
 });
 
 test("SessionView ready: tabIndex=0 on active Skim/Transcript/Raw panels; NOT on Metadata", () => {
@@ -307,12 +313,12 @@ test("SessionView ready: tabIndex=0 on active Skim/Transcript/Raw panels; NOT on
         onTryRescan={NOOP}
       />,
     );
-    // Metadata is the default tab. Metadata panel does NOT carry
-    // `tabIndex` (Copy path button is the first tab stop).
-    const metadataPanel = container.querySelector(
-      "#panel-metadata",
+    // Transcript is the default tab (M4). Transcript panel carries
+    // tabIndex="0" per Option A (unconditional on isActive).
+    const transcriptPanel = container.querySelector(
+      "#panel-transcript",
     ) as HTMLElement;
-    expect(metadataPanel.hasAttribute("tabindex")).toBe(false);
+    expect(transcriptPanel.getAttribute("tabindex")).toBe("0");
     // Activate Skim → Skim panel carries tabIndex="0".
     act(() => {
       (container.querySelector("#tab-skim") as HTMLButtonElement).click();
@@ -321,19 +327,20 @@ test("SessionView ready: tabIndex=0 on active Skim/Transcript/Raw panels; NOT on
       "#panel-skim",
     ) as HTMLElement;
     expect(skimPanel.getAttribute("tabindex")).toBe("0");
-    // Metadata (now inactive) MUST NOT carry tabIndex (lockstep with hidden).
-    expect(metadataPanel.hasAttribute("tabindex")).toBe(false);
-    expect(metadataPanel.hasAttribute("hidden")).toBe(true);
-    // Activate Transcript → Transcript panel carries tabIndex="0".
+    // Transcript (now inactive) MUST NOT carry tabIndex (lockstep with hidden).
+    expect(transcriptPanel.hasAttribute("tabindex")).toBe(false);
+    expect(transcriptPanel.hasAttribute("hidden")).toBe(true);
+    // Activate Metadata → Metadata panel does NOT carry tabIndex
+    // (Copy path button is always the first focusable child).
     act(() => {
       (
-        container.querySelector("#tab-transcript") as HTMLButtonElement
+        container.querySelector("#tab-metadata") as HTMLButtonElement
       ).click();
     });
-    const transcriptPanel = container.querySelector(
-      "#panel-transcript",
+    const metadataPanel = container.querySelector(
+      "#panel-metadata",
     ) as HTMLElement;
-    expect(transcriptPanel.getAttribute("tabindex")).toBe("0");
+    expect(metadataPanel.hasAttribute("tabindex")).toBe(false);
     // Activate Raw → Raw panel carries tabIndex="0" (Option A:
     // unconditional on isActive).
     act(() => {
@@ -436,12 +443,12 @@ test("SessionView ready: cross-fade-IN — active panel carries inline style.ani
       onTryRescan={NOOP}
     />,
   );
-  // Default (metadata) panel is active → carries the keyframe.
-  const metadataPanel = container.querySelector(
-    "#panel-metadata",
+  // Default (transcript) panel is active → carries the keyframe.
+  const transcriptPanel = container.querySelector(
+    "#panel-transcript",
   ) as HTMLElement;
-  expect(metadataPanel.style.animation).toContain("tab-fade-in");
-  // Activate Skim → Skim is active, Metadata becomes "none".
+  expect(transcriptPanel.style.animation).toContain("tab-fade-in");
+  // Activate Skim → Skim is active, Transcript becomes "none".
   act(() => {
     (container.querySelector("#tab-skim") as HTMLButtonElement).click();
   });
@@ -449,10 +456,10 @@ test("SessionView ready: cross-fade-IN — active panel carries inline style.ani
     "#panel-skim",
   ) as HTMLElement;
   expect(skimPanel.style.animation).toContain("tab-fade-in");
-  // The previous metadata panel's style.animation is now "none".
+  // The previous transcript panel's style.animation is now "none".
   // happy-dom may normalize "none" — just check it does NOT carry
   // the keyframe name anymore.
-  expect(metadataPanel.style.animation).not.toContain("tab-fade-in");
+  expect(transcriptPanel.style.animation).not.toContain("tab-fade-in");
 });
 
 test("SessionView ready: page-turn fade — `.session-pane` declares animation in CSS source", async () => {
@@ -526,6 +533,143 @@ test("SessionView landmarks: <article> wraps the pane with aria-live=polite", ()
   expect(article).not.toBeNull();
   expect(article?.getAttribute("aria-live")).toBe("polite");
   expect(article?.getAttribute("aria-label")).toBe("Session view");
+});
+
+test("SessionView ready (M4): 'Open raw' anchor renders only when row.storedSessionUid !== null; URL = /api/v1/sessions/<uid>/raw; target=_blank rel=noreferrer", () => {
+  globalThis.fetch = mock(async () =>
+    new Response("", { status: 200 }),
+  ) as unknown as typeof globalThis.fetch;
+  // Source-only row → anchor must NOT render.
+  const sourceOnly = render(
+    <SessionView
+      state="ready"
+      now={NOW}
+      row={buildRow({ storedSessionUid: null })}
+      showBackToList={false}
+      onBackToList={NOOP}
+      onClearSelection={NOOP}
+      onTryRescan={NOOP}
+    />,
+  );
+  expect(
+    sourceOnly.container.querySelector(".session-open-raw"),
+  ).toBeNull();
+  cleanup();
+  // Stored row → anchor renders with the spec-anchored attributes.
+  const stored = render(
+    <SessionView
+      state="ready"
+      now={NOW}
+      row={buildRow({
+        storedSessionUid: "uid-open-raw-anchor",
+        storedRawRef: "raw/uid-open-raw-anchor.ndjson",
+        presence: "both",
+        status: "up_to_date",
+      })}
+      showBackToList={false}
+      onBackToList={NOOP}
+      onClearSelection={NOOP}
+      onTryRescan={NOOP}
+    />,
+  );
+  const anchor = stored.container.querySelector(
+    ".session-open-raw",
+  ) as HTMLAnchorElement | null;
+  expect(anchor).not.toBeNull();
+  expect(anchor?.textContent).toBe("Open raw");
+  expect(anchor?.getAttribute("href")).toBe(
+    "/api/v1/sessions/uid-open-raw-anchor/raw",
+  );
+  expect(anchor?.getAttribute("target")).toBe("_blank");
+  expect(anchor?.getAttribute("rel")).toBe("noreferrer");
+});
+
+test("SessionView ready (M4): TranscriptView mounts on the default Transcript tab; renders aria-label='Session transcript' content", () => {
+  globalThis.fetch = mock(async () =>
+    new Response("", { status: 200 }),
+  ) as unknown as typeof globalThis.fetch;
+  // Source-only row → TranscriptView lands on the "no_raw" branch
+  // and renders the spec-verbatim "not-imported" copy. The
+  // <section aria-label="Session transcript"> wrapper is reserved
+  // for the success/truncated branches; for the "no_raw" branch we
+  // only assert that the panel mounts and the placeholder copy is
+  // gone.
+  const row = buildRow({ storedSessionUid: null });
+  const { container } = render(
+    <SessionView
+      state="ready"
+      now={NOW}
+      row={row}
+      showBackToList={false}
+      onBackToList={NOOP}
+      onClearSelection={NOOP}
+      onTryRescan={NOOP}
+    />,
+  );
+  const transcriptPanel = container.querySelector("#panel-transcript");
+  expect(transcriptPanel).not.toBeNull();
+  expect(transcriptPanel?.textContent).not.toContain(
+    "Coming in Milestone 4",
+  );
+  expect(transcriptPanel?.textContent).toContain(
+    "This session has not been imported yet",
+  );
+});
+
+test("SessionView ready (M4): switching Transcript → Metadata → Transcript keeps the panel React-mounted (keep-mounted contract)", () => {
+  // The default tab is now Transcript; visit Metadata; come back
+  // to Transcript and assert the original element reference is
+  // unchanged (no remount). This is the M4 expansion of the
+  // M2b keep-mounted contract test for the new functional
+  // TranscriptView surface.
+  suppressActWarnings();
+  try {
+    globalThis.fetch = mock(async () =>
+      new Response("", { status: 200 }),
+    ) as unknown as typeof globalThis.fetch;
+    const row = buildRow({ storedSessionUid: null });
+    const { container } = render(
+      <SessionView
+        state="ready"
+        now={NOW}
+        row={row}
+        showBackToList={false}
+        onBackToList={NOOP}
+        onClearSelection={NOOP}
+        onTryRescan={NOOP}
+      />,
+    );
+    const transcriptPanelFirst = container.querySelector(
+      "#panel-transcript",
+    ) as HTMLElement;
+    expect(transcriptPanelFirst).not.toBeNull();
+    const initialMarker = transcriptPanelFirst;
+    // Switch to Metadata.
+    act(() => {
+      (
+        container.querySelector("#tab-metadata") as HTMLButtonElement
+      ).click();
+    });
+    // Transcript panel still in DOM, hidden.
+    const transcriptStillThere = container.querySelector(
+      "#panel-transcript",
+    ) as HTMLElement;
+    expect(transcriptStillThere).toBe(initialMarker);
+    expect(transcriptStillThere.hasAttribute("hidden")).toBe(true);
+    // Switch back to Transcript.
+    act(() => {
+      (
+        container.querySelector("#tab-transcript") as HTMLButtonElement
+      ).click();
+    });
+    const transcriptPanelSecond = container.querySelector(
+      "#panel-transcript",
+    ) as HTMLElement;
+    expect(transcriptPanelSecond).toBe(initialMarker);
+    expect(transcriptPanelSecond.hasAttribute("hidden")).toBe(false);
+  } finally {
+    restoreActWarnings();
+  }
 });
 
 test("SessionView ready: conflict badge renders only when row.statusConflict=true", () => {

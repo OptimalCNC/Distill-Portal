@@ -3266,12 +3266,14 @@ test("M1a: popstate round trip — dispatching popstate after URL change syncs s
 });
 
 // =============================================================
-// Phase 5 / M2b: row click mounts the SessionView with default
-// tab = Metadata; popstate snaps active tab back to default;
-// no <dialog> element renders inside the App.
+// Phase 5 / M4: row click mounts the SessionView with default
+// tab = Transcript (M2b shipped Metadata; M4 shifted per Resolved
+// Decision #11 alongside TranscriptView landing); popstate snaps
+// active tab back to default; no <dialog> element renders inside
+// the App.
 // =============================================================
 
-test("M2b: row click → SessionView mounts → default tab = Metadata → Metadata <dl> carries the row's session_key text", async () => {
+test("M4: row click → SessionView mounts → default tab = Transcript; Metadata <dl> still carries the row's session_key once activated", async () => {
   resetUrl();
   globalThis.fetch =
     makeM1aFetchMock() as unknown as typeof globalThis.fetch;
@@ -3286,17 +3288,24 @@ test("M2b: row click → SessionView mounts → default tab = Metadata → Metad
   await act(async () => {
     titleCell.click();
   });
-  // The right pane is now in "ready" state (M2b — replaces M1a
-  // "ready-placeholder"). The Metadata tab is active by default
-  // (Resolved Decision #11 — DEFAULT_TAB_ON_SELECTION = "metadata").
+  // The right pane is now in "ready" state. The Transcript tab is
+  // active by default (Resolved Decision #11 — M4 shifted
+  // DEFAULT_TAB_ON_SELECTION from "metadata" to "transcript").
   const article = container.querySelector("article.session-pane");
   await waitFor(() => {
     expect(article?.getAttribute("data-state")).toBe("ready");
   });
-  const metadataTab = container.querySelector("#tab-metadata");
-  expect(metadataTab?.getAttribute("aria-selected")).toBe("true");
-  // The Metadata <dl> renders the row's session_key text
-  // (the value of `row_key`).
+  const transcriptTab = container.querySelector("#tab-transcript");
+  expect(transcriptTab?.getAttribute("aria-selected")).toBe("true");
+  // Activate Metadata to assert the <dl> still wires up correctly
+  // (no regression vs M2b Metadata extraction).
+  const metadataTab = container.querySelector(
+    "#tab-metadata",
+  ) as HTMLButtonElement | null;
+  expect(metadataTab).not.toBeNull();
+  await act(async () => {
+    metadataTab!.click();
+  });
   const selectedRowKey =
     container.querySelector('tbody tr[aria-current="true"]')
       ?.querySelector(".title-cell-rowkey")?.textContent ?? "";
@@ -3324,13 +3333,13 @@ test("M2b: row click does NOT mount any <dialog> element (the modal drawer is go
   expect(container.querySelector("dialog.drawer")).toBeNull();
 });
 
-test("M2b: popstate to a different row resets the active tab to the default (Metadata)", async () => {
+test("M4: popstate to a different row resets the active tab to the default (Transcript)", async () => {
   resetUrl();
   globalThis.fetch =
     makeM1aFetchMock() as unknown as typeof globalThis.fetch;
   const { container } = render(<App />);
   await screen.findByText("claude_code:m1a-1");
-  // Click a row → URL-syncs to that row + activeTab = metadata.
+  // Click a row → URL-syncs to that row + activeTab = transcript.
   const tr = container.querySelector(
     "tbody tr",
   ) as HTMLTableRowElement | null;
@@ -3340,7 +3349,7 @@ test("M2b: popstate to a different row resets the active tab to the default (Met
     titleCell.click();
   });
   // Wait for the SessionView to mount in "ready" state with the
-  // default Metadata tab active.
+  // default Transcript tab active (M4 shift).
   const article = container.querySelector("article.session-pane");
   await waitFor(() => {
     expect(article?.getAttribute("data-state")).toBe("ready");
@@ -3371,12 +3380,12 @@ test("M2b: popstate to a different row resets the active tab to the default (Met
       otherTitle.click();
     });
     // The new SessionView mounts (key changes) → activeTab snaps
-    // back to default (Metadata).
+    // back to default (Transcript per M4).
     await waitFor(() => {
-      const meta = container.querySelector(
-        "#tab-metadata",
+      const transcript = container.querySelector(
+        "#tab-transcript",
       ) as HTMLButtonElement | null;
-      expect(meta?.getAttribute("aria-selected")).toBe("true");
+      expect(transcript?.getAttribute("aria-selected")).toBe("true");
     });
   }
 });

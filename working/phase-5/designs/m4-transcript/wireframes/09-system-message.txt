@@ -1,0 +1,77 @@
+M4 — Wireframe 09 — System message variants
+============================================
+
+Scenario: system messages between assistant turns. NO panel chrome. Single
+muted line with `system ·` glyph.
+
+Spec line 709: "single line in --color-ink-muted --text-sm, prefixed with a
+small `system ·` label. No panel chrome."
+
+  +----------------------------------------------------------------------+
+  | Session metadata frame                              [codex]          |
+  | Transcript  Skim  Raw  Metadata                                      |
+  | ----------                                                           |
+  |                                                                      |
+  |  +----------------------------------------------------------+        |
+  |  | ASSISTANT · an hour ago                                  |        |
+  |  | Starting a fresh task — let me first frame the scope.    |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |  <- 16px gap (default; assistant→system kind-change)
+  |                                                                      |
+  |   SYSTEM · cwd: /home/huwei/ai_codings/distill-portal · cli_version: |  <- no panel chrome
+  |   codex-0.4.1 · model: gpt-5                                         |     text-sm
+  |                                                                      |     ink-muted
+  |                                                                      |
+  |                                                                      |  <- 24px gap (same-kind override; system→system)
+  |   SYSTEM · task_started                                              |
+  |                                                                      |
+  |                                                                      |  <- 16px gap (default; system→assistant kind-change)
+  |  +----------------------------------------------------------+        |
+  |  | ASSISTANT · an hour ago                                  |        |
+  |  | Frame complete. Proceeding with the implementation pass. |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |
+  +----------------------------------------------------------------------+
+
+Glyph treatment
+---------------
+
+  HTML:
+    <p class="msg msg-system">
+      <span class="msg-system-glyph" aria-hidden="true">system ·</span>
+      cwd: /home/huwei/ai_codings/distill-portal · cli_version: codex-0.4.1 …
+    </p>
+
+  CSS:
+    .msg-system {
+      font-family: var(--font-chrome);
+      font-size: var(--text-sm);
+      color: var(--color-ink-muted);
+      margin: 0;
+      max-inline-size: var(--measure);
+      padding: 0;
+    }
+    .msg-system-glyph {
+      font-family: var(--font-chrome);
+      font-size: var(--text-xs);
+      color: var(--color-ink-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-right: var(--space-1);
+    }
+
+Notes
+-----
+- "system ·" glyph copy verbatim from spec line 709.
+- Middle dot is U+00B7 plain-text Unicode (NOT an SVG icon).
+- aria-hidden="true" on the glyph: screen readers announce only the
+  message body, not the dot.
+- Body text shape varies — some system messages are short metadata
+  records (cwd / cli_version / model), others are event descriptions
+  (task_started / task_complete / error). Per-tool variations:
+    Claude Code: "summary" records emit as system with `leafUuid: summary`.
+    Codex: session_meta first-occurrence + task_started + task_complete.
+- System messages do NOT carry a timestamp. (The spec doesn't mandate one
+  for system; designer omits to keep the muted-line treatment quiet.)
+- 24px same-kind rhythm: adjacent system messages stack tighter than
+  kind-change rhythm.

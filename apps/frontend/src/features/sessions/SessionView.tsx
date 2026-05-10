@@ -44,8 +44,10 @@
 // M1a (App.tsx still owns selectRow / narrowMode).
 import { useEffect, useState, type ReactNode } from "react";
 import { Tabs } from "../../components/Tabs";
+import { RAW_SESSION_PATH } from "../../lib/api";
 import { SessionMetadata } from "./SessionMetadata";
 import { RawTab } from "./RawTab";
+import { TranscriptView } from "./TranscriptView";
 import type { SessionRow } from "./types";
 import "./SessionView.css";
 
@@ -58,11 +60,14 @@ export type SessionViewState =
 export type TabId = "transcript" | "skim" | "raw" | "metadata";
 
 /**
- * Default active tab when a selection arrives. M2b ships with
- * Metadata; M4 will shift this to "transcript" alongside the
- * TranscriptView landing (single-line edit + one test update).
+ * Default active tab when a selection arrives. M2b shipped with
+ * "metadata"; M4 (this chunk) shifts to "transcript" per Resolved
+ * Decision #11 because TranscriptView now renders real content on
+ * the default tab (Skim is still placeholder until M5; defaulting
+ * to a non-functional placeholder would regress the first
+ * impression for every selection click).
  */
-export const DEFAULT_TAB_ON_SELECTION: TabId = "metadata";
+export const DEFAULT_TAB_ON_SELECTION: TabId = "transcript";
 
 export type SessionViewProps = {
   state: SessionViewState;
@@ -241,7 +246,7 @@ function ReadyTabShell({
   // the INNER content tree must NOT carry any per-activation key
   // (acceptance #27).
   const panelContent: Record<TabId, ReactNode> = {
-    transcript: <TranscriptPlaceholder />,
+    transcript: <TranscriptView row={row} now={now} />,
     skim: <SkimPlaceholder />,
     raw: <RawTab row={row} />,
     metadata: <SessionMetadata row={row} now={now} />,
@@ -277,6 +282,15 @@ function ReadyTabShell({
 }
 
 function SessionPaneHeader({ row }: { row: SessionRow }) {
+  // M4 expansion (design.md §6.1.1): the "Open raw" anchor lands in
+  // the right-side action group AFTER the conflict badge, only when
+  // a stored UID exists (source-only rows would 404 on the raw URL).
+  // The anchor copy is "Open raw" verbatim per spec line 626 (NOT
+  // "View raw", which is the Metadata-tab precedent).
+  const rawHref =
+    row.storedSessionUid !== null
+      ? RAW_SESSION_PATH(row.storedSessionUid)
+      : null;
   return (
     <header className="session-pane-header">
       <h2 className="session-title">{row.title ?? "(untitled)"}</h2>
@@ -291,6 +305,16 @@ function SessionPaneHeader({ row }: { row: SessionRow }) {
         >
           Conflict
         </span>
+      ) : null}
+      {rawHref !== null ? (
+        <a
+          className="session-open-raw"
+          href={rawHref}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Open raw
+        </a>
       ) : null}
     </header>
   );
@@ -334,15 +358,6 @@ function TabPanel({
       }}
     >
       {children}
-    </div>
-  );
-}
-
-function TranscriptPlaceholder() {
-  return (
-    <div className="tab-placeholder">
-      <strong>Transcript</strong>
-      <span>Coming in Milestone 4</span>
     </div>
   );
 }

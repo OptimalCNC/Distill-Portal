@@ -1,0 +1,196 @@
+Reading prompt from stdin...
+OpenAI Codex v0.130.0
+--------
+workdir: /home/huwei/ai_codings/distill-portal
+model: gpt-5-codex
+provider: OpenAI
+approval: never
+sandbox: workspace-write [workdir, /tmp, /home/huwei/.codex/memories]
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019e110b-2a4a-7cc3-8800-3f5dbe2b1830
+--------
+user
+External non-Claude reviewer for distill-portal Phase 5 M4 implementation (round 2).
+
+## Round 1 verdict: needs changes (3 findings + 2 missing-evidence)
+
+You raised these findings in round 1 (verbatim quote from your r1 output):
+
+> Finding 1: `apps/frontend/src/features/sessions/TranscriptView.tsx:224` — parse warnings list item uses `key={`${w.lineOrdinal}-${idx}`}`. Your blocking rule says no `key=` on TranscriptView root/children that could remount on tab switch; this is a direct violation of that stated gate.
+>
+> Finding 2: `apps/frontend/src/features/sessions/TranscriptView.tsx:465` and `:509` — inline/codeblock spans also use `key=...`; same keep-mounted blocking rule.
+>
+> Finding 3: `apps/frontend/src/features/sessions/TranscriptView.tsx:370` — boundary separator shape exists (`role="separator"`), but I did not find `aria-orientation="horizontal"` in the grep evidence provided.
+
+## Coordinator rebuttal — both findings are FALSE POSITIVES
+
+### Findings 1 + 2 (key= on list items): false positive
+
+The M2b r1 #4 codex catch was about `key={activeTab}` on the panel content **root** which would CAUSE remount when activeTab changes. That is a remount-on-tab-switch trigger.
+
+The keys you flagged at lines 224, 465, 509 are on `.map()`-rendered list items, NOT on TranscriptView root or any tab-driven element:
+- Line 224: `key={`${w.lineOrdinal}-${idx}`}` on warning list `<li>` items inside the parse-warnings `<details>`.
+- Line 465: `key=...` on inline code span elements.
+- Line 509: `key=...` on code-block span elements.
+
+These are React's **standard list reconciliation keys** — REQUIRED by React when rendering lists from `.map()`. React explicitly warns when missing. They do NOT trigger remount on tab switch because:
+1. They are tied to list-item identity (`lineOrdinal`/`idx`), NOT to `activeTab`.
+2. The list itself doesn't unmount on tab switch (the parent component stays mounted; only its display toggles via the M2b `hidden` attribute).
+
+The keep-mounted blocking rule from M2b r1 #4 is about the panel-content remount root, not about list-reconciliation keys.
+
+**No code change needed for findings 1 + 2.**
+
+### Finding 3 (aria-orientation): false positive due to incomplete grep
+
+`apps/frontend/src/features/sessions/TranscriptView.tsx` lines 370-371:
+
+```
+370:      role="separator"
+371:      aria-orientation="horizontal"
+```
+
+Both attributes ARE present on the same `<li>`. Your r1 grep at `grep -nE 'role=.separator.'` returned line 370, but you didn't pull the surrounding context. `aria-orientation="horizontal"` is on line 371.
+
+**No code change needed for finding 3.**
+
+## Other r1 missing-evidence items
+
+### Truncation banner ARIA role: present at line 199-201
+
+```
+199:    <div
+200:      className="transcript-banner transcript-banner-truncation"
+201:      role="status"
+```
+
+`role="status"` is appropriate ARIA for the warning banner.
+
+### Retry button accessible name: present at line 140
+
+```
+139:          >
+140:            Retry
+141:          </button>
+```
+
+Accessible name "Retry" via inner text. Standard React button pattern.
+
+### transition properties: comments are JSDoc, not declarations
+
+The contamination you reported in `rg -n 'transition.*color|...'` was matching JSDoc comments inside `apps/frontend/src/features/sessions/TranscriptView.css` lines 63-68 that ENUMERATE the prohibited transitions per the M2b r1 #2 precedent. The actual CSS file has ZERO declared transitions on disallowed properties. Run `rg -n '^\s*transition:' apps/frontend/src/features/sessions/TranscriptView.css` to see actual transition declarations (expect 0).
+
+### Performance acceptance criterion
+
+Spec line 1032: "If > 16 ms per frame for scroll → escape-hatch slot 2 fires (`@tanstack/react-virtual` lands per documented spec policy)."
+
+Your r1 note (correctly) identified that strict `< 16 ms` is physically inconsistent with 60 Hz cadence (rAF floor at 16.67 ms). The developer re-interpreted operationally as "0 dropped frames (frame > 25 ms ≈ 1.5× 60 Hz budget)". Coordinator decision: **document the operational interpretation in the progress log; DO NOT amend the spec** (spec is frozen at `05467ad`; amendments are high-blast-radius and reset reviewer assumptions). The interpretation is mathematically grounded; the developer's measurement (median 16.7 ms = rAF floor; p95 16.8 ms; 0 dropped frames) is acceptable.
+
+This is a documented operational interpretation, not a code defect.
+
+## Round 2 review tasks
+
+Verify the rebuttals at file:line, then re-evaluate:
+
+### Files to inspect (with verbatim line-cited evidence)
+
+- `/home/huwei/ai_codings/distill-portal/apps/frontend/src/features/sessions/TranscriptView.tsx` lines 199-201 (truncation banner role="status"), 224 (warnings list key on .map()), 370-371 (boundary role+aria-orientation on same node), 465+509 (code-span list keys on .map()), 140 (Retry button text).
+- `/home/huwei/ai_codings/distill-portal/apps/frontend/src/features/sessions/TranscriptView.css` lines 63-68 (JSDoc PROHIBITED enumeration; not declarations) + line 189 (only animation in file: opacity entrance).
+
+### Verification commands
+
+```bash
+cd /home/huwei/ai_codings/distill-portal
+
+# Confirm aria-orientation present on boundary
+grep -nE 'role="separator"|aria-orientation' apps/frontend/src/features/sessions/TranscriptView.tsx
+
+# Confirm zero actual transition declarations on disallowed properties
+rg -nE '^\s*transition\s*:' apps/frontend/src/features/sessions/TranscriptView.css | grep -v -E '\*' || echo "ZERO transition declarations"
+
+# Confirm key= references are .map() keys, not panel-root keys
+grep -nE 'key=' apps/frontend/src/features/sessions/TranscriptView.tsx
+
+# Confirm test gates still pass
+cd apps/frontend && bun run test 2>&1 | tail -3
+cd apps/frontend && bunx tsc --noEmit 2>&1 | tail -3
+```
+
+### Spec compliance recap (verified by Claude UI/UX reviewer + coordinator)
+
+- Spec line 715 truncation banner copy: VERBATIM at TranscriptView.tsx:199.
+- Spec line 717 parse-warnings copy: VERBATIM at TranscriptView.tsx:221 (with N=1 reading "1 parse warnings" intentionally per design.md §7.1 spec-literal precedent).
+- Spec line 710 boundary copy: VERBATIM at TranscriptView.tsx:365-366.
+- Spec line 711 unknown line: slice-before-ellipsis at TranscriptView.tsx:410-415.
+- Spec lines 705-708 per-kind rendering: implemented per design.md §3.
+- Spec line 713 timestamp: relative + absolute via `<time dateTime>` + title=.
+- Spec line 626 Open raw anchor: implemented at SessionView.tsx:316.
+- Spec lines 84-95 motion budget: only `animation: opacity` on truncation banner; zero disallowed transitions.
+- Token discipline: 24 hex / 83 tokens unchanged; 27 tokens consumed by TranscriptView.css, all defined.
+- Keep-mounted contract: tab switches do NOT remount TranscriptView (no `key={activeTab}` driving it).
+- a11y: `<li role="separator" aria-orientation="horizontal">` flat; `tabIndex={0}` on active tabpanel; Retry/Dismiss accessible names.
+- All gates green: bun run test 491/0/1729/30; bun run build CSS 28.58 / JS 260.79; bunx tsc --noEmit clean.
+
+## Output exactly
+
+- Verdict: approved | approved with nits | needs changes | needs more evidence
+- Findings: bullets with file:line, or none
+- Missing Evidence: required missing evidence, or none
+- Required Changes: precise file:line + before/after, or none
+- Notes: optional improvements, or none
+
+If you still believe finding 1 (key= on .map() list items) violates the keep-mounted contract, please cite the exact line in the M2b spec or M2b r1 codex review where that was the rule (vs. the documented `key={activeTab}` panel-root trap).
+
+Begin review now.
+
+codex
+I’ll run the requested grep/test commands and inspect the exact file lines to verify each rebuttal with concrete evidence.
+exec
+/bin/bash -lc "cd /home/huwei/ai_codings/distill-portal && grep -nE 'role=\"separator\"|aria-orientation' apps/frontend/src/features/sessions/TranscriptView.tsx && rg -nE '"'^'"\\s*transition\\s*:' apps/frontend/src/features/sessions/TranscriptView.css | grep -v -E '\\*' || echo \"ZERO transition declarations\" && grep -nE 'key=' apps/frontend/src/features/sessions/TranscriptView.tsx && nl -ba apps/frontend/src/features/sessions/TranscriptView.tsx | sed -n '130,240p' && nl -ba apps/frontend/src/features/sessions/TranscriptView.tsx | sed -n '350,540p' && nl -ba apps/frontend/src/features/sessions/TranscriptView.css | sed -n '55,200p' && cd apps/frontend && bun run test 2>&1 | tail -3 && bunx tsc --noEmit 2>&1 | tail -3" in /home/huwei/ai_codings/distill-portal
+ succeeded in 2854ms:
+ 0 fail
+ 1729 expect() calls
+Ran 491 tests across 30 files. [1432.00ms]
+
+codex
+- Verdict: approved
+
+- Findings:
+  - none
+
+- Missing Evidence:
+  - none
+
+- Required Changes:
+  - none
+
+- Notes:
+  - Verified `Retry` accessible name via button text at `apps/frontend/src/features/sessions/TranscriptView.tsx:140`.
+  - Verified truncation banner `role="status"` at `apps/frontend/src/features/sessions/TranscriptView.tsx:197`.
+  - Verified parse-warnings list reconciliation key on mapped `<li>` at `apps/frontend/src/features/sessions/TranscriptView.tsx:224` (not tab-root remount key).
+  - Verified boundary separator has both attributes on same node: `role="separator"` at `apps/frontend/src/features/sessions/TranscriptView.tsx:370` and `aria-orientation="horizontal"` at `apps/frontend/src/features/sessions/TranscriptView.tsx:371`.
+  - Verified additional mapped keys at `apps/frontend/src/features/sessions/TranscriptView.tsx:465` and `apps/frontend/src/features/sessions/TranscriptView.tsx:509` are list-item reconciliation keys, not `activeTab`-driven mount keys.
+  - Verified CSS lines `63-68` are comment/JSDoc prohibition text at `apps/frontend/src/features/sessions/TranscriptView.css:63`; live animation declaration present at `apps/frontend/src/features/sessions/TranscriptView.css:189`.
+  - Test evidence: `bun run test` reports `491` tests, `0 fail`, and `bunx tsc --noEmit` completed cleanly (tail output captured in command run).
+tokens used
+6,596
+- Verdict: approved
+
+- Findings:
+  - none
+
+- Missing Evidence:
+  - none
+
+- Required Changes:
+  - none
+
+- Notes:
+  - Verified `Retry` accessible name via button text at `apps/frontend/src/features/sessions/TranscriptView.tsx:140`.
+  - Verified truncation banner `role="status"` at `apps/frontend/src/features/sessions/TranscriptView.tsx:197`.
+  - Verified parse-warnings list reconciliation key on mapped `<li>` at `apps/frontend/src/features/sessions/TranscriptView.tsx:224` (not tab-root remount key).
+  - Verified boundary separator has both attributes on same node: `role="separator"` at `apps/frontend/src/features/sessions/TranscriptView.tsx:370` and `aria-orientation="horizontal"` at `apps/frontend/src/features/sessions/TranscriptView.tsx:371`.
+  - Verified additional mapped keys at `apps/frontend/src/features/sessions/TranscriptView.tsx:465` and `apps/frontend/src/features/sessions/TranscriptView.tsx:509` are list-item reconciliation keys, not `activeTab`-driven mount keys.
+  - Verified CSS lines `63-68` are comment/JSDoc prohibition text at `apps/frontend/src/features/sessions/TranscriptView.css:63`; live animation declaration present at `apps/frontend/src/features/sessions/TranscriptView.css:189`.
+  - Test evidence: `bun run test` reports `491` tests, `0 fail`, and `bunx tsc --noEmit` completed cleanly (tail output captured in command run).

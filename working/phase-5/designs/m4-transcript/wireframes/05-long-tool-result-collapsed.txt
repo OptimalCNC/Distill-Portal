@@ -1,0 +1,61 @@
+M4 — Wireframe 05 — Long tool_result, collapsed
+================================================
+
+Scenario: tool_result body > 2 KB. First 2 KB rendered above; rest behind a
+<details> disclosure. Threshold = msg.bytes > 2048. UTF-8 codepoint-safe split.
+
+  +----------------------------------------------------------------------+
+  | Diagnostic dump from CI                              [claude-code]   |
+  | Transcript  Skim  Raw  Metadata                                      |
+  | ----------                                                           |
+  |                                                                      |
+  |  +----------------------------------------------------------+        |
+  |  | TOOL · Bash                                              |        |
+  |  | ▸ Arguments                                              |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |
+  |  +----------------------------------------------------------+        |
+  |  | TOOL RESULT · Bash                                       |        |
+  |  | +------------------------------------------------------+ |        |
+  |  | | [2026-05-09T14:00:00Z] Starting build pipeline       | |        |  <- head <pre>
+  |  | | [2026-05-09T14:00:01Z] Checked out 6068d6f on main   | |        |     surface-raised bg
+  |  | | [2026-05-09T14:00:02Z] Resolving dependencies via    | |        |     mono, text-sm
+  |  | | [2026-05-09T14:00:04Z] Lockfile validated (256 deps) | |        |     overflow-x: auto
+  |  | | [2026-05-09T14:00:05Z] Type-checking apps/frontend   | |        |     line-height 1.4
+  |  | | [2026-05-09T14:00:11Z] Type-check OK (0 errors)      | |        |
+  |  | | [2026-05-09T14:00:12Z] Building Vite bundle for prod | |        |
+  |  | | [2026-05-09T14:00:14Z] Vite: rollup pass 1           | |        |     (first ~2 KB of body)
+  |  | | [2026-05-09T14:00:15Z] Vite: rollup pass 2           | |        |
+  |  | | [2026-05-09T14:00:17Z] Bundle written: 21.34 kB      | |        |
+  |  | | [2026-05-09T14:00:18Z] Source map generated          | |        |
+  |  | | [2026-05-09T14:00:18Z] Asset hash: ad8e4f            | |        |
+  |  | | [2026-05-09T14:00:19Z] Running cargo test --workspace| |        |
+  |  | | [2026-05-09T14:00:42Z]    Compiling collector-runtime| |        |
+  |  | | [2026-05-09T14:00:48Z]    Compiling distill-portal-… | |        |
+  |  | | [2026-05-09T14:00:53Z]    Compiling distill-portal-… | |        |
+  |  | | [2026-05-09T14:01:02Z]     Finished release [optimi…]| |        |
+  |  | | [2026-05-09T14:01:03Z] Running test binary collector | |        |
+  |  | | [2026-05-09T14:01:11Z]     test result: ok. 47 passed| |        |
+  |  | | [2026-05-09T14:01:12Z] Running test binary distill-… | |        |
+  |  | | [2026-05-09T14:01:31Z]     test result: ok. 112 pass | |        |
+  |  | +------------------------------------------------------+ |        |
+  |  |                                                          |        |
+  |  | ▸ Expand (1024 more bytes)                               |        |  <- disclosure summary
+  |  +----------------------------------------------------------+        |     accent color
+  |                                                                      |     hover: underline
+  +----------------------------------------------------------------------+
+
+Notes
+-----
+- TOOL_RESULT_OVERFLOW_BYTES = 2048 (declared in TranscriptView.tsx).
+- Discriminator: msg.bytes > 2048 (parser-computed UTF-8 byte count).
+- Split-point: TextEncoder.encode(msg.text), find byte 2048, walk back to
+  a UTF-8 codepoint boundary (continuation bytes start with 10xxxxxx),
+  TextDecoder.decode the head and tail.
+- "Expand (Nmore more bytes)" copy verbatim from spec line 708, where
+  Nmore = msg.bytes - 2048.
+- The disclosure summary uses --color-accent (the M4 surface that consumes
+  accent as an emphasis affordance — NOT a hyperlink, but the color reads
+  as "interactive").
+- Hover state: text-decoration underline (INSTANT, no transition).
+- ARIA: native <details> inherits all keyboard support.

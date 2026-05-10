@@ -1,0 +1,49 @@
+M4 — Wireframe 06 — Long tool_result, expanded
+==============================================
+
+Scenario: same as 05 with <details open>. The tail flows visually-continuous
+with the head (no top margin gap).
+
+  +----------------------------------------------------------------------+
+  | Diagnostic dump from CI                              [claude-code]   |
+  | Transcript  Skim  Raw  Metadata                                      |
+  | ----------                                                           |
+  |                                                                      |
+  |  +----------------------------------------------------------+        |
+  |  | TOOL RESULT · Bash                                       |        |
+  |  | +------------------------------------------------------+ |        |
+  |  | | [2026-05-09T14:00:00Z] Starting build pipeline       | |        |
+  |  | | [2026-05-09T14:00:01Z] Checked out 6068d6f on main   | |        |     <- head
+  |  | | [2026-05-09T14:00:02Z] Resolving dependencies via    | |        |
+  |  | | …                                                    | |        |
+  |  | | [2026-05-09T14:00:18Z] Bundle written: 21.34 kB      | |        |
+  |  | | [2026-05-09T14:00:18Z] Source map generated          | |        |
+  |  | +------------------------------------------------------+ |        |
+  |  |                                                          |        |
+  |  | ▾ Expand (1024 more bytes)                               |        |
+  |  | +------------------------------------------------------+ |        |
+  |  | | [2026-05-09T14:00:14Z] Vite: rollup pass 1           | |        |     <- tail
+  |  | | [2026-05-09T14:00:15Z] Vite: rollup pass 2           | |        |     same recipe
+  |  | | [2026-05-09T14:00:17Z] Bundle written: 21.34 kB      | |        |     no top margin —
+  |  | | [2026-05-09T14:00:18Z] Source map generated          | |        |     visually continuous
+  |  | | [2026-05-09T14:00:18Z] Asset hash: ad8e4f            | |        |
+  |  | | [2026-05-09T14:01:43Z] All test gates green          | |        |
+  |  | | [2026-05-09T14:02:02Z] Pipeline complete in 122.34s  | |        |
+  |  | +------------------------------------------------------+ |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |
+  +----------------------------------------------------------------------+
+
+Notes
+-----
+- The disclosure animation: 200 ms ease-in-out on block-size, via the
+  global `interpolate-size: allow-keywords` rule (from M2b global.css).
+- The summary text rotates from "▸ Expand (N more bytes)" to "▾ Expand
+  (N more bytes)" — same string, different disclosure marker (browser-
+  native rotation).
+- The tail <pre> uses class `msg-tool-pre msg-tool-result-tail` with
+  `margin-top: 0` to flow continuous with the head.
+- State persists across tab switches (M2b keep-mounted contract). User
+  expands once, switches to Metadata, returns to Transcript — disclosure
+  is still open.
+- State resets on selectedRowKey change (parent SessionView remounts).

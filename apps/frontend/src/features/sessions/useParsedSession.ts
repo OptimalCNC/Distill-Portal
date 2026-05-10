@@ -336,7 +336,21 @@ export function useParsedSession(
             // bumpCacheEpoch) silently no-ops; a subsequent re-render
             // picks up fresh data via the dep-array re-run on row
             // identity. We never transition to "error" on abort.
-            if (isAbortError(err)) return;
+            //
+            // M4 surface bug-fix: under React 18 StrictMode, the FIRST
+            // mount's cleanup aborts its own controller while the
+            // SECOND mount immediately coalesces onto the same (now-
+            // doomed) Promise. Without the retryNonce bump below, the
+            // second mount would silently no-op on the AbortError and
+            // the consumer would stay in "loading" forever (no dep
+            // re-run is forthcoming). The bump triggers a fresh fetch
+            // on the next render via the useEffect's dep array — by
+            // then, inFlight has been cleared (the originator's
+            // .then/.catch ran first), so step 5 fires.
+            if (isAbortError(err)) {
+              setRetryNonce((n) => n + 1);
+              return;
+            }
             setState({
               state: "error",
               error: err instanceof Error ? err : new Error(String(err)),

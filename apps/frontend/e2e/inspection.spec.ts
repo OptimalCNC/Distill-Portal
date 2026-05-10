@@ -105,11 +105,11 @@ test.describe.serial("inspection surface end-to-end", () => {
     await importToast.locator(".toast-dismiss").click();
     await expect(importToast).toHaveCount(0);
 
-    // 6. M2b: the "View raw" anchor lives inside the right-pane
-    //    Metadata tab body (`SessionMetadata`'s
-    //    `.metadata-raw-link-row`). The Metadata tab is the default
-    //    active tab when a row is selected — click the row → assert
-    //    the anchor in the tab body.
+    // 6. M4: the default tab shifted from "metadata" to "transcript"
+    //    alongside TranscriptView landing (Resolved Decision #11).
+    //    The Metadata tab still carries the "View raw" anchor in its
+    //    body — activate it explicitly to make the assertion. The
+    //    M4-added "Open raw" anchor lives in the session header.
     const fixtureRow = page
       .locator(`tr:has-text("${FIXTURE_SESSION_KEY}")`)
       .first();
@@ -118,11 +118,28 @@ test.describe.serial("inspection surface end-to-end", () => {
     await expect(sessionPane).toHaveAttribute("data-state", "ready", {
       timeout: 5_000,
     });
-    // Default tab is Metadata.
-    await expect(page.locator("#tab-metadata")).toHaveAttribute(
+    // M4 default tab is Transcript (not Metadata).
+    await expect(page.locator("#tab-transcript")).toHaveAttribute(
       "aria-selected",
       "true",
     );
+    // Wait for the TranscriptView to resolve (loading → success) and
+    // assert the M4 landmark <section aria-label="Session transcript">.
+    const transcriptPanelInitial = page.locator("#panel-transcript");
+    await expect(
+      transcriptPanelInitial.locator(".transcript-loading"),
+    ).toHaveCount(0, { timeout: 15_000 });
+    await expect(
+      transcriptPanelInitial.locator('[aria-label="Session transcript"]'),
+    ).toBeVisible({ timeout: 10_000 });
+    // M4: the "Open raw" anchor lives in the session header (right-
+    // side action group, AFTER the conflict badge). The seeded
+    // session has storedSessionUid !== null so the anchor renders.
+    const openRawAnchor = sessionPane.locator(".session-open-raw");
+    await expect(openRawAnchor).toBeVisible();
+    await expect(openRawAnchor).toHaveText("Open raw");
+    // Activate Metadata for the "View raw" anchor assertion.
+    await page.locator("#tab-metadata").click();
     const metadataPanel = page.locator("#panel-metadata");
     await expect(metadataPanel).toBeVisible();
     const rawLink = metadataPanel
@@ -195,7 +212,17 @@ test.describe.serial("inspection surface end-to-end", () => {
     );
     const transcriptPanel = page.locator("#panel-transcript");
     await expect(transcriptPanel).toBeVisible();
-    await expect(transcriptPanel).toContainText("Coming in Milestone 4");
+    // M4: TranscriptView replaces the "Coming in Milestone 4"
+    // placeholder. The detailed render assertion lives at step 6
+    // (before any Rescan-driven cache invalidation). Here we only
+    // confirm the panel is the new TranscriptView surface — i.e.
+    // the placeholder is gone — without re-asserting the full
+    // section landmark (after Rescan + bumpCacheEpoch the hook
+    // may stay in its already-resolved state via the warm closure;
+    // the surface contract assertion at step 6 is authoritative).
+    await expect(transcriptPanel).not.toContainText(
+      "Coming in Milestone 4",
+    );
 
     await page.locator("#tab-metadata").click();
     await expect(page.locator("#tab-metadata")).toHaveAttribute(

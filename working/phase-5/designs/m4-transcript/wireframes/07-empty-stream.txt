@@ -1,0 +1,36 @@
+M4 — Wireframe 07 — Empty stream
+=================================
+
+Scenario: parsed.messages.length === 0. Parser succeeded but extracted no
+messages (e.g., an NDJSON file containing only metadata records).
+
+  +----------------------------------------------------------------------+
+  | Empty session                                       [claude-code]    |
+  | Transcript  Skim  Raw  Metadata                                      |
+  | ----------                                                           |
+  |                                                                      |
+  |                                                                      |
+  |                                                                      |
+  |                                                                      |
+  |                          No messages parsed.                         |  <- text-sm muted italic
+  |                                                                      |     centered
+  |                                                                      |     padding 32px 0
+  |                                                                      |
+  |                                                                      |
+  |                                                                      |
+  |                                                                      |
+  +----------------------------------------------------------------------+
+
+Notes
+-----
+- This is a SUCCESS state — parsing succeeded; the file just contained no
+  recognizable messages (or only filtered records like custom-title /
+  permission-mode).
+- The Metadata tab is the alternative path; the user can review what IS
+  available.
+- Copy: "No messages parsed." Designer flagged Q-DESIGN-6 in design.md as
+  open question — alternative more-verbose copy "No messages in this
+  session — the file parsed successfully but contained no recognizable
+  messages." is on file.
+- ARIA: rendered inside the <section aria-label="Session transcript">; no
+  separate live region (the empty state is observed at first paint).

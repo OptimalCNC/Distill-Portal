@@ -1,0 +1,93 @@
+M4 — Wireframe 01 — Standard mixed transcript
+================================================
+
+Scenario: user → assistant → tool_use → tool_result → assistant → user → system.
+Mounted inside the right pane (.session-pane) inside the Tabs primitive at the
+Transcript tab.
+
+Width: 70ch reading column, panel padding 32px / 24px.
+
+  +----------------------------------------------------------------------+
+  | Refactoring the metadata grid                          [claude-code] |  <- session-pane-header
+  | Transcript  Skim  Raw  Metadata                                      |  <- tabs-strip
+  | ----------                                                           |
+  |                                                                      |
+  |  +----------------------------------------------------------+        |  <- .msg-user (accent5% bg)
+  |  | USER · 12 minutes ago                                    |        |     attribution row uppercase
+  |  |                                                          |        |     letter-spacing 0.06em
+  |  | Can you walk me through how the metadata <dl> grid is    |        |
+  |  | laid out? I'd like to add a new field but I'm not sure   |        |
+  |  | where the column rule lives.                             |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |  <- 16px gap (default)
+  |  +----------------------------------------------------------+        |  <- .msg-assistant (surface bg)
+  |  | ASSISTANT · 12 minutes ago                               |        |
+  |  |                                                          |        |
+  |  | The grid is declared in `SessionMetadata.css` with a     |        |
+  |  | two-column template. Here's the rule:                    |        |
+  |  |                                                          |        |
+  |  | +----------------------------------------------------+   |        |  <- code block <pre>
+  |  | | .metadata-meta {                                   |   |        |     surface-raised bg
+  |  | |   display: grid;                                   |   |        |     mono font, text-sm
+  |  | |   grid-template-columns: max-content 1fr;          |   |        |
+  |  | |   gap: var(--space-2) var(--space-4);              |   |        |
+  |  | |   margin: 0;                                       |   |        |
+  |  | | }                                                  |   |        |
+  |  | +----------------------------------------------------+   |        |
+  |  |                                                          |        |
+  |  | The first column is sized to the widest <dt>; the second |        |
+  |  | takes the remainder. Adding a field is just a new <dt>/  |        |
+  |  | <dd> pair — no layout change needed.                     |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |  <- 16px gap (default)
+  |  +----------------------------------------------------------+        |  <- .msg-tool-use (border)
+  |  | TOOL · Read                                              |        |     hairline border
+  |  | ▸ Arguments                                              |        |     <details> closed
+  |  +----------------------------------------------------------+        |
+  |                                                                      |  <- 16px gap (default; tool_use + tool_result are different kinds)
+  |  +----------------------------------------------------------+        |  <- .msg-tool-result (border)
+  |  | TOOL RESULT · Read                                       |        |
+  |  | +------------------------------------------------------+ |        |
+  |  | | .metadata-meta {                                     | |        |  <- result <pre> head
+  |  | |   display: grid;                                     | |        |     surface-raised bg
+  |  | |   grid-template-columns: max-content 1fr;            | |        |
+  |  | |   gap: var(--space-2) var(--space-4);                | |        |
+  |  | |   margin: 0;                                         | |        |
+  |  | | }                                                    | |        |
+  |  | | …                                                    | |        |
+  |  | +------------------------------------------------------+ |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |  <- 16px gap (default)
+  |  +----------------------------------------------------------+        |  <- .msg-assistant
+  |  | ASSISTANT · 12 minutes ago                               |        |
+  |  | Confirmed — the grid logic is exactly as I described…    |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |  <- 16px gap (default)
+  |  +----------------------------------------------------------+        |  <- .msg-user (accent5%)
+  |  | USER · 11 minutes ago                                    |        |
+  |  | Got it — thanks. One more: what controls spacing…        |        |
+  |  +----------------------------------------------------------+        |
+  |                                                                      |  <- 16px gap (default)
+  |   SYSTEM · Conversation compacted from 47 prior messages.            |  <- .msg-system (no chrome)
+  |                                                                      |
+  +----------------------------------------------------------------------+
+
+Notes
+-----
+- User panels carry the 5% accent tint (warm amber wash); assistant panels sit
+  on the bare warm-paper surface. The differential reads as turn-taking without
+  needing avatars or labelled rails.
+- The 70ch reading measure caps the panels regardless of viewport width.
+- Code blocks inside assistant prose use surface-raised + mono.
+- The tool_use / tool_result panel pair shares the hairline-bordered chrome —
+  same recipe, different header label.
+- The system message at the bottom carries no panel chrome — single muted line.
+- Spacing rhythm (3 magnitudes): 16px default between any two adjacent
+  messages (the floor for non-boundary kind-changes); 24px override between
+  adjacent SAME-kind messages (user→user, assistant→assistant, tool_use→
+  tool_use, tool_result→tool_result, system→system); 32px breathing only
+  around boundary messages (not depicted in this wireframe — see wireframe
+  04). This wireframe shows the 16px default firing on every transition
+  because there are no adjacent same-kind pairs in this scenario. NOTE:
+  tool_use → tool_result is a kind-change (different MessageKinds) and uses
+  16px, NOT 24px — same-kind override matches per-kind exactly.
