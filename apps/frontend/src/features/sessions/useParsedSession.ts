@@ -347,6 +347,12 @@ export function useParsedSession(
             // on the next render via the useEffect's dep array — by
             // then, inFlight has been cleared (the originator's
             // .then/.catch ran first), so step 5 fires.
+            //
+            // M6 retrospective note: this patch landed in M4 (the
+            // first visible useParsedSession consumer was
+            // TranscriptView, which surfaced the race in StrictMode).
+            // See the M4 closure entry in `progress/phase-5.progress.md`
+            // for the full root-cause trail.
             if (isAbortError(err)) {
               setRetryNonce((n) => n + 1);
               return;

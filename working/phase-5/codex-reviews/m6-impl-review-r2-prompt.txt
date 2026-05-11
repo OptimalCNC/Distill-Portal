@@ -1,0 +1,54 @@
+External non-Claude reviewer for distill-portal Phase 5 M6 implementation (round 2 — fix-up confirmation).
+
+## Round 1 result
+
+You returned `needs changes` with 2 findings + 1 missing-evidence (sandbox-bound, not actual failure):
+
+1. **WCAG row at `progress/phase-5.progress.md:476`** combined `S06 / T17, T29` under one row but only reported `--color-surface` ratios (1.49:1 / 1.35:1). T17 in `wcag_m4.py` actually has BG `--color-surface-raised` and ratios 1.41:1 / 1.29:1.
+2. **`progress/phase-5.progress.md:7`** said `created in M5`; should read `created in M6`.
+
+Plus missing-evidence on `bun run test:e2e` (your sandbox's socket EPERM blocked the dev server; coordinator confirmed locally `2 passed in 6.5s`).
+
+## Fixes applied (docs-only)
+
+1. **Line 476 split** — replaced the combined row with two rows: one for S06/T29 (border over surface; 1.49:1/1.35:1) + one for T17 alone (border over surface-raised; 1.41:1/1.29:1).
+2. **Line 7 update** — `(created in M5)` → `(created in M6)`.
+
+No code changed; tests/build/tsc all green; e2e 2/2 passed locally.
+
+## YOU MUST EXECUTE these confirmation commands
+
+```bash
+cd /home/huwei/ai_codings/distill-portal
+
+# Confirm the row split at line 476-477
+sed -n '474,479p' progress/phase-5.progress.md
+# Expected: S06 / T29 row + — / T17 row separately
+
+# Confirm the M5→M6 fix at line 7
+sed -n '5,10p' progress/phase-5.progress.md
+# Expected: "created in M6"
+
+# Re-confirm all invariants
+cd apps/frontend && bun run test 2>&1 | tail -5
+cd apps/frontend && bunx tsc --noEmit 2>&1 | tail -3
+cd ../..
+rg -n '#[0-9a-fA-F]{3,8}' apps/frontend/src/ | wc -l    # MUST equal 24
+rg -c '^\s*--' apps/frontend/src/styles/tokens.css      # MUST equal 83
+git diff --stat HEAD -- apps/backend/ components/ tests/e2e/ Cargo.toml Cargo.lock apps/frontend/package.json apps/frontend/bun.lock
+# Expected: empty
+```
+
+## Round 2 review tasks
+
+Verify both fixes landed. If both are clean, return `approved`. Spec at `05467ad` still frozen; M6 still in M6 scope.
+
+## Output exactly
+
+- Verdict: approved | approved with nits | needs changes | needs more evidence
+- Findings: bullets with file:line, or none
+- Missing Evidence: required missing evidence, or none
+- Required Changes: precise file:line + before/after, or none
+- Notes: optional improvements, or none
+
+Begin review now.

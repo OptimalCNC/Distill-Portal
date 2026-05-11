@@ -7,8 +7,8 @@ The session store persists ingested session metadata in SQLite and raw JSONL blo
 ## Frontend Files To Modify
 
 - `apps/frontend/src/App.tsx`
-- `apps/frontend/src/features/sessions/` (unified session list, drawer body, and the pure merge / filter / pagination / streaming-raw-preview helpers; co-located sibling `.css` files for each component)
-- `apps/frontend/src/components/` (shared React primitives — action bar, scan-errors callout, native-`<dialog>` drawer shell, pagination strip, toast — and their sibling `.css` files)
+- `apps/frontend/src/features/sessions/` (unified session list, right-pane session view + four-tab shell, per-tool parsers + skim builder, URL-synced selection, and the pure merge / filter / pagination / streaming-raw-preview helpers; co-located sibling `.css` files for each component)
+- `apps/frontend/src/components/` (shared React primitives — action bar, scan-errors callout, accessible Tabs primitive, pagination strip, toast — and their sibling `.css` files)
 - `apps/frontend/src/lib/api.ts`
 - `apps/frontend/src/lib/contracts.ts`
 

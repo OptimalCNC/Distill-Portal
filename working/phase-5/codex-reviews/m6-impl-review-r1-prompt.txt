@@ -1,0 +1,182 @@
+External non-Claude reviewer for distill-portal Phase 5 M6 implementation (round 1).
+
+M6 is the FINAL Phase 5 chunk: cleanup, retire drawer + SessionDetail, 8-doc sweep, cumulative WCAG-AA table, fold in deferred follow-ups from M3a/M3b/M4/M5, Phase 5 closure progress log. ZERO new visible UI surface; ZERO new tokens; ZERO new hex; ZERO new fonts; ZERO new motion vocab.
+
+You have full sandbox permission. Execute every check below directly. Return concrete file:line findings + command outputs.
+
+## M6 deliverables under review
+
+### Deletions (6 files / 1963 lines)
+- `apps/frontend/src/features/sessions/SessionDetail.tsx` (492 lines)
+- `apps/frontend/src/features/sessions/SessionDetail.test.tsx` (729 lines / 19 tests)
+- `apps/frontend/src/features/sessions/SessionDetail.css` (173 lines)
+- `apps/frontend/src/components/Drawer.tsx` (259 lines)
+- `apps/frontend/src/components/Drawer.test.tsx` (218 lines / 8 tests)
+- `apps/frontend/src/components/Drawer.css` (92 lines)
+
+### Modified files
+- `apps/frontend/src/features/sessions/SessionsView.{tsx,test.tsx}` — JSDoc rewrites (DEAD-BUT-TESTED → past-tense post-M6)
+- `apps/frontend/src/features/sessions/SessionsTable.{tsx,test.tsx}` — JSDoc rewrites
+- `apps/frontend/src/features/sessions/SessionMetadata.{tsx,css}` — JSDoc rewrites
+- `apps/frontend/src/features/sessions/RawTab.css` — JSDoc rewrite
+- `apps/frontend/src/features/sessions/SessionView.test.tsx` (+77 lines) — new test asserting native `<details>` open state preservation across full Skim → Transcript → Skim tab cycle
+- `apps/frontend/src/App.tsx` (+14 lines) — `bumpCacheEpoch` import comment expanded to 3-line JSDoc citing spec line 466
+- `apps/frontend/src/features/sessions/useParsedSession.ts` (+6 lines) — M6 retrospective JSDoc note at AbortError-coalescing branch citing M4 closure
+- `apps/frontend/e2e/inspection.spec.ts` (+12/-2) — replaced M5-era stale `not yet imported` assertion with structural success-state assertion `Agent reaction (`; reflects actual post-import fixture state
+
+### Docs (7 updated + 1 new)
+- `docs/README.md` — frontend bullet refreshed
+- `docs/dependency-rules.md` — focus-trap-react ORPHAN status documented
+- `docs/dev-commands.md` — test-surface paragraph extended with Phase 5 files
+- `docs/features/inspection-surface.md` — REWRITE for split-pane master-detail
+- `docs/features/session-view.md` — NEW (~280 lines; tab architecture, parsers, stream caps, oversize threshold, expansion semantics, known limitations, JSON.stringify pitfall)
+- `docs/features/session-store.md` — drawer→right-pane copy
+- `docs/playbooks/modify-frontend-page.md` — per-tool parsers section + grep `--` separator notes
+- `apps/frontend/README.md` — Entry Points refreshed
+
+### Progress log (`progress/phase-5.progress.md`)
+- Current Snapshot updated (PHASE 5 CLOSED)
+- Active Plan adds M6 entry
+- UI/UX Design Log adds M6 entry (not required)
+- Remaining Milestones marks M6 CLOSED
+- Completed Work Log adds M6 entry (top)
+- Review Log adds ### M6 section (placeholder — coordinator fills with trio outcome after this review)
+- External Reviewer Availability Log adds M6 entry (placeholder)
+- Next Recommended Task replaces M6 with "Phase 5 closed; Phase 6 + post-Phase-5 docs PRs"
+- NEW section "Cumulative WCAG-AA Table (Phase 5 close)" — ~30 unique pairs from M4 + M5
+
+## Spec source-of-truth
+
+- `/home/huwei/ai_codings/distill-portal/working/phase-5.md` lines 948-965 (§Documentation 8-doc sweep) + 1061-1078 (M6 DoD) + 1080-1130 (Phase 5 Acceptance Criteria). Spec frozen at `05467ad`.
+
+## Plan
+
+`/home/huwei/ai_codings/distill-portal/working/phase-5/m6-plan.md` — operative plan with 7 deferred follow-up decisions (4 INCLUDE / 2 DEFER / 1 DOCUMENTED LIMITATION / 6 SKIP).
+
+## Test/build baseline post-M6
+
+- `bun run test`: 531 pass / 0 fail / 1752 expects across 30 files (M5 baseline 557/0/1860/32 → -26 tests / -108 expects / -2 files; deleted SessionDetail.test.tsx 19 + Drawer.test.tsx 8 = 27 tests; new keep-mounted test +1; net -26 ✓)
+- `bun run build`: CSS 34.81 kB / JS 265.88 kB / 535 ms (UNCHANGED — deleted files were already tree-shaken since M2b)
+- `bunx tsc --noEmit`: clean
+- `bun run test:e2e`: 2 passed (6.6s) — inspection + transcript-perf
+- Hex isolation: 24 (unchanged)
+- Token count: 83 (unchanged)
+- Protected paths: untouched
+- `focus-trap-react`: still in package.json, zero src imports (orphan installed)
+
+## YOU MUST EXECUTE these commands in your sandbox
+
+```bash
+cd /home/huwei/ai_codings/distill-portal
+
+# Test gates
+cd apps/frontend && bun run test 2>&1 | tail -5
+cd apps/frontend && bunx tsc --noEmit 2>&1 | tail -3
+cd apps/frontend && bun run build 2>&1 | tail -5
+cd apps/frontend && bun run test:e2e 2>&1 | tail -10
+cd ../..
+
+# Cargo gates
+cargo check --workspace 2>&1 | tail -3
+cargo test -p distill-portal-ui-api-contracts --features ts-bindings 2>&1 | tail -3
+
+# Deletion verification
+ls apps/frontend/src/features/sessions/SessionDetail.* 2>&1 | head -5  # Expected: No such file
+ls apps/frontend/src/components/Drawer.* 2>&1 | head -5                # Expected: No such file
+
+# No live imports of deleted files
+rg -nE 'from\s+["\x27].*(SessionDetail|Drawer)' apps/frontend/src/ --type ts --type tsx
+# Expected: zero hits
+
+# No DEAD-BUT-TESTED references remain in src
+rg -n 'DEAD-BUT-TESTED' apps/frontend/src/
+# Expected: zero hits
+
+# Doc references to deleted components
+rg -nE '<Drawer|SessionDetail' docs/
+# Expected: zero hits
+
+# Invariants
+rg -n '#[0-9a-fA-F]{3,8}' apps/frontend/src/ | wc -l   # MUST equal 24
+rg -c '^\s*--' apps/frontend/src/styles/tokens.css     # MUST equal 83
+
+# Protected paths
+git diff --stat HEAD -- apps/backend/ components/ tests/e2e/ Cargo.toml Cargo.lock apps/frontend/package.json apps/frontend/bun.lock
+# Expected: empty
+
+# focus-trap-react orphan
+grep -E 'focus-trap-react' apps/frontend/package.json
+# Expected: one match
+rg -n 'focus-trap' apps/frontend/src/
+# Expected: zero hits
+
+# New doc creation
+ls docs/features/session-view.md && wc -l docs/features/session-view.md
+# Expected: file exists
+
+# Bun-first invariant
+rg -n 'jest\.fn\|child_process\|node:fs' apps/frontend/src/
+# Expected: zero hits
+
+# Spec frozen
+git log --oneline working/phase-5.md | head -3
+# Expected: spec last touched at 05467ad (frozen)
+
+# WCAG scripts still reproducible
+python3 working/phase-5/designs/m4-transcript/wcag_m4.py 2>&1 | head -10
+python3 working/phase-5/designs/m5-skim/wcag_m5.py 2>&1 | head -10
+# Expected: clean output matching the cumulative table
+
+# Cumulative WCAG-AA table presence
+grep -nE '^## Cumulative WCAG-AA Table' progress/phase-5.progress.md
+# Expected: one match
+
+# Phase 5 closure entry presence
+grep -nE 'PHASE 5 CLOSED' progress/phase-5.progress.md
+# Expected: at least one match
+```
+
+## Block if you find any of these
+
+### File integrity
+- Any deleted file still referenced from a live import path in `apps/frontend/src/` → BLOCKING.
+- Any DEAD-BUT-TESTED JSDoc remaining in `apps/frontend/src/` → BLOCKING (M6 must complete the cleanup).
+
+### Doc sweep
+- Any of the 8 docs not updated (per plan §5.1-§5.8) → flag with file:line.
+- New `docs/features/session-view.md` missing or empty → BLOCKING.
+- Stale "drawer" / "SessionDetail" references in `docs/` outside historical context → flag.
+
+### Invariants
+- Hex isolation != 24 → BLOCKING.
+- Token count != 83 → BLOCKING.
+- Protected paths show any diff → BLOCKING.
+- `focus-trap-react` removed from package.json → BLOCKING (planner-recommended to keep installed).
+- Any new runtime dep added → BLOCKING.
+
+### Tests
+- Test count doesn't match expected delta (-26 net, 557→531) — explain delta.
+- E2E suite not green → BLOCKING.
+- tsc --noEmit not clean → BLOCKING.
+
+### Spec freeze contract
+- `working/phase-5.md` shows any commit after `05467ad` → BLOCKING (spec must stay frozen; amendments are post-M6 docs PRs).
+
+### Bun-first
+- Any `jest.fn()`, `child_process`, or `node:fs` import in apps/frontend/src/ source → BLOCKING.
+
+### Cumulative WCAG table
+- Cumulative table values don't reconcile with `wcag_m4.py` + `wcag_m5.py` outputs → flag with row-level cite.
+
+### Phase 5 closure
+- Phase 5 acceptance criteria from spec lines 1080+ not verifiable from progress log → flag missing items.
+
+## Output exactly
+
+- Verdict: approved | approved with nits | needs changes | needs more evidence
+- Findings: bullets with file:line, or none
+- Missing Evidence: required missing evidence, or none
+- Required Changes: precise file:line + before/after, or none
+- Notes: optional improvements, or none
+
+Begin review now.

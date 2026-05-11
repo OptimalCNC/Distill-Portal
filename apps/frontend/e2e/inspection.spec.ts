@@ -205,13 +205,13 @@ test.describe.serial("inspection surface end-to-end", () => {
     const skimPanel = page.locator("#panel-skim");
     await expect(skimPanel).toBeVisible();
     // M5: SkimView replaces the "Coming in Milestone 5" placeholder.
-    // Source-only row → SkimView lands on the no_raw branch and
-    // renders the spec-verbatim "not yet imported" copy (mirrors
-    // TranscriptView's no_raw surface).
+    // The fixture row was imported earlier in this e2e (step 4 "imports
+    // through the browser"), so SkimView lands on the success branch
+    // and renders parsed skim blocks. Assert the structural "Agent
+    // reaction" disclosure that every user_turn block carries (spec
+    // line 685; M5 acceptance).
     await expect(skimPanel).not.toContainText("Coming in Milestone 5");
-    await expect(skimPanel).toContainText(
-      "This session has not been imported yet",
-    );
+    await expect(skimPanel).toContainText("Agent reaction (");
 
     await page.locator("#tab-transcript").click();
     await expect(page.locator("#tab-transcript")).toHaveAttribute(

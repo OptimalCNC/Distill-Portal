@@ -29,8 +29,10 @@
 // Phase-4 modal `<Drawer>` + `<SessionDetail>` are unmounted from
 // the running app — selection now flows through the right-pane
 // `<SessionView>` with its four-tab shell (App.tsx → SessionView).
-// Drawer.tsx + SessionDetail.tsx remain on disk through M5 per
-// Resolved Decision #6; M6 deletes them.
+// Phase 5 M6 (2026-05-11) deleted `Drawer.tsx` + `SessionDetail.tsx`
+// and their sibling CSS / test files from disk per Resolved
+// Decision #6; the four-tab shell on `SessionView` is the only
+// remaining detail surface.
 //
 // `App.tsx` retains ownership of fetch state, the merged + filtered
 // + paginated row sets (memoized once + passed in), the `selected`

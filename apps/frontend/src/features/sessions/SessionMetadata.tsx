@@ -26,9 +26,9 @@
 // SessionMetadata is presentational. The parent (SessionView, via
 // the Tabs primitive) passes `row` + `now`; this component owns no
 // fetch state and never reaches outside its props. The Phase-4
-// `<SessionDetail>` component remains on disk through M5 (Resolved
-// Decision #6) and is no longer reachable from the running app —
-// this extraction is a NEW component, NOT an in-place edit.
+// `<SessionDetail>` component was deleted at Phase 5 M6 per
+// Resolved Decision #6 — this extraction is a NEW component,
+// NOT an in-place edit.
 import { useEffect, useRef, useState } from "react";
 import { relativeTimeFrom } from "./relativeTime";
 import type { SessionRow } from "./types";

@@ -10,21 +10,22 @@ Bun + Vite + React + TypeScript inspection UI. Surfaces source sessions, stored 
 - `vite.config.ts` — dev server + `/api/v1/**` and `/health` proxy to the backend
 - `index.html` — Vite HTML shell
 - `src/main.tsx` — React root bootstrap; imports `reset.css` → `tokens.css` → `global.css` BEFORE `App` so the three global sheets land first in the dist bundle and feature-local sibling sheets land after them (see CSS layout convention below)
-- `src/App.tsx` — inspection-page orchestration (data fetching, import/rescan mutations, selection state, pagination index, toast queue, last-rescan persistence)
-- `src/features/sessions/` — unified session feature surface (one folder for the whole list workflow):
-  - `SessionsView.tsx` (+ `SessionsView.css`) — section wrapper that owns drawer state and renders the filter bar, table, pagination strip, and Drawer
-  - `SessionsTable.tsx` (+ `SessionsTable.css`) — the table chrome, the inlined status-badge JSX (M6 retired the dedicated `StatusBadge` component), the per-row drawer-open wiring
-  - `SessionFilters.tsx` (+ `SessionFilters.css`) — chip groups, project autocomplete, search, sort selectors
-  - `SessionDetail.tsx` (+ `SessionDetail.css`) — drawer body and the streaming raw-preview block
+- `src/App.tsx` — split-pane shell + inspection-page orchestration (data fetching, import/rescan mutations, URL-driven selection via `useSelectedSession`, narrow-viewport mode, deep-link pulse, Esc handler with editable-control scope, pagination index, toast queue, last-rescan persistence, `bumpCacheEpoch` wire-up on Rescan + Import success)
+- `src/features/sessions/` — unified session feature surface (one folder for the whole list workflow + the right-pane session view + the per-tool parsers):
+  - List + filters: `SessionsView.tsx` (+ `.css`) — section wrapper rendering filter bar, table, and the sticky `.list-pane-footer` carrying `<Pagination>` above `<ActionBar>`; `SessionsTable.tsx` (+ `.css`) — the compact 4-essential table (Title with inline tool badge + muted mono rowKey + optional `(refresh)` marker, Status, Project, Updated) plus Select; the inlined status-badge JSX (Phase 4 M6 retired the dedicated `StatusBadge` component); `aria-current="true"` + `onSelectRow` wiring; `SessionFilters.tsx` (+ `.css`) — chip groups, project autocomplete, search, sort selectors, with `<details>` wrap below 1100 px
+  - Right-pane session view: `SessionView.tsx` (+ `.css` + `.test.tsx`) — four-state machine + four-tab shell; `SessionMetadata.tsx` (+ `.css`) — Metadata tab body (18 SessionRow fields + Copy path + subagent sidecar badge); `RawTab.tsx` (+ `.css`) — Raw tab body (256 KB / 20-line cap; byte-equivalent to the retired Phase 4 drawer raw preview); `TranscriptView.tsx` (+ `.css`) — Transcript tab body (chronological per-kind timeline); `SkimView.tsx` (+ `.css`) — Skim tab body (four block kinds); `BoundaryRow.tsx` (+ `.css`) — shared chapter-break component consumed by both Transcript and Skim
+  - URL hook: `useSelectedSession.ts` — `?session=<rowKey>` via `replaceState` + `popstate`
+  - Parsers + cache layer: `parsers/{types, claude_code, codex, buildSkim, index}.ts` — per-tool parsers (pure / total / synchronous) + registry-based dispatcher; `streamRawText.ts` — 5 MB capped fetch with cancel-on-abort; `useParsedSession.ts` — lazy fetch + LRU(5) cache + `bumpCacheEpoch` epoch invalidation + in-flight coalescing + `_resetForTests()` helper
   - Pure helpers: `mergeSessions.ts`, `filterSessions.ts`, `applyPagination.ts`, `relativeTime.ts`, `rawPreview.ts`, `lastRescan.ts`
   - Hooks: `useSessionFilters.ts` (+ persisted filter blob), `useToastQueue.ts`
   - `types.ts` — `SessionRow` UI-local join type + `isImportable` helper
 - `src/components/` — shared React primitives (each with a sibling `.css`):
   - `ActionBar.tsx` (+ `ActionBar.css`) — Rescan + Import buttons, last-rescan caption, hidden-by-filter caption, sticky modifier
-  - `Drawer.tsx` (+ `Drawer.css`) — native-`<dialog>`-backed shell with `focus-trap-react` (the documented escape-hatch package added in M4)
+  - `Tabs.tsx` (+ `Tabs.css`) — accessible Tabs primitive (ARIA `tablist` / `tab` / `tabpanel`, Left/Right/Home/End keyboard nav, selection-follows-focus, 1 px sliding indicator with unitless `scaleX`)
   - `Pagination.tsx` (+ `Pagination.css`) — page-size selector + Prev/Next + caption
   - `Toast.tsx` (+ `Toast.css`) — success / error / info kinds, Retry + Dismiss actions
   - `ScanErrorsCallout.tsx` — collapsed-when-empty scan-error surface
+- The Phase 4 `Drawer.tsx` + `SessionDetail.tsx` and their sibling CSS / tests were deleted at Phase 5 M6 per Resolved Decision #6. The `focus-trap-react@^11` escape-hatch package stays installed as an orphan (no live import; future modal needs may revive it).
 - `src/lib/api.ts` — typed HTTP client (every browser → backend HTTP call goes through this module)
 - `src/lib/config.ts` — frontend runtime config (`VITE_API_BASE` override)
 - `src/lib/contracts.ts` — re-export barrel for generated contract types

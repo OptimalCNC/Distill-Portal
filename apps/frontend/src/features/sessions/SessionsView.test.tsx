@@ -13,9 +13,10 @@
 //
 // M2b removed the M1b drawer-trigger tests (the imperative
 // `openDetail` ref handle + the drawer-body filter regression
-// guard). Drawer.tsx + SessionDetail.tsx remain on disk and still
-// have their own focused tests via direct import (Resolved Decision
-// #6); deletion is M6 work.
+// guard). Phase 5 M6 (2026-05-11) then deleted `Drawer.tsx` +
+// `SessionDetail.tsx` and their sibling CSS / test files from disk
+// per Resolved Decision #6 — the four-tab shell on `SessionView`
+// is the only remaining detail surface.
 import { afterEach, expect, mock, test } from "bun:test";
 import { cleanup, render } from "@testing-library/react";
 import { SessionsView } from "./SessionsView";
@@ -123,9 +124,9 @@ test("SessionsView M2b: NO <dialog> element renders inside the SessionsView rend
   // The M1b modal drawer was removed in M2b; selection now flows
   // through the right-pane SessionView with its four-tab shell.
   // SessionsView's render tree must NOT contain any <dialog>
-  // elements (the Phase-4 Drawer + SessionDetail still live on
-  // disk per Resolved Decision #6, but are no longer mounted by
-  // any reachable component).
+  // elements (the Phase-4 Drawer + SessionDetail files were deleted
+  // from disk at Phase 5 M6 per Resolved Decision #6, so no
+  // reachable component can mount one).
   const { container } = harness();
   expect(container.querySelector("dialog")).toBeNull();
   expect(container.querySelector("dialog.drawer")).toBeNull();

@@ -350,6 +350,83 @@ test("SessionView ready: Skim → Transcript → Skim keeps the SkimView panel R
   }
 });
 
+test("SessionView ready: native <details> open state inside #panel-skim survives a full Skim → Transcript → Skim tab cycle (M5 follow-up; M6 close)", () => {
+  // Phase 5 M6 closure obligation (deferred follow-up from M5 normal
+  // Claude reviewer's round-1 soft note #a): assert that the keep-
+  // mounted contract on the SkimView panel preserves NATIVE
+  // `<details>` open state across a full tab cycle. The two M5
+  // composition tests (SkimView.test.tsx:985 — details survives a
+  // 'now' prop change; SessionView.test.tsx:297 — #panel-skim element
+  // identity stable across Skim↔Transcript↔Skim toggle) prove this
+  // by composition. This test asserts the contract end-to-end on a
+  // single DOM by INJECTING a `<details>` into the live #panel-skim
+  // subtree, toggling it open, cycling Skim→Transcript→Skim, and
+  // verifying both the element reference and the `open` attribute
+  // survive — proves React did not unmount the panel subtree (which
+  // would have destroyed the injected node).
+  suppressActWarnings();
+  try {
+    globalThis.fetch = mock(async () =>
+      new Response("", { status: 200 }),
+    ) as unknown as typeof globalThis.fetch;
+    const row = buildRow({ storedSessionUid: null });
+    const { container } = render(
+      <SessionView
+        state="ready"
+        now={NOW}
+        row={row}
+        showBackToList={false}
+        onBackToList={NOOP}
+        onClearSelection={NOOP}
+        onTryRescan={NOOP}
+      />,
+    );
+    // Activate Skim.
+    act(() => {
+      (container.querySelector("#tab-skim") as HTMLButtonElement).click();
+    });
+    const skimPanel = container.querySelector(
+      "#panel-skim",
+    ) as HTMLElement;
+    expect(skimPanel).not.toBeNull();
+    // Inject a native <details> child into the Skim panel and toggle
+    // its open state. If React unmounted the panel subtree on tab
+    // switch, this injected node would disappear.
+    const injected = document.createElement("details");
+    injected.setAttribute("data-test-injected", "1");
+    const summary = document.createElement("summary");
+    summary.textContent = "test injection";
+    injected.appendChild(summary);
+    skimPanel.appendChild(injected);
+    injected.open = true;
+    expect(injected.open).toBe(true);
+    // Switch to Transcript.
+    act(() => {
+      (
+        container.querySelector("#tab-transcript") as HTMLButtonElement
+      ).click();
+    });
+    // Skim panel still in DOM (hidden) and the injected <details>
+    // survives untouched.
+    const injectedAfterAway = container.querySelector(
+      "#panel-skim [data-test-injected]",
+    ) as HTMLDetailsElement | null;
+    expect(injectedAfterAway).toBe(injected);
+    expect(injectedAfterAway?.open).toBe(true);
+    // Switch back to Skim.
+    act(() => {
+      (container.querySelector("#tab-skim") as HTMLButtonElement).click();
+    });
+    const injectedAfterReturn = container.querySelector(
+      "#panel-skim [data-test-injected]",
+    ) as HTMLDetailsElement | null;
+    expect(injectedAfterReturn).toBe(injected);
+    expect(injectedAfterReturn?.open).toBe(true);
+  } finally {
+    restoreActWarnings();
+  }
+});
+
 test("SessionView ready: tabIndex=0 on active Skim/Transcript/Raw panels; NOT on Metadata", () => {
   suppressActWarnings();
   try {

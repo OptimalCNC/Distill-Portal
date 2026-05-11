@@ -77,11 +77,15 @@ import { useToastQueue } from "./features/sessions/useToastQueue";
 import { readLastRescan, writeLastRescan } from "./features/sessions/lastRescan";
 import { useSelectedSession } from "./features/sessions/useSelectedSession";
 import { SessionView } from "./features/sessions/SessionView";
-// M3b: bumpCacheEpoch clears the per-session parser cache + aborts
-// in-flight fetches whenever a Rescan or Import succeeds. Spec line
-// 466 + Resolved Decision #13 (line 1158): cached parsed payloads are
-// invalidated whenever a Rescan or Import-success has changed the
-// underlying raw bytes.
+/**
+ * M3b: `bumpCacheEpoch` clears the per-session parser cache + aborts
+ * in-flight fetches whenever a Rescan or Import succeeds. Spec line
+ * 466 + Resolved Decision #13 (spec line 1158): cached parsed
+ * payloads are invalidated whenever a Rescan or Import-success has
+ * changed the underlying raw bytes. Call-site invariant: success
+ * branch ONLY, after `pushToast`, before `await refetchAll()`; never
+ * in `finally`, never on error path.
+ */
 import { bumpCacheEpoch } from "./features/sessions/useParsedSession";
 
 export function App() {

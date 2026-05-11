@@ -2,10 +2,10 @@
  * Feature-local CSS for the Phase-5 Metadata tab body.
  *
  * Imported by `SessionMetadata.tsx` (sibling-import convention).
- * The Phase-4 drawer-body sheet (`SessionDetail.css`) remains on
- * disk through M5 per Resolved Decision #6 and is no longer
- * reachable from the running app — these rules are a NEW extraction
- * with tab-panel-body chrome (NOT drawer chrome).
+ * The Phase-4 drawer-body sheet previously lived in
+ * `SessionDetail.css`; that file was deleted at Phase 5 M6 per
+ * Resolved Decision #6. These rules are a NEW extraction with
+ * tab-panel-body chrome (NOT drawer chrome).
  *
  * Selectors owned here:
  *   - `.session-metadata`                → tab-body wrapper

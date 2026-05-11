@@ -19,7 +19,8 @@
 // marker (line 2). The dropped Phase-4 columns (Tool / Stored Copy /
 // Source Path) are now surfaced by the M2b Metadata tab inside
 // `SessionView` on the right pane (no drawer; the Phase-4 `<Drawer>`
-// is retained as DEAD-BUT-TESTED scaffolding only).
+// + `<SessionDetail>` files were deleted at Phase 5 M6 per Resolved
+// Decision #6).
 //
 // Per spec, a row whose `statusConflict` is true gets a small
 // "(refresh)" affordance inside the Title cell — telegraphing the

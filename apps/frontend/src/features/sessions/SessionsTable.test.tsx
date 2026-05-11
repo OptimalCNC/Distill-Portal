@@ -253,8 +253,9 @@ test("SessionsTable: M1b header renders 5 columns (Select + Title + Status + Pro
   // The M1b column compression: 5 essentials only. The dropped Phase-4
   // columns (Tool / Stored Copy / Source Path) must not appear in
   // `<thead>` or `<tbody>` — staleness + stored-uid + tool surface
-  // through the still-mounted Phase-4 `<Drawer>` until M2's Metadata
-  // tab takes over.
+  // through the M2b Metadata tab on the right-pane SessionView
+  // (the Phase-4 `<Drawer>` + `<SessionDetail>` were deleted at
+  // Phase 5 M6 per Resolved Decision #6).
   const rows: SessionRow[] = [
     buildRow({
       rowKey: "claude_code:m1b-1",

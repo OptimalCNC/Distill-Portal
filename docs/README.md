@@ -13,14 +13,14 @@ This file is both the docs entry point and the repo map.
 | Change session storage behavior | [`playbooks/modify-session-store.md`](playbooks/modify-session-store.md) |
 | Run or test locally | [`dev-commands.md`](dev-commands.md) |
 | Check dependency boundaries | [`dependency-rules.md`](dependency-rules.md) |
-| Understand a feature | [`features/inspection-surface.md`](features/inspection-surface.md), [`features/session-store.md`](features/session-store.md) |
+| Understand a feature | [`features/inspection-surface.md`](features/inspection-surface.md), [`features/session-view.md`](features/session-view.md), [`features/session-store.md`](features/session-store.md) |
 | Understand product + architecture intent | [`../PRD.md`](../PRD.md), [`../ARCHITECTURE.md`](../ARCHITECTURE.md) |
 | Audit historical planning or delivery | [`../working/README.md`](../working/README.md), [`../progress/README.md`](../progress/README.md) |
 
 ## Apps
 
 - `apps/backend` — Rust backend binary: runtime wiring, scan/ingest/store orchestration, machine-consumable HTTP routes. See [`../apps/backend/README.md`](../apps/backend/README.md).
-- `apps/frontend` — Bun + Vite + React + TypeScript inspection UI. The unified session list (table, filters, view, drawer body, merge / filter / sort / paginate / persistence helpers) lives under `apps/frontend/src/features/sessions/`; shared React primitives (action bar, scan-errors callout, native-`<dialog>`-backed drawer shell, pagination strip, toast) live under `apps/frontend/src/components/`. CSS is co-located: each `.tsx`/`.ts` imports its sibling `.css` (no CSS Modules, no CSS-in-JS, no Tailwind); `src/styles/` carries only the three global sheets `reset.css`, `tokens.css`, `global.css`. See [`../apps/frontend/README.md`](../apps/frontend/README.md).
+- `apps/frontend` — Bun + Vite + React + TypeScript inspection UI. Split-pane master-detail layout: list panel (left, 300–380 px) + session pane (right, persistent, four-tab shell — Transcript / Skim / Raw / Metadata). The unified session list (table, filters, view, session pane, per-tool parsers + skim builder, URL-synced selection, merge / filter / sort / paginate / persistence helpers) lives under `apps/frontend/src/features/sessions/`; per-tool parsers (`apps/frontend/src/features/sessions/parsers/`) consume NDJSON and emit `ParsedSession` for the Transcript + Skim tabs. Shared React primitives (action bar, scan-errors callout, accessible tabs primitive, pagination strip, toast) live under `apps/frontend/src/components/`. CSS is co-located: each `.tsx`/`.ts` imports its sibling `.css` (no CSS Modules, no CSS-in-JS, no Tailwind); `src/styles/` carries only the three global sheets `reset.css`, `tokens.css`, `global.css`. See [`../apps/frontend/README.md`](../apps/frontend/README.md).
 
 ## Components
 
@@ -36,6 +36,7 @@ Reusable, app-independent crates. Each owns its own README:
 ## Feature Guides
 
 - [`features/inspection-surface.md`](features/inspection-surface.md) — page ownership, API touchpoints, and tests for the inspection workflow
+- [`features/session-view.md`](features/session-view.md) — four-tab session view, parser registry, stream caps, expansion semantics
 - [`features/session-store.md`](features/session-store.md) — storage ownership, backend touchpoints, and tests for persisted session behavior
 
 ## Playbooks

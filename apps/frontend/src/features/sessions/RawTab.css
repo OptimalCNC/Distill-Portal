@@ -2,10 +2,10 @@
  * Feature-local CSS for the Phase-5 Raw tab body.
  *
  * Imported by `RawTab.tsx` (sibling-import convention). The Phase-4
- * raw-preview rules in `SessionDetail.css` remain on disk through
- * M5 per Resolved Decision #6 and are no longer reachable from the
- * running app — these rules are a NEW extraction with tab-panel-
- * body chrome (NOT drawer chrome).
+ * raw-preview rules previously lived in `SessionDetail.css`; that
+ * file was deleted at Phase 5 M6 per Resolved Decision #6. These
+ * rules are a NEW extraction with tab-panel-body chrome (NOT
+ * drawer chrome).
  *
  * Selectors owned here:
  *   - `.raw-tab`               → tab-body wrapper
