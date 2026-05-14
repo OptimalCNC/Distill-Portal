@@ -1,0 +1,184 @@
+External non-Claude reviewer (codex) for distill-portal post-Phase-5 roadmap (Phases 6 through 9).
+
+ROLE: You are a senior software architect reviewing a 4-phase roadmap proposal. Your job is to:
+1. Sharpen the scope of each phase so we know exactly what's in / out.
+2. Surface hidden risks, ordering issues, hidden dependencies, or scope creep.
+3. Offer insightful ideas — especially for Phase 9 (Job Center + execution model), which is the foundational refactor.
+4. Challenge ordering: are Phases 6 / 7 / 8 / 9 in the right order? Could parts be deferred or merged?
+5. Identify what should NOT be in each phase (out-of-scope items that smell like they want to creep in).
+
+We are NOT asking for line-by-line spec drafting. We want an architectural pre-mortem of the roadmap.
+
+## Repo context (you have full sandbox; verify any of this by reading source)
+
+- Rust workspace under `apps/backend/`, `components/*/`. Frontend Bun + Vite + React + TS under `apps/frontend/`.
+- Phase 5 closed at SHA `a08ee79` (impl) + `076b119` (log). All M1-M6 milestones landed. Tests: 531 pass / 0 fail / 1752 expects / 30 files. Build CSS 34.81 kB / JS 265.88 kB.
+- Frontend is now split-pane master-detail. Right pane has four tabs: Transcript / Skim / Raw / Metadata.
+- Per-tool parsers live at `apps/frontend/src/features/sessions/parsers/`. They consume NDJSON and emit `ParsedSession` for the Transcript + Skim tabs.
+- Backend `raw-session-store` (SQLite + blob store) owns persisted sessions. `collector-runtime` owns source discovery + parsing. `ui-api-contracts` is the source of truth for Rust → TS bindings (ts-rs).
+- Sessions today are identified by `session_key` like `claude_code:546104ba-031c-46f2-9b24-36b147c6b2f6`. There is no `display_title` field yet. Frontend displays the raw key in the list panel.
+- Existing endpoints: POST /api/v1/import (synchronous; blocks until done), POST /api/v1/rescan (synchronous), GET /api/v1/sessions, GET /api/v1/sessions/:id/raw, GET /api/v1/source-sessions. There is NO job queue today.
+- The frontend "Import selected" button is `disabled` while the request is in flight; success/failure surfaces as a toast (bottom-right). The user reports this as unresponsive UX.
+- Auto-mode workflows in this repo follow: planner → UI/UX gate → design loop → developer → 3-reviewer rule → two-commit landing.
+- Bun-first invariant: no `jest.fn()`, no `child_process`, no `node:fs` in `apps/frontend/src/`.
+- Token isolation invariant: 24 hex literals, 83 CSS custom properties.
+- focus-trap-react is orphan-installed (kept; cost negligible).
+
+## The 4-phase proposal under review
+
+### Phase 6 — Title model + display layer (size: S)
+
+**Goal**: Sessions today display their full `session_key` (e.g., `claude_code:546104ba-031c-46f2-9b24-36b147c6b2f6`) as title. This is ugly and unscannable. Prep the data model for future AI summarization (in Phase 10+).
+
+**Scope**:
+- Backend: add `display_title TEXT` (NOT NULL with default) and `summary TEXT NULL` columns to the `sessions` table in raw-session-store. Populate `display_title` on ingest via heuristic (proposed: first user message truncated to 60 chars, with fallback to short session_key tail).
+- `ui-api-contracts`: expose `display_title` + `summary` in the `Session` payload.
+- Frontend: list panel renders `display_title` in the row; full `session_key` moves to the Metadata tab (already there). Tooltip on truncate.
+- NO AI summarization. The `summary` column is reserved for Phase 10+. Heuristic only for `display_title`.
+
+**Out of scope**: AI summarization logic, summary backfill jobs, summary UI surfaces, any title-editing UI.
+
+**Open questions**:
+1. Heuristic for `display_title`: first user message vs. session_key tail vs. tool-specific (Claude Code has a `cwd` we could include)?
+2. Migration story for existing imported sessions: backfill via rescan, lazy backfill on read, or one-shot migration command?
+
+### Phase 7 — Transcript rendering overhaul (size: M-L)
+
+**Goal**: Fix items 2 + 3 from the user's punch list:
+- (Item 2) Parser warnings are currently surfaced loosely. Rule: "for un-important messages, don't hide them silently. You can collapse them, but allow user to zoom into it."
+- (Item 3) Group consecutive same-type items. Multiple tool calls in a row should NOT each get a full card — they should be visually unified.
+
+**Scope**:
+- Enumerate all parser warning types (sub-task: spelunk `apps/frontend/src/features/sessions/parsers/` to list them).
+- Design "collapse-with-inspect" UX: low-signal messages are collapsed by default with a chevron / "Show details" affordance; expanded reveals raw payload.
+- Group consecutive same-type blocks (esp. consecutive tool calls). Reference: `github.com/OptimalCNC/agents-runner` (user hint; not authoritative, just inspirational).
+- Update TranscriptView + parsers as needed. Stay within the existing token + hex budget.
+
+**Out of scope**: Skim view changes (Phase 5 just landed it). Raw view changes (Phase 8). Backend parser changes (parsers live in frontend per Phase 5 architecture).
+
+**Open questions**:
+1. Is "consecutive same-type" purely visual grouping, or should we collapse the group itself by default and only show counts (e.g., "12 tool calls")?
+2. What's "unimportant"? System messages? Tool-result echoes? Empty thinking blocks? Need a concrete taxonomy.
+
+### Phase 8 — Raw view polish (size: S-M)
+
+**Goal**: Raw tab currently renders JSONL line-by-line as plain text. Item 4: render JSON nicely. Reference: https://json-render.dev/docs.
+
+**Scope**:
+- Pretty JSON per line with collapse/expand, syntax highlight, copy buttons.
+- Preserve streaming line cap (256 KB) and the existing caption.
+- Evaluate `json-render.dev` as inline dep (cost vs. value vs. our existing hex/token invariants).
+
+**Out of scope**: Transcript / Skim / Metadata changes. Streaming protocol changes.
+
+**Open questions**:
+1. Is json-render.dev a runtime dep or an inspiration? (Their bundle size + license + token-fit matter.)
+2. Should "copy" copy the raw JSON line or the formatted version?
+
+### Phase 9 — Job Center + execution model (size: L, foundational)
+
+**Goal**: Replace synchronous Import / Rescan endpoints with a job model. Make all long-running ops idempotent, observable, and cancellable. Foundation for future Phase 10+ summarization.
+
+**User's original framing** (from message):
+- Import / rescan / summarize / re-summarize are all "jobs".
+- Jobs are idempotent: re-submitting same job = no-op or returns existing.
+- "Force re-summarize" exists to override idempotency.
+- Job center is a UX surface to track all jobs.
+
+**Coordinator's refinements** (what user is being asked to evaluate):
+- Idempotency via params-hash, NOT via a special op. `summarize_session{ id, force: true }` has different params hash than `summarize_session{ id, force: false }` → naturally distinct jobs. No special-case code.
+- Idempotency TTL: for ops whose inputs can change (e.g., re-import after a rescan with new data), tie the idempotency key to the source content hash. Otherwise import would never re-run after data drift.
+- SSE (not WebSocket) for live status. Simpler, one-way, plays well with our Vite dev proxy.
+- Explicit cancel API. Worker polls a cancel flag.
+- Defer: job dependency graphs. Add only if needed.
+
+**Proposed scope**:
+- Backend: new `components/jobs/` crate. `jobs` table (id, kind, params_hash, status, created_at, started_at, finished_at, result_json, error_json, source_version_hash). Workers per kind. POST /api/v1/jobs, GET /api/v1/jobs, GET /api/v1/jobs/:id, DELETE /api/v1/jobs/:id (cancel), SSE /api/v1/jobs/:id/events.
+- Frontend: `JobCenter` panel (slide-out from right pane edge? Modal? Inline?), `JobBadge` in action bar with running count.
+- Refactor Import + Rescan to submit jobs. Direct synchronous endpoints retired (or kept as thin facades?).
+- Job kinds in Phase 9: `import_sessions`, `rescan_sources`. NOT `summarize_session` — that lands in Phase 10.
+
+**Out of scope**: Summarization jobs (Phase 10). Multi-user / multi-worker concurrency beyond what SQLite naturally serializes. Distributed queue (we're a single-binary backend).
+
+**Open questions**:
+1. New crate `components/jobs/` vs. fold into `raw-session-store`? Coordinator leans toward new crate (clean ownership).
+2. SSE per-job vs. SSE single firehose channel for all jobs? Per-job is simpler, firehose is fewer connections.
+3. Status transitions: pending → running → succeeded / failed / cancelled. Anything missing?
+4. Worker model: tokio task per kind, single-threaded? Worker pool? Persistent state across backend restarts?
+5. How to handle a backend crash mid-job? Resume on next boot vs. mark as `interrupted` and require re-submit?
+6. Idempotency window: forever? 24h? Per-kind config? "Already imported" is forever; "rescan completed 5 minutes ago" might be replayable after 1 minute.
+7. UI: where does Job Center live? Slide-out drawer (we just retired the modal Drawer for SessionDetail, so the pattern is gone but the implementation primitives may still be useful)? Fixed bottom bar? Separate route?
+8. Optimistic UI: should clicking Import IMMEDIATELY add a job card to the JobCenter (optimistic) and only flip to error if the POST fails? Or wait for the server to acknowledge?
+
+## What we want from you (codex)
+
+For EACH phase (6, 7, 8, 9):
+
+1. **Scope clarity**: Is the scope clear enough that an implementer can start? What's ambiguous? What's the smallest concrete change you'd recommend to sharpen scope?
+2. **Hidden dependencies**: Does this phase silently depend on another phase or another part of the system that isn't listed?
+3. **Risks**: What's the most likely thing to go wrong? What's the most likely thing to over-scope?
+4. **Out-of-scope discipline**: Are there items that smell like they want to creep in? Call them out so the spec can ban them.
+5. **One bold idea**: One insightful idea per phase that the coordinator probably missed.
+
+For PHASE 9 SPECIFICALLY (deeper treatment):
+
+A. **Idempotency model**: Is params-hash sufficient? When does it fail? Real-world cases where this design breaks?
+B. **Source-version key for idempotency TTL**: Is this the right mechanism for "data changed → job should run again"? Alternatives?
+C. **Cancellation**: Cooperative cancel (worker polls flag) vs. hard abort (tokio task drop). What are the trade-offs for OUR specific ops (import, rescan)?
+D. **Job persistence vs. ephemerality**: We're a single-binary backend. Are jobs persisted across backend restarts? If yes, how do we handle a running job whose worker crashed?
+E. **UX placement**: Where should JobCenter live in the UI? You can look at the existing layout in `apps/frontend/src/App.tsx` + `apps/frontend/src/features/sessions/` to ground this.
+F. **Status taxonomy**: Are `pending / running / succeeded / failed / cancelled` enough? What about `interrupted`, `superseded`, `paused`?
+G. **One alternative architecture**: If you DON'T like the job-queue model, what's a simpler design that still solves the user's UX complaint? (E.g., optimistic UI + per-resource status endpoints; SSE-stream of any resource's progress without a job table at all.)
+H. **What we should NOT do in Phase 9 (defer to Phase 9.1)**: Where would you split this if it gets too big?
+
+For CROSS-PHASE concerns:
+
+X1. **Ordering**: Is 6 → 7 → 8 → 9 right? Or should something move? (E.g., Phase 9 first because everything else can ride on the job foundation?)
+X2. **Coupling**: Any phase that secretly depends on another?
+X3. **Total scope sanity check**: Is this 4-phase plan realistic, or are we biting off too much per phase?
+
+## Output format
+
+```
+## Phase 6 review
+- Scope clarity: ...
+- Hidden dependencies: ...
+- Risks: ...
+- Out-of-scope discipline: ...
+- Bold idea: ...
+
+## Phase 7 review
+[same structure]
+
+## Phase 8 review
+[same structure]
+
+## Phase 9 review
+- Scope clarity: ...
+- Hidden dependencies: ...
+- Risks: ...
+- Out-of-scope discipline: ...
+- Bold idea: ...
+
+### Phase 9 deep dive
+- A. Idempotency model: ...
+- B. Source-version key: ...
+- C. Cancellation: ...
+- D. Persistence: ...
+- E. UX placement: ...
+- F. Status taxonomy: ...
+- G. Alternative architecture: ...
+- H. Phase 9.1 split: ...
+
+## Cross-phase
+- X1. Ordering: ...
+- X2. Coupling: ...
+- X3. Scope sanity: ...
+
+## Top 3 recommended changes to the roadmap (prioritized)
+1. ...
+2. ...
+3. ...
+```
+
+Be opinionated. The coordinator will weigh your input against the user's intent and other signals; you don't need to hedge. Cite file:line when grounding in actual repo state. Begin review now.
