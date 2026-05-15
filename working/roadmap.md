@@ -31,13 +31,14 @@ Legend: ✅ delivered · 📐 frozen spec (not yet implemented) · 🗓 planned 
 - **Scope**: Split-pane master-detail. Compact 4-column list on the left; right-pane four-tab `SessionView` (Transcript / Skim / Raw / Metadata). Per-tool client-side parsers (Claude Code + Codex) emit a typed `Message` stream and four `SkimBlock` kinds. URL-synced selection via History API. Archive-room aesthetic.
 - **Notable**: Retired modal drawer; per-tool parsers live frontend-side; `oversized_user_message` block never summarized; native `<details>` for browser-managed open state. Tests: 531 pass / 0 fail / 1752 expects.
 
+### ✅ Phase 6 — Title Resolution Provenance
+- **Closed**: 2026-05-15 at `9d1d09d` (M1 impl) + `3e9d82e` (M1 log) + `dbd31c5` (M2 impl) + `e78c2b1` (M2 log)
+- **Scope**: `TitleSource` enum (`custom` / `first_user_message` / `slug` / `generated`; last reserved, never emitted) + `Option<TitleSource>` on `SourceSessionView` and `StoredSessionRecord`. Existing `title` resolution priority unchanged; provenance is purely additive. v2 SQLite migration adds nullable `title_source TEXT` to `sessions`; legacy rows surface as `None` until rescan + re-ingest. Parsers emit `(title, title_source)` from the same code path; ingest enforces `title.is_some() == title_source.is_some()` via `debug_assert_eq!`. Frontend: list-panel title cell CSS-truncates with full-text on the native HTML `title=` attribute; Metadata tab gains a terse caption row (Origin / Opening message / Path slug / Generated / Unknown).
+- **Notable**: First phase to fire a documented spec-vs-code-typo exception (4 instances, all in M1); single shared `TitleSource.ts` ts-rs export serves both parser-direct and SQL-round-trip views; no new runtime deps, no new design tokens, no new hex literals — hex 24 / tokens 83 invariant preserved. Eight-doc sweep complete (3 M1 + 5 M2). Codex external reviewer hung at default `xhigh` reasoning effort during M1; switched to `medium` for the remainder of the phase — guidance carried forward for Phase 7+. Tests: 538 pass / 0 fail / 1786 expects (frontend); cargo workspace fully green.
+
 ## Frozen (spec landed, implementation pending)
 
-### 📐 Phase 6 — Title Resolution Provenance
-- **Spec frozen**: 2026-05-13 at `09389dc` (`working/phase-6.md`)
-- **Scope**: Adds `Option<TitleSource>` field on `SourceSessionView` + `StoredSessionRecord`. Enum values: `custom` / `first_user_message` / `slug` / `generated` (last reserved). Existing `title` resolution priority unchanged; phase is purely additive on the provenance signal. Frontend truncates at render time via CSS + native `title=` tooltip; Metadata tab gains a terse caption row (Origin / Opening message / Path slug / Generated / Unknown).
-- **Milestones**: M1 backend (contract + migration + parser emission) → M2 frontend (truncation + caption).
-- **Out of scope**: AI title generation, user-editable titles, separate `summary` column.
+_(none — Phase 7 spec not yet drafted)_
 
 ## Upcoming (spec not yet drafted; agreed ordering)
 
