@@ -55,16 +55,14 @@
 
 ## Current Snapshot
 
-- Phase 5 closed cleanly; protected-paths freeze from Phase 5 is now released ONLY for the files listed under `protected_exception_paths` above.
-- Phase 6 spec landed; no implementation work has begun.
-- No design artifacts required (Resolved Decision #10).
-- Codex external reviewer verified available.
+- **Phase 6 CLOSED on 2026-05-15** — all 11 acceptance criteria satisfied. M1 landed at impl `9d1d09d` + log `3e9d82e`; M2 landed at impl `dbd31c5` + this log-update commit. Eight-doc sweep complete (3 M1 + 5 M2). All 8 verification commands green across both milestones. Three-reviewer rule honored on both chunks.
+- Phase 5 protected-paths freeze remains in effect for everything outside the Phase 6 thaw list. Phase 6 thaw is now closed.
+- No design artifacts produced (Resolved Decision #10 disposed of UI/UX gate phase-wide).
+- Ready for Phase 7+ planning (Transcript / Skim / Raw rendering changes per spec §Out of Scope).
 
 ## Active Plan
 
-- **Current chunk**: M1 — single-shot backend + contract + parser emission + ingest plumbing + 3-doc partial sweep, per planner recommendation 2026-05-14.
-- **Owner**: developer subagent (dispatch pending immediately after this log update).
-- **Status**: planner closed; UI/UX gate disposed (not required, Resolved Decision #10); developer dispatch next.
+- **Phase 6 complete.** No active chunks remain. This progress-log commit is the closing entry.
 
 ### Planner Output Summary (2026-05-14)
 
@@ -95,22 +93,23 @@ Critical risks per planner:
   - `ingest-service` enforces invariant `title.is_some() == title_source.is_some()` via `debug_assert_eq!` ✓
   - Backend integration tests assert the new field appears in `/api/v1/sessions` + `/api/v1/source-sessions` ✓
   - DoD: `cargo check --workspace`, `cargo test --workspace`, `cargo test -p distill-portal-ui-api-contracts --features ts-bindings` all green ✓; migration up + down path documented in this log ✓
-- **M2 — Frontend rendering + docs** (pending; depends on M1 contracts)
-  - `SessionsTable.{tsx,css}` render-time CSS truncation + `title=` HTML attribute
-  - `SessionMetadata.{tsx,css}` one new `<dt>`/`<dd>` pair per spec §Frontend Rendering table
-  - `types.ts` extends `SessionRow` with `titleSource: TitleSource | null`
-  - `contracts.ts` re-exports generated `TitleSource`
-  - `mergeSessions.ts` carries the field through the union
-  - Eight-doc sweep per spec §Documentation
-  - Final progress-log entry closing Phase 6
-  - DoD: `bun run test`, `bunx tsc --noEmit`, `bun run build`, `bun run test:e2e` all green; hex count `24`; token count `83`; eight docs updated
+- **M2 — Frontend rendering + docs** (CLOSED at impl `dbd31c5` on 2026-05-15; this log-update commit closes Phase 6)
+  - `SessionsTable.tsx` render-time `title=` HTML attribute; CSS truncation rule was already in place at `SessionsTable.css:171-178` from Phase 5 ✓
+  - `SessionMetadata.tsx` one new `<dt>`/`<dd>` pair per spec §Frontend Rendering table; `titleSourceCaption` pure helper ✓
+  - `types.ts` extends `SessionRow` with `titleSource: TitleSource | null` (camelCase) ✓
+  - `lib/contracts.ts` re-exports generated `TitleSource` ✓
+  - `mergeSessions.ts` carries the field through both / source_only / stored_only paths ✓
+  - Eight-doc sweep complete (3 M1 + 5 M2) ✓
+  - Final progress-log entry closing Phase 6 (this entry + the next two-commit landing) ✓
+  - DoD: `bun run test`, `bunx tsc --noEmit`, `bun run build`, `bun run test:e2e` all green ✓; hex count `24` ✓; token count `83` ✓; eight docs updated ✓
 
 ## Completed Work Log
 
 _(append-only; entries added as chunks close)_
 
 - 2026-05-14 — Progress log initialized; invocation block resolved; codex availability confirmed (codex-cli 0.130.0); Phase 6 spec frozen at `09389dc`.
-- 2026-05-15 — M1 implementation landed at `9d1d09d` on `main`. 23 files changed (+767 / −24). 21 modified files + 2 new (`components/raw-session-store/tests/title_source_roundtrip.rs`, `components/ui-api-contracts/bindings/TitleSource.ts`). All 8 verification commands green: `cargo check --workspace` clean; `cargo test --workspace` green; `cargo test -p distill-portal-ui-api-contracts --features ts-bindings` 1 passed; `cargo test -p distill-portal-collector-runtime --test parsers` 8 passed; `cargo test -p distill-portal-raw-session-store` 4 passed (1 unit + 3 integration); `cargo test -p distill-portal-ingest-service` 7 passed (5 propagation + 2 `#[should_panic]`); `cargo test -p distill-portal-backend --test http_api` 6 passed; `cargo test -p distill-portal-e2e --test inspection_surface` 1 passed. Codex independently re-ran cargo check + test --workspace + ts-bindings, all green. Two spec-vs-code-typo extensions (apps/backend/src/app.rs 4-line constructor edit; components/ingest-service/Cargo.toml [dev-dependencies] for AC#5 tests) accepted under documented doctrine. Migration up-path: v2 ALTER TABLE adds `title_source TEXT` column; legacy v1 DBs auto-migrate via SqliteStore::open with rows reading `Option::None` until rescan. Migration manual down recipe: `ALTER TABLE sessions DROP COLUMN title_source;` on SQLite ≥ 3.35; for older SQLite use the standard copy/swap pattern (`CREATE TABLE sessions_new (...without title_source...); INSERT INTO sessions_new SELECT all-columns-except-title_source FROM sessions; DROP TABLE sessions; ALTER TABLE sessions_new RENAME TO sessions;` then re-apply foreign keys + indexes). Down recipe is informational only — Resolved Decision #8 says rescan-to-repopulate is the supported path, not downgrade.
+- 2026-05-15 — M1 implementation landed at `9d1d09d` on `main`. 23 files changed (+767 / −24). 21 modified files + 2 new (`components/raw-session-store/tests/title_source_roundtrip.rs`, `components/ui-api-contracts/bindings/TitleSource.ts`).
+- 2026-05-15 — M2 implementation landed at `dbd31c5` on `main`. Phase 6 closes with this delivery. 23 files changed (+419 / −23). 22 modified frontend/test/doc files + 1 nit-fix doc (the 22 above counted SessionMetadata.css + inspection.spec.ts which received both substantive edits and the stale-comment fixes): 5 frontend source files (`SessionMetadata.tsx`, `SessionsTable.tsx`, `types.ts`, `mergeSessions.ts`, `lib/contracts.ts`), 9 frontend test files (`SessionMetadata.test.tsx` +5 caption tests, `SessionsTable.test.tsx` +1 title-attribute contract test, `mergeSessions.test.ts` +1 propagation test + factory updates, `App.test.tsx` 28-fixture sweep, plus 5 sibling test files swept for fixtures only — `RawTab.test.tsx`, `SessionView.test.tsx`, `SessionsView.test.tsx`, `SkimView.test.tsx`, `TranscriptView.test.tsx`, `filterSessions.test.ts`, `useParsedSession.test.ts`), 1 e2e (`inspection.spec.ts` +1 caption assertion), 5 M2 docs (`docs/README.md`, `docs/features/inspection-surface.md`, `docs/features/session-view.md`, `docs/playbooks/modify-frontend-page.md`, `apps/frontend/README.md`), and 2 stale-comment fixes (`SessionMetadata.css:14` "18-field grid" → "19-field grid"; `inspection.spec.ts:160` "one of the 18 fields" → "one of the 19 fields" — Phase 6 added the title-source caption row). All 8 verification commands green: `bun run test` 538 pass / 0 fail / 1786 expect() across 30 files; `bunx tsc --noEmit` clean; `bun run build` 266.78 kB / 80.07 kB gzip (Phase-5 envelope preserved); `bun run test:e2e` 2 passed (inspection 3.6s + transcript-perf 3.0s); hex count 24 (unchanged); token count 83 (unchanged); `cargo check --workspace` clean (M1 invariants preserved); `cargo test --workspace` all green. Eight-doc sweep complete (3 M1 + 5 M2). E2E lands on the "Origin" branch because the Claude Code fixture ships a `custom-title` record (verified at `tests/fixtures/claude_code/sample_session.jsonl:4`). All 8 verification commands green: `cargo check --workspace` clean; `cargo test --workspace` green; `cargo test -p distill-portal-ui-api-contracts --features ts-bindings` 1 passed; `cargo test -p distill-portal-collector-runtime --test parsers` 8 passed; `cargo test -p distill-portal-raw-session-store` 4 passed (1 unit + 3 integration); `cargo test -p distill-portal-ingest-service` 7 passed (5 propagation + 2 `#[should_panic]`); `cargo test -p distill-portal-backend --test http_api` 6 passed; `cargo test -p distill-portal-e2e --test inspection_surface` 1 passed. Codex independently re-ran cargo check + test --workspace + ts-bindings, all green. Two spec-vs-code-typo extensions (apps/backend/src/app.rs 4-line constructor edit; components/ingest-service/Cargo.toml [dev-dependencies] for AC#5 tests) accepted under documented doctrine. Migration up-path: v2 ALTER TABLE adds `title_source TEXT` column; legacy v1 DBs auto-migrate via SqliteStore::open with rows reading `Option::None` until rescan. Migration manual down recipe: `ALTER TABLE sessions DROP COLUMN title_source;` on SQLite ≥ 3.35; for older SQLite use the standard copy/swap pattern (`CREATE TABLE sessions_new (...without title_source...); INSERT INTO sessions_new SELECT all-columns-except-title_source FROM sessions; DROP TABLE sessions; ALTER TABLE sessions_new RENAME TO sessions;` then re-apply foreign keys + indexes). Down recipe is informational only — Resolved Decision #8 says rescan-to-repopulate is the supported path, not downgrade.
 
 ## UI/UX Design Log
 
@@ -189,12 +188,55 @@ Notes: none
 
 UI/UX gate decision was recorded as "not required" per Resolved Decision #10. Implementation matches spec §M1. All required verification commands run and green. Three M1 docs updated. Phase 5 protected-paths exception list honored. Ready for two-commit landing.
 
+### M2 review trail (2026-05-15)
+
+**Developer completion claim**: M2 frontend rendering + 5-doc sweep + Phase 6 close prep. 22 files modified.
+
+**Reviewer 1 — Backend-protection (Claude subagent)** — verdict: `backend untouched` → `proceed to normal review`.
+
+Inspected the 22-file changeset. All entries in the M2 exception list. Spot-checked 7 fixture-only sweep diffs (`RawTab.test.tsx`, `SessionView.test.tsx`, `SessionsView.test.tsx`, `SkimView.test.tsx`, `TranscriptView.test.tsx`, `filterSessions.test.ts`, `useParsedSession.test.ts`) — each contained ONLY a `titleSource: null` addition to one factory function (no new logic, no test cases). `SessionMetadata.css` + `SessionsTable.css` confirmed UNCHANGED (truncation rule + metadata grid styling preserved from Phase 5). No backend file, no `components/**/src/**` file, no `components/**/tests/**` file, no contract source or migration source, no generated TS binding touched. The 3 M1 docs (`docs/features/session-store.md`, `components/raw-session-store/README.md`, `docs/playbooks/modify-backend-api.md`) confirmed untouched.
+
+**Reviewer 2 — Normal Claude reviewer** — verdict: `approved with nits`.
+
+Independently verified all 14 review goals. Caption + tooltip strings match spec §Frontend Rendering table lines 152-157 character-for-character across all 5 variants (verified verbatim). `titleSourceCaption` helper is a pure switch — no React deps, no state, no side effects. Title-cell `title={row.title ?? ""}` lives on the same `<span className="title-cell-title">` element that carries the CSS truncation rule. camelCase/snake_case boundary honored. `mergeSessions` propagation tested across all three merge paths. App.test.tsx 28-fixture sweep complete. E2E correctly targets the "Origin" branch (Claude Code fixture has a `custom-title` record). Phase-5 invariants intact. Bun-first invariant intact. Test counts match developer claims.
+
+Two nits found (both non-functional stale comments): `SessionMetadata.css:14` doc comment said "18-field grid" → should be 19; `inspection.spec.ts:160` historical comment said "one of the 18 fields" → should be 19.
+
+**Reviewer 3 — Codex external (medium reasoning effort)** — verdict: `approved with nits`.
+
+Wall time ~3 minutes. Codex independently re-ran `bun run test` (538 pass), `bunx tsc --noEmit` (clean), `bun run build` (266.78 kB / 80.07 kB), `cargo check --workspace`, `cargo test --workspace`, plus hex/token audits — all green. Caption/tooltip strings verbatim-match. Codex flagged the SAME two stale-comment nits independently (`SessionMetadata.css:14` and `inspection.spec.ts:160`), confirming the Claude reviewer's finds. Codex noted browser e2e could not be independently re-run because Vite's port 4100 binding fails inside its sandbox (`listen EPERM 127.0.0.1:4100`); accepted developer's `bun run test:e2e` evidence (2 passed).
+
+**Codex stdout (verbatim)**:
+
+```
+Verdict: approved with nits
+
+Findings:
+- `apps/frontend/src/features/sessions/SessionMetadata.css:14` still says "18-field <dl> grid"; should be 19.
+- `apps/frontend/e2e/inspection.spec.ts:160` still says "one of the 18 fields"; should be 19.
+
+Missing Evidence: none
+
+Required Changes: none
+
+Notes:
+- Caption/tooltip strings match spec verbatim.
+- Local checks passed: `bun run test`, `bunx tsc --noEmit`, `bun run build`, `cargo check --workspace`, `cargo test --workspace`, ts-rs drift check, hex `24`, tokens `83`.
+- Browser e2e could not be independently rerun here because Vite bind fails with `listen EPERM 127.0.0.1:4100`; developer evidence says `bun run test:e2e` passed.
+- `git status` includes untracked `.claude/`; not part of the M2 diff.
+```
+
+**Nit resolution (2026-05-15)**: both stale comments fixed in the coordinator's pre-commit pass. `SessionMetadata.css:14` updated to "19-field <dl> grid (Phase 6 added the title-source caption row)"; `inspection.spec.ts:160` updated to "one of the 19 fields (Phase 6 added the title-source caption row)". Audits re-run post-fix: hex 24, tokens 83, tsc clean, bun test 538 pass / 0 fail — invariants preserved.
+
+**M2 three-reviewer cycle: complete.** All three required implementation reviewers approved on substantively the same evidence pack, with the two nits caught by both Claude and codex independently (the spec test of three-reviewer rule efficacy — same finds from independent reviewers confirms the nits are real even though non-blocking; both fixed before commit).
+
 
 
 ## External Reviewer Availability Log
 
 - 2026-05-14 — `codex exec` available (codex-cli 0.130.0 at `/home/huwei/.bun/bin/codex`). Confirmed before M1 dispatch.
 - 2026-05-15 — codex exec at default `xhigh` reasoning effort hung twice during M1 review (85 min and 41 min wall time, `Sl` sleep state on upstream I/O, 0% CPU, 0-byte stdout). Killed via `TaskStop`. Retried with `-c model_reasoning_effort=medium` — completed cleanly in ~25 minutes, produced full structured verdict. Coordinator recommendation for Phase 6 going forward: use medium reasoning effort by default; reserve xhigh only when a chunk has high architectural-risk surface (Phase 6 is plumbing — medium is plenty). Document this guidance for M2.
+- 2026-05-15 — codex exec at `-c model_reasoning_effort=medium` for M2 review completed in ~3 minutes wall time. Confirmed the guidance: medium is the right default for Phase 6 plumbing chunks. Codex's stdout was structured and complete on first attempt with no hangs.
 
 ## Protected-Path Exception Log
 
@@ -212,8 +254,9 @@ UI/UX gate decision was recorded as "not required" per Resolved Decision #10. Im
 
 ## Next Recommended Task
 
-- **M1 two-commit landing** (next action; requires human go-ahead for the commit step per coordinator-prompt §Executing actions with care):
-  - Commit (a): the implementation. 20 modified source/test/doc files + `Cargo.lock` (auto) + 2 new files (`components/raw-session-store/tests/title_source_roundtrip.rs`, `components/ui-api-contracts/bindings/TitleSource.ts`). Do NOT include `progress/phase-6.progress.md` in this commit — per Phase 5 precedent, the log update is its own commit (b) that references the impl commit SHA.
-  - Commit (b): this progress-log file alone, with the impl commit SHA cross-referenced in the Completed Work Log entry.
-- **After M1 commits land**: dispatch the M2 planner. M2 scope is frontend rendering + 5 remaining docs + Phase 6 close. Planner brief: confirm M2 as single-shot vs split; identify any post-M1 follow-up risks; expected to be a smaller chunk than M1.
-- **Open guidance for M2**: use `codex exec -c model_reasoning_effort=medium` to avoid the xhigh-effort hang pattern; expect M2 to have similar overall shape (developer single-shot + three-reviewer cycle); explicit codex prompt should ask it to read working/phase-6.md and progress/phase-6.progress.md directly rather than embedding a large summary.
+- **M2 two-commit landing closes Phase 6**:
+  - Commit (a): the implementation. 22 modified frontend/test/doc files plus the 2 stale-comment nit fixes (`SessionMetadata.css`, `inspection.spec.ts` — both already in the 22 above; the fixes are part of the same files). Do NOT include `progress/phase-6.progress.md` in this commit.
+  - Commit (b): this progress-log file alone, with the impl commit SHA cross-referenced as the Phase 6 close marker.
+- **Phase 6 close**: after commit (b), all 11 spec §Acceptance Criteria are satisfied. The next phase work would be Phase 7+ (Transcript / Skim / Raw rendering changes per spec §Out of Scope).
+- **Open follow-ups deferred from Phase 6** (non-blocking; pick up whenever convenient):
+  - None — Phase 6 closes cleanly with no carried-forward open items. The two reviewer nits were both resolved before commit. The "Open Risks / Open Questions" section above documents long-running concerns that survive Phase 6 (mobile `title=` rendering, hex/token invariants for future phases); none are Phase-6 blockers.
