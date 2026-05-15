@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use distill_portal_ui_api_contracts::Tool;
+use distill_portal_ui_api_contracts::{TitleSource, Tool};
 use serde_json::Value;
 use time::OffsetDateTime;
 
@@ -120,7 +120,20 @@ impl SessionAdapter for ClaudeCodeAdapter {
             }
         }
 
-        let title = custom_title_value.or(title).or(slug);
+        // Phase 6: emit `(title, title_source)` from the same resolution
+        // priority that previously produced just `title`. The textual output
+        // for `title` is byte-equivalent to the pre-Phase-6 behavior — each
+        // arm here returns the exact same `Option<String>` the old
+        // `custom_title_value.or(title).or(slug)` chain would have returned.
+        let (title, title_source) = if let Some(value) = custom_title_value {
+            (Some(value), Some(TitleSource::Custom))
+        } else if let Some(value) = title {
+            (Some(value), Some(TitleSource::FirstUserMessage))
+        } else if let Some(value) = slug {
+            (Some(value), Some(TitleSource::Slug))
+        } else {
+            (None, None)
+        };
         let created_at = created_at.or(file_timestamp);
         let source_updated_at = source_updated_at.or(file_timestamp);
         let project_path = project_path.or_else(|| fallback_project_path(path));
@@ -135,6 +148,7 @@ impl SessionAdapter for ClaudeCodeAdapter {
             source_updated_at,
             project_path,
             title,
+            title_source,
             has_subagent_sidecars: sidecar_dir(path).is_dir(),
         })
     }

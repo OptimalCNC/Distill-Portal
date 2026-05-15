@@ -12,7 +12,7 @@ use distill_portal_backend::App;
 use distill_portal_configuration::BackendConfig;
 use distill_portal_ui_api_contracts::{
     source_key, ImportReport, RescanReport, SessionSyncStatus, SourceSessionView,
-    StoredSessionView, Tool,
+    StoredSessionView, TitleSource, Tool,
 };
 use serde_json::json;
 use tempfile::TempDir;
@@ -41,6 +41,23 @@ async fn startup_discovers_source_sessions_without_auto_importing() {
     assert!(source_sessions
         .iter()
         .all(|session| session.status == SessionSyncStatus::NotStored));
+    // Phase 6: contract symmetry — the parser-direct source view carries
+    // `title_source` for both tool fixtures. Claude's sample has a
+    // `custom-title` record (Custom); Codex's sample has only a first
+    // user_message (FirstUserMessage).
+    let claude_source = source_sessions
+        .iter()
+        .find(|session| session.tool == Tool::ClaudeCode)
+        .expect("claude source row");
+    assert_eq!(claude_source.title_source, Some(TitleSource::Custom));
+    let codex_source = source_sessions
+        .iter()
+        .find(|session| session.tool == Tool::Codex)
+        .expect("codex source row");
+    assert_eq!(
+        codex_source.title_source,
+        Some(TitleSource::FirstUserMessage)
+    );
 
     let stored_sessions: Vec<StoredSessionView> = get_json(&app, "/api/v1/sessions").await;
     assert!(stored_sessions.is_empty());
@@ -72,6 +89,9 @@ async fn importing_selected_session_saves_it_and_marks_it_up_to_date() {
     assert_eq!(stored_sessions.len(), 1);
     let stored = &stored_sessions[0];
     assert_eq!(stored.status, SessionSyncStatus::UpToDate);
+    // Phase 6: after import, the stored view round-trips through SQLite
+    // and surfaces the same `title_source` the parser emitted.
+    assert_eq!(stored.session.title_source, Some(TitleSource::Custom));
 
     let raw = get_raw(&app, &stored.session.session_uid).await;
     assert_eq!(raw.as_slice(), CLAUDE_FIXTURE);

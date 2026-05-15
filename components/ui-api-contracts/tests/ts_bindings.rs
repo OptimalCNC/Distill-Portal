@@ -32,7 +32,8 @@ use std::{
 
 use distill_portal_ui_api_contracts::{
     ImportReport, ImportSourceSessionsRequest, PersistedScanError, RescanReport,
-    SessionSyncStatus, SourceSessionView, StoredSessionRecord, StoredSessionView, Tool,
+    SessionSyncStatus, SourceSessionView, StoredSessionRecord, StoredSessionView, TitleSource,
+    Tool,
 };
 use ts_rs::{Config, TS};
 
@@ -48,6 +49,7 @@ const EXPECTED_BINDING_FILES: &[&str] = &[
     "SourceSessionView.ts",
     "StoredSessionRecord.ts",
     "StoredSessionView.ts",
+    "TitleSource.ts",
     "Tool.ts",
 ];
 
@@ -84,6 +86,7 @@ fn export_all_contracts(out_dir: &Path) {
     let config = Config::new().with_out_dir(out_dir);
     Tool::export_all(&config).expect("export Tool");
     SessionSyncStatus::export_all(&config).expect("export SessionSyncStatus");
+    TitleSource::export_all(&config).expect("export TitleSource");
     SourceSessionView::export_all(&config).expect("export SourceSessionView");
     StoredSessionRecord::export_all(&config).expect("export StoredSessionRecord");
     StoredSessionView::export_all(&config).expect("export StoredSessionView");

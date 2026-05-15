@@ -414,6 +414,10 @@ fn source_session_view(
             .as_ref()
             .map(|path| path.display().to_string()),
         title: session.title.clone(),
+        // Phase 6: provenance carried alongside `title` on the source view.
+        // Symmetric with the stored view, which round-trips through the
+        // SQLite `sessions.title_source` column.
+        title_source: session.title_source,
         has_subagent_sidecars: session.has_subagent_sidecars,
         status,
         session_uid,

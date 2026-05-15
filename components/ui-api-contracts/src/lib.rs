@@ -63,6 +63,81 @@ pub enum SessionSyncStatus {
     SourceMissing,
 }
 
+/// Provenance of a session's resolved [`title`](SourceSessionView::title).
+///
+/// Captured at parse time and round-tripped through the persisted sessions
+/// table. `None` (NULL in SQL) means the value is unknown — either because
+/// the title itself was missing (no usable source produced one) or because
+/// the row was ingested before Phase 6 introduced this field.
+///
+/// Invariant maintained by the ingest layer: `title.is_some()` iff
+/// `title_source.is_some()`. The reverse direction (consumer code) treats
+/// `None` as "unknown source; render no caption".
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export_to = "TitleSource.ts"))]
+#[serde(rename_all = "snake_case")]
+pub enum TitleSource {
+    /// Title brought in from the original coding session (e.g. Claude Code's
+    /// `custom-title` record).
+    Custom,
+    /// Extracted from the first user message in the session.
+    FirstUserMessage,
+    /// Derived from the session's source path as a final fallback when no
+    /// usable message text was found (Claude Code only).
+    Slug,
+    /// AI-generated title. Reserved enum value: never emitted by Phase 6
+    /// parsers, but accepted by the serde/SQL boundary so a later phase can
+    /// populate it without a second migration.
+    Generated,
+}
+
+impl TitleSource {
+    /// Stable snake_case representation used both by serde and by the SQLite
+    /// column. Keeping this method co-located with the variants makes the
+    /// round-trip mapping unambiguous: write `as_str()` into the DB, read
+    /// `from_str()` back out.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Custom => "custom",
+            Self::FirstUserMessage => "first_user_message",
+            Self::Slug => "slug",
+            Self::Generated => "generated",
+        }
+    }
+}
+
+impl fmt::Display for TitleSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ParseTitleSourceError;
+
+impl fmt::Display for ParseTitleSourceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("unknown title source")
+    }
+}
+
+impl std::error::Error for ParseTitleSourceError {}
+
+impl FromStr for TitleSource {
+    type Err = ParseTitleSourceError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "custom" => Ok(Self::Custom),
+            "first_user_message" => Ok(Self::FirstUserMessage),
+            "slug" => Ok(Self::Slug),
+            "generated" => Ok(Self::Generated),
+            _ => Err(ParseTitleSourceError),
+        }
+    }
+}
+
 impl SessionSyncStatus {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -90,6 +165,7 @@ pub struct SourceSessionView {
     pub source_updated_at: Option<String>,
     pub project_path: Option<String>,
     pub title: Option<String>,
+    pub title_source: Option<TitleSource>,
     pub has_subagent_sidecars: bool,
     pub status: SessionSyncStatus,
     pub session_uid: Option<String>,
@@ -114,6 +190,7 @@ pub struct StoredSessionRecord {
     pub ingested_at: String,
     pub project_path: Option<String>,
     pub title: Option<String>,
+    pub title_source: Option<TitleSource>,
     pub has_subagent_sidecars: bool,
 }
 

@@ -245,6 +245,7 @@ version = "0.1.0"
 dependencies = [
  "distill-portal-collector-runtime",
  "distill-portal-raw-session-store",
+ "distill-portal-ui-api-contracts",
  "serde",
  "sha2",
  "thiserror",

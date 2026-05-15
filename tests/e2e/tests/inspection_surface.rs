@@ -17,7 +17,7 @@ use distill_portal_backend::App as BackendApp;
 use distill_portal_configuration::BackendConfig;
 use distill_portal_ui_api_contracts::{
     source_key, ImportReport, ImportSourceSessionsRequest, SessionSyncStatus, SourceSessionView,
-    StoredSessionView, Tool,
+    StoredSessionView, TitleSource, Tool,
 };
 use http_body_util::{BodyExt, Full};
 use hyper::{header::CONTENT_TYPE, Method, Request, StatusCode, Uri};
@@ -68,6 +68,15 @@ async fn inspection_surface_works_through_frontend_backend_http_boundary() {
         get_json(backend_addr, "/api/v1/source-sessions").await;
     assert_eq!(source_sessions.len(), 1);
     assert_eq!(source_sessions[0].status, SessionSyncStatus::NotStored);
+    // Phase 6: assert title_source deserializes typed through the HTTP
+    // boundary. The Claude fixture carries a `custom-title` record so the
+    // resolved provenance must be Custom — pinning the parser priority
+    // across the entire collector-runtime -> raw-session-store ->
+    // ingest-service -> backend wire path.
+    assert_eq!(
+        source_sessions[0].title_source,
+        Some(TitleSource::Custom)
+    );
 
     let key = source_key(Tool::ClaudeCode, CLAUDE_SESSION_ID);
     let import_report: ImportReport = post_json(
@@ -86,6 +95,9 @@ async fn inspection_surface_works_through_frontend_backend_http_boundary() {
     assert_eq!(stored_sessions.len(), 1);
     let stored = &stored_sessions[0];
     assert_eq!(stored.status, SessionSyncStatus::UpToDate);
+    // After import, the stored view round-trips title_source through
+    // SQLite and surfaces the same value the parser produced.
+    assert_eq!(stored.session.title_source, Some(TitleSource::Custom));
 
     let raw = get_bytes(
         backend_addr,

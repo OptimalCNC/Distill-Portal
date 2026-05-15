@@ -19,6 +19,10 @@ pub struct StoredSessionInput {
     pub source_updated_at: Option<time::OffsetDateTime>,
     pub project_path: Option<PathBuf>,
     pub title: Option<String>,
+    /// Phase 6: provenance of the resolved [`title`]. Persists to the
+    /// `sessions.title_source` column as the snake_case serde
+    /// representation; `None` round-trips through SQL `NULL`.
+    pub title_source: Option<distill_portal_ui_api_contracts::TitleSource>,
     pub has_subagent_sidecars: bool,
     pub raw_size_bytes: usize,
 }

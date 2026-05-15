@@ -1,10 +1,11 @@
 use rusqlite::{Connection, OptionalExtension};
 
-pub const CURRENT_VERSION: i64 = 1;
+pub const CURRENT_VERSION: i64 = 2;
 
-const MIGRATIONS: &[(i64, &str)] = &[(
-    1,
-    r#"
+const MIGRATIONS: &[(i64, &str)] = &[
+    (
+        1,
+        r#"
 CREATE TABLE IF NOT EXISTS migrations (
   version INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL
@@ -43,7 +44,12 @@ CREATE TABLE IF NOT EXISTS scan_errors (
   last_seen_at TEXT NOT NULL
 );
 "#,
-)];
+    ),
+    // Phase 6: title provenance. Existing rows return NULL (mapped to
+    // `None`) until rescan + re-ingest naturally repopulates them. No
+    // backfill — Resolved Decision #8.
+    (2, "ALTER TABLE sessions ADD COLUMN title_source TEXT;"),
+];
 
 pub fn apply(connection: &Connection) -> Result<(), rusqlite::Error> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;

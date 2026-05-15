@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use distill_portal_ui_api_contracts::Tool;
+use distill_portal_ui_api_contracts::{TitleSource, Tool};
 use serde_json::Value;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -165,6 +165,12 @@ impl SessionAdapter for CodexAdapter {
             .or(file_timestamp);
         let source_updated_at = source_updated_at.or(file_timestamp);
 
+        // Phase 6: Codex has only one title path (the first `event_msg` with
+        // `payload.type == "user_message"`), so `title_source` is
+        // `Some(FirstUserMessage)` iff `title.is_some()` — preserving the
+        // contract invariant enforced by the ingest layer.
+        let title_source = title.as_ref().map(|_| TitleSource::FirstUserMessage);
+
         Ok(ParsedSession {
             tool: Tool::Codex,
             source_session_id,
@@ -175,6 +181,7 @@ impl SessionAdapter for CodexAdapter {
             source_updated_at,
             project_path,
             title,
+            title_source,
             has_subagent_sidecars: false,
         })
     }

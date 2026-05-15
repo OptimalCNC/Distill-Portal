@@ -5,7 +5,7 @@ use std::{
     sync::Mutex,
 };
 
-use distill_portal_ui_api_contracts::{PersistedScanError, StoredSessionRecord, Tool};
+use distill_portal_ui_api_contracts::{PersistedScanError, StoredSessionRecord, TitleSource, Tool};
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use sha2::{Digest, Sha256};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
@@ -54,7 +54,7 @@ impl SqliteStore {
         query_session(
             &connection,
             "SELECT session_uid, tool, source_session_id, source_path, source_fingerprint, raw_ref,
-                    created_at, source_updated_at, ingested_at, project_path, title, has_subagent_sidecars
+                    created_at, source_updated_at, ingested_at, project_path, title, title_source, has_subagent_sidecars
              FROM sessions
              WHERE tool = ?1 AND source_session_id = ?2",
             params![tool.as_str(), source_session_id],
@@ -69,7 +69,7 @@ impl SqliteStore {
         query_session(
             &connection,
             "SELECT session_uid, tool, source_session_id, source_path, source_fingerprint, raw_ref,
-                    created_at, source_updated_at, ingested_at, project_path, title, has_subagent_sidecars
+                    created_at, source_updated_at, ingested_at, project_path, title, title_source, has_subagent_sidecars
              FROM sessions
              WHERE session_uid = ?1",
             params![session_uid],
@@ -80,7 +80,7 @@ impl SqliteStore {
         let connection = self.connection()?;
         let mut statement = connection.prepare(
             "SELECT session_uid, tool, source_session_id, source_path, source_fingerprint, raw_ref,
-                    created_at, source_updated_at, ingested_at, project_path, title, has_subagent_sidecars
+                    created_at, source_updated_at, ingested_at, project_path, title, title_source, has_subagent_sidecars
              FROM sessions
              ORDER BY ingested_at DESC, session_uid DESC",
         )?;
@@ -170,8 +170,8 @@ impl SqliteStore {
         transaction.execute(
             "INSERT INTO sessions (
                  session_uid, tool, source_session_id, source_path, source_fingerprint, raw_ref,
-                 created_at, source_updated_at, ingested_at, project_path, title, has_subagent_sidecars
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                 created_at, source_updated_at, ingested_at, project_path, title, title_source, has_subagent_sidecars
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 session_uid,
                 input.tool.as_str(),
@@ -184,6 +184,7 @@ impl SqliteStore {
                 format_time(ingested_at),
                 input.project_path.as_ref().map(|path| path.display().to_string()),
                 input.title,
+                input.title_source.map(TitleSource::as_str),
                 input.has_subagent_sidecars as i64,
             ],
         )?;
@@ -218,7 +219,8 @@ impl SqliteStore {
                  ingested_at = ?7,
                  project_path = ?8,
                  title = ?9,
-                 has_subagent_sidecars = ?10
+                 title_source = ?10,
+                 has_subagent_sidecars = ?11
              WHERE session_uid = ?1",
             params![
                 existing.session_uid,
@@ -233,6 +235,7 @@ impl SqliteStore {
                     .as_ref()
                     .map(|path| path.display().to_string()),
                 input.title,
+                input.title_source.map(TitleSource::as_str),
                 input.has_subagent_sidecars as i64,
             ],
         )?;
@@ -315,7 +318,11 @@ fn map_session_row(row: &rusqlite::Row<'_>) -> Result<StoredSessionRecord, rusql
         ingested_at: row.get(8)?,
         project_path: row.get(9)?,
         title: row.get(10)?,
-        has_subagent_sidecars: row.get::<_, i64>(11)? != 0,
+        title_source: row
+            .get::<_, Option<String>>(11)?
+            .map(|value| title_source_from_db(&value))
+            .transpose()?,
+        has_subagent_sidecars: row.get::<_, i64>(12)? != 0,
     })
 }
 
@@ -325,6 +332,16 @@ fn tool_from_db(value: &str) -> Result<Tool, rusqlite::Error> {
             0,
             rusqlite::types::Type::Text,
             format!("unknown tool: {value}").into(),
+        )
+    })
+}
+
+fn title_source_from_db(value: &str) -> Result<TitleSource, rusqlite::Error> {
+    TitleSource::from_str(value).map_err(|_| {
+        rusqlite::Error::FromSqlConversionFailure(
+            0,
+            rusqlite::types::Type::Text,
+            format!("unknown title source: {value}").into(),
         )
     })
 }
