@@ -11,6 +11,7 @@ This file is both the docs entry point and the repo map.
 | Modify the inspection UI | [`playbooks/modify-frontend-page.md`](playbooks/modify-frontend-page.md), [`../apps/frontend/README.md`](../apps/frontend/README.md) |
 | Change a backend API or JSON payload | [`playbooks/modify-backend-api.md`](playbooks/modify-backend-api.md), [`dependency-rules.md`](dependency-rules.md) |
 | Change session storage behavior | [`playbooks/modify-session-store.md`](playbooks/modify-session-store.md) |
+| Change title resolution behavior | [`features/session-store.md`](features/session-store.md) (`TitleSource` enum + parser priority), [`features/session-view.md`](features/session-view.md) (Metadata tab "Title source" caption), [`features/inspection-surface.md`](features/inspection-surface.md) (list-panel title-cell truncation + tooltip), [`playbooks/modify-backend-api.md`](playbooks/modify-backend-api.md) (Phase 6 worked example: enum + field through contract → parser → ingest → store) |
 | Run or test locally | [`dev-commands.md`](dev-commands.md) |
 | Check dependency boundaries | [`dependency-rules.md`](dependency-rules.md) |
 | Understand a feature | [`features/inspection-surface.md`](features/inspection-surface.md), [`features/session-view.md`](features/session-view.md), [`features/session-store.md`](features/session-store.md) |

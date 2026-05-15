@@ -1,14 +1,18 @@
 // Component-level tests for the M2b Metadata tab body.
 //
-// The 18-field `<dl>` is byte-equivalent to the Phase-4
-// SessionDetail drawer body; tests adapt the relevant assertions
-// from `SessionDetail.test.tsx`. M2b ADDS the inline subagent
-// sidecar badge and removes the drawer header (the minimal header
-// at M2b lives in SessionView, NOT in this component).
+// The 18-field `<dl>` of M2b grew to 19 in Phase 6 M2 (Resolved
+// Decision #12): a new "Title source" row sits immediately after the
+// `title` field. The added row reuses the existing `<dt>`/`<dd>` grid
+// — no new component, no JS popover — and carries the longer
+// explanatory tooltip on the `<dd>` via the native HTML `title=`
+// attribute. Tests adapt the relevant assertions from
+// `SessionDetail.test.tsx`. M2b ADDS the inline subagent sidecar badge
+// and removes the drawer header (the minimal header at M2b lives in
+// SessionView, NOT in this component).
 //
 // Coverage:
-//   1. All 18 <dt> labels render in order (snake_case + the source-
-//      path label swap).
+//   1. All 19 <dt> labels render in order (snake_case + the source-
+//      path label swap + Phase-6 Title source row).
 //   2. Timestamps render absolute ISO + relative pair.
 //   3. Source-clock + backend-clock annotations.
 //   4. statusConflict=true renders "(disagreed during load)" muted
@@ -20,6 +24,10 @@
 //      sourcePath.
 //   8. Copy fallback when navigator.clipboard is undefined.
 //   9. "View raw" anchor renders only when storedSessionUid !== null.
+//   10. Phase-6 Title source caption row: one test case per
+//       TitleSource enum value + the legacy `null` case. Asserts the
+//       visible caption equals the spec terse-caption string AND the
+//       `<dd>`'s HTML `title=` attribute equals the spec tooltip.
 import { afterEach, beforeEach, expect, mock, test } from "bun:test";
 import { act, cleanup, render } from "@testing-library/react";
 import { SessionMetadata } from "./SessionMetadata";
@@ -34,6 +42,7 @@ function buildRow(overrides: Partial<SessionRow> = {}): SessionRow {
     tool: "claude_code",
     sourceSessionId: "fixture-1",
     title: "Fixture title",
+    titleSource: "custom",
     projectPath: "/projects/fixture",
     sourcePath: "/srv/sessions/fixture-1.jsonl",
     sourcePathIsStale: false,
@@ -83,7 +92,7 @@ afterEach(() => {
   }
 });
 
-test("SessionMetadata: renders all 18 <dt> labels in snake_case order", () => {
+test("SessionMetadata: renders all 19 <dt> labels in expected order", () => {
   const row = buildRow();
   const { container } = render(<SessionMetadata row={row} now={NOW} />);
   const dtTexts = Array.from(
@@ -99,6 +108,8 @@ test("SessionMetadata: renders all 18 <dt> labels in snake_case order", () => {
     "status",
     "status_conflict",
     "title",
+    // Phase 6 M2: Title source row sits immediately after `title`.
+    "Title source",
     "project_path",
     "Source path",
     "source_path_is_stale",
@@ -268,4 +279,83 @@ test("SessionMetadata: 'View raw' anchor renders only when storedSessionUid !== 
   );
   expect(link.getAttribute("target")).toBe("_blank");
   expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+});
+
+// ---------------------------------------------------------------------------
+// Phase 6 M2 — Title source caption row.
+//
+// Spec §Frontend Rendering — "Metadata tab — title source caption"
+// (working/phase-6.md lines 152-157). Each `TitleSource` enum value
+// (plus the legacy `null` case for pre-Phase-6 stored rows) renders a
+// terse caption in the `<dd>` text + a longer explanatory tooltip on
+// the same `<dd>`'s HTML `title=` attribute. Strings are pinned
+// verbatim here so a future spec drift surfaces immediately.
+// ---------------------------------------------------------------------------
+
+function findTitleSourceDd(container: ParentNode): HTMLElement {
+  const dts = Array.from(
+    container.querySelectorAll<HTMLElement>("dl.metadata-meta dt"),
+  );
+  const dds = Array.from(
+    container.querySelectorAll<HTMLElement>("dl.metadata-meta dd"),
+  );
+  const idx = dts.findIndex((el) => el.textContent === "Title source");
+  expect(idx).toBeGreaterThan(-1);
+  const dd = dds[idx];
+  expect(dd).toBeDefined();
+  return dd as HTMLElement;
+}
+
+test("SessionMetadata: titleSource='custom' renders 'Origin' caption + tooltip", () => {
+  const row = buildRow({ titleSource: "custom" });
+  const { container } = render(<SessionMetadata row={row} now={NOW} />);
+  const dd = findTitleSourceDd(container);
+  expect(dd.textContent).toBe("Origin");
+  expect(dd.getAttribute("title")).toBe(
+    "Title brought in from the original coding session (e.g. Claude Code's customTitle record).",
+  );
+});
+
+test("SessionMetadata: titleSource='first_user_message' renders 'Opening message' caption + tooltip", () => {
+  const row = buildRow({ titleSource: "first_user_message" });
+  const { container } = render(<SessionMetadata row={row} now={NOW} />);
+  const dd = findTitleSourceDd(container);
+  expect(dd.textContent).toBe("Opening message");
+  expect(dd.getAttribute("title")).toBe(
+    "Extracted from the first user message in this session.",
+  );
+});
+
+test("SessionMetadata: titleSource='slug' renders 'Path slug' caption + tooltip", () => {
+  const row = buildRow({ titleSource: "slug" });
+  const { container } = render(<SessionMetadata row={row} now={NOW} />);
+  const dd = findTitleSourceDd(container);
+  expect(dd.textContent).toBe("Path slug");
+  expect(dd.getAttribute("title")).toBe(
+    "Derived from the session's source path as a fallback when no usable message text was found.",
+  );
+});
+
+test("SessionMetadata: titleSource='generated' renders 'Generated' caption + tooltip", () => {
+  const row = buildRow({ titleSource: "generated" });
+  const { container } = render(<SessionMetadata row={row} now={NOW} />);
+  const dd = findTitleSourceDd(container);
+  expect(dd.textContent).toBe("Generated");
+  expect(dd.getAttribute("title")).toBe(
+    "AI-generated title (reserved for a later phase; not produced in Phase 6).",
+  );
+});
+
+test("SessionMetadata: titleSource=null renders 'Unknown' caption + legacy-row tooltip", () => {
+  // The legacy / pre-Phase-6 case: stored row imported before
+  // `title_source` tracking existed. Frontend renders the "Unknown"
+  // caption with the rescan-to-populate tooltip — no UI suggests an
+  // error state.
+  const row = buildRow({ titleSource: null });
+  const { container } = render(<SessionMetadata row={row} now={NOW} />);
+  const dd = findTitleSourceDd(container);
+  expect(dd.textContent).toBe("Unknown");
+  expect(dd.getAttribute("title")).toBe(
+    "This session was imported before title-source tracking was added; rescan to populate.",
+  );
 });

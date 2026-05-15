@@ -36,6 +36,7 @@ function buildRow(overrides: Partial<SessionRow> = {}): SessionRow {
     tool: "claude_code",
     sourceSessionId: "fixture-raw",
     title: "Fixture title",
+    titleSource: null,
     projectPath: "/projects/fixture",
     sourcePath: "/srv/sessions/fixture-raw.jsonl",
     sourcePathIsStale: false,

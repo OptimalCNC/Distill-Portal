@@ -157,8 +157,8 @@ test.describe.serial("inspection surface end-to-end", () => {
     expect(rawBody.byteLength).toBeGreaterThan(16);
 
     // 7. M2b: the Metadata tab `<dl>` exposes the session_uid as
-    //    one of the 18 fields. The lookup now lives in
-    //    `.session-metadata` (was `.drawer-meta` in M1b).
+    //    one of the 19 fields (Phase 6 added the title-source caption row).
+    //    The lookup now lives in `.session-metadata` (was `.drawer-meta` in M1b).
     const uuidPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
     const sessionUidValue = metadataPanel
       .locator(".session-metadata .metadata-meta dd.mono")
@@ -238,10 +238,29 @@ test.describe.serial("inspection surface end-to-end", () => {
       "true",
     );
     await expect(metadataPanel).toBeVisible();
-    // Metadata tab carries the 18-field <dl>.
+    // Metadata tab carries the 19-field <dl> (Phase 6 M2 added the
+    // "Title source" provenance caption row immediately after `title`).
     await expect(
       metadataPanel.locator(".metadata-meta dt"),
-    ).toHaveCount(18);
+    ).toHaveCount(19);
+    // Phase 6 M2: the "Title source" caption row exposes a terse
+    // value with the longer tooltip on the same <dd>. The seeded
+    // Claude Code fixture (tests/fixtures/claude_code/sample_session.jsonl)
+    // ships a top-of-session `custom-title` record, so the parser's
+    // resolution priority lands on `custom` → terse caption "Origin"
+    // + a non-empty `title=` tooltip that mentions customTitle.
+    const titleSourceDt = metadataPanel
+      .locator(".metadata-meta dt")
+      .filter({ hasText: "Title source" });
+    await expect(titleSourceDt).toHaveCount(1);
+    const titleSourceDd = titleSourceDt.locator(
+      "xpath=following-sibling::dd[1]",
+    );
+    await expect(titleSourceDd).toHaveText("Origin");
+    await expect(titleSourceDd).toHaveAttribute(
+      "title",
+      /customTitle/,
+    );
 
     // (c) Keyboard nav: focus the active tab (Metadata) →
     //     ArrowLeft cycles to Raw → ArrowLeft to Skim →

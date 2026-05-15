@@ -21,6 +21,35 @@ To add support for a new tool (a future `<tool>` discriminant in the `Tool` unio
 
 The parser-dispatch path is entirely separate from the Raw tab's `consumeRawPreview` (256 KB / 20-line preview). Skim and Transcript share one cached `ParsedSession` via `useParsedSession`'s LRU(5); the Raw tab runs its own consumer.
 
+## CSS-only truncation with full-text tooltip (Phase 6 worked example)
+
+When a list cell holds a string that may exceed the column's available width, do NOT introduce a JS character-count constant or a separate "display title" field. Two ingredients suffice:
+
+1. A pure CSS rule on the cell's text element:
+
+   ```css
+   .title-cell-title {
+     overflow: hidden;
+     text-overflow: ellipsis;
+     white-space: nowrap;
+     min-width: 0;
+   }
+   ```
+
+2. The full string carried on the element's native `title=` attribute:
+
+   ```tsx
+   <span className="title-cell-title" title={row.title ?? ""}>
+     {row.title ?? "(untitled)"}
+   </span>
+   ```
+
+The browser's built-in tooltip exposes the full string on hover; assistive technologies read it via the same `title` attribute. No popover component, no event handlers, no `useState`. The same pattern is reused on the Metadata tab's "Title source" `<dd>` (Phase 6 M2) — the `<dd>` carries the longer explanatory tooltip on its `title=` attribute while the visible body stays at a two-word caption. Implementation lives at:
+
+- `apps/frontend/src/features/sessions/SessionsTable.tsx` (the list-panel title cell — `title={row.title ?? ""}`)
+- `apps/frontend/src/features/sessions/SessionsTable.css` (the `.title-cell-title` CSS rule)
+- `apps/frontend/src/features/sessions/SessionMetadata.tsx` (the Metadata tab "Title source" caption row + the pure helper `titleSourceCaption(value)`)
+
 ## Verification commands
 
 When auditing token usage in `apps/frontend/src/styles/tokens.css`, remember that token names start with a leading `--` (a double-dash). Use `grep -q -- "${tok}:"` (with the explicit `--` separator) when scripting per-token presence checks, otherwise `grep` may interpret `--color-foo` as a flag and fail silently.

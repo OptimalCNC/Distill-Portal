@@ -49,6 +49,7 @@ function buildRow(overrides: Partial<SessionRow> = {}): SessionRow {
     tool: "claude_code",
     sourceSessionId: "session-view-1",
     title: "View row",
+    titleSource: null,
     projectPath: "/projects/view",
     sourcePath: "/srv/sessions/session-view-1.jsonl",
     sourcePathIsStale: false,

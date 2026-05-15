@@ -22,6 +22,11 @@
 //     authoritative. If the stored-side `status` disagrees,
 //     `statusConflict` is set so the UI can surface the
 //     "fetched state changed during load — refresh" affordance.
+//   - Phase 6: `titleSource` is propagated straight from whichever side
+//     produced the row (source-side `src.title_source` when present;
+//     otherwise the stored-side `st.title_source`). No logic change.
+//     Field is camelCase on `SessionRow`; snake_case at the contract
+//     boundary.
 import type { SourceSessionView, StoredSessionView } from "../../lib/contracts";
 import type { Presence, SessionRow } from "./types";
 
@@ -64,6 +69,7 @@ export function mergeSessions(
         tool: src.tool,
         sourceSessionId: src.source_session_id,
         title: src.title,
+        titleSource: src.title_source,
         projectPath: src.project_path,
         sourcePath: src.source_path,
         sourcePathIsStale: false,
@@ -87,6 +93,7 @@ export function mergeSessions(
         tool: src.tool,
         sourceSessionId: src.source_session_id,
         title: src.title,
+        titleSource: src.title_source,
         projectPath: src.project_path,
         sourcePath: src.source_path,
         sourcePathIsStale: false,
@@ -124,6 +131,7 @@ export function mergeSessions(
       tool: st.tool,
       sourceSessionId: st.source_session_id,
       title: st.title,
+      titleSource: st.title_source,
       projectPath: st.project_path,
       sourcePath: st.source_path,
       sourcePathIsStale,

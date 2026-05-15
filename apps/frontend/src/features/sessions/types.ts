@@ -16,7 +16,7 @@
 //     fallback `stored:${session_uid}`. Row identity is used only for
 //     React keys and for tracking which rows the UI is talking about;
 //     the `stored:...` fallback never enters the import POST.
-import type { SessionSyncStatus, Tool } from "../../lib/contracts";
+import type { SessionSyncStatus, TitleSource, Tool } from "../../lib/contracts";
 
 export type Presence = "source_only" | "stored_only" | "both";
 
@@ -28,6 +28,11 @@ export type SessionRow = {
   tool: Tool;
   sourceSessionId: string;
   title: string | null;
+  /** Provenance of the resolved `title`. Null when the title itself is null
+   *  OR when the row was ingested before Phase 6 introduced this signal
+   *  (legacy stored rows that have never been rescanned). The Metadata
+   *  tab maps each value to a terse caption + tooltip. */
+  titleSource: TitleSource | null;
   projectPath: string | null;
   /** Always populated. Source-side `source_path` when discoverable; otherwise the last-known `StoredSessionView.source_path`. */
   sourcePath: string;

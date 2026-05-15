@@ -11,7 +11,7 @@
  *   - `.session-metadata`                → tab-body wrapper
  *   - `.metadata-meta`,
  *     `.metadata-meta dt`,
- *     `.metadata-meta dd`                → 18-field <dl> grid
+ *     `.metadata-meta dd`                → 19-field <dl> grid (Phase 6 added the title-source caption row)
  *   - `.metadata-source-path`            → wrapping span on the path text
  *   - `.metadata-copy-btn` /
  *     `.metadata-copy-btn:hover`         → Copy path button

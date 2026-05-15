@@ -2,12 +2,20 @@
 //
 // Extracted from `SessionDetail.tsx` lines 130–256 (Phase 4 drawer
 // body) byte-equivalently per design.md §3.3:
-//   - Same 18 fields rendered as a `<dl class="metadata-meta">`
-//     with snake_case `<dt>` text and `mono`-classed `<dd>` for
-//     identifier-style values. The single exception is the
-//     source-path `<dt>`, which derives from `sourcePathLabel`
-//     ("Source path:" or "Last seen source path:") with the trailing
-//     colon stripped — matches Phase 4 verbatim.
+//   - The Phase-5 18-field `<dl class="metadata-meta">` was extended
+//     to 19 fields in Phase 6 M2 (Resolved Decision #12): a new
+//     "Title source" row sits immediately after `title`. The label is
+//     a Title-Case caption (NOT snake_case) because the value is a
+//     human-readable provenance phrase, not a machine identifier.
+//     `<dt>` text for the other 18 fields stays snake_case. The
+//     `<dd>`-carried HTML `title=` tooltip mirrors the list-panel
+//     truncation pattern: native tooltip, no JS, no popover. Strings
+//     are pinned by `titleSourceCaption(value)` below to the spec
+//     §Frontend Rendering caption table.
+//   - The single existing exception remains the source-path `<dt>`,
+//     which derives from `sourcePathLabel` ("Source path:" or
+//     "Last seen source path:") with the trailing colon stripped —
+//     matches Phase 4 verbatim.
 //   - Same Copy path button + Clipboard-API → manual-selection
 //     fallback. Hint copy preserved verbatim ("Copied" / "Selected
 //     — press Ctrl/Cmd + C to copy").
@@ -32,6 +40,7 @@
 import { useEffect, useRef, useState } from "react";
 import { relativeTimeFrom } from "./relativeTime";
 import type { SessionRow } from "./types";
+import type { TitleSource } from "../../lib/contracts";
 import "./SessionMetadata.css";
 
 export type SessionMetadataProps = {
@@ -138,6 +147,11 @@ export function SessionMetadata({ row, now }: SessionMetadataProps) {
         <dt>title</dt>
         <dd>{row.title ?? <span className="muted">(untitled)</span>}</dd>
 
+        <dt>Title source</dt>
+        <dd title={titleSourceCaption(row.titleSource).tooltip}>
+          {titleSourceCaption(row.titleSource).caption}
+        </dd>
+
         <dt>project_path</dt>
         <dd className="mono">{row.projectPath ?? "—"}</dd>
 
@@ -238,4 +252,48 @@ function renderTimestamp(now: string, value: string | null) {
       <span className="muted">({relativeTimeFrom(now, value)})</span>
     </>
   );
+}
+
+/**
+ * Phase 6 M2 (Resolved Decision #12): map the four `TitleSource` enum
+ * values (plus the legacy `null` case for pre-Phase-6 stored rows) to a
+ * terse caption + a longer HTML `title=` tooltip. Strings are verbatim
+ * from spec §Frontend Rendering — Metadata tab caption table (lines
+ * 152-157). Pure helper; co-located here because no other surface
+ * consumes it.
+ */
+export function titleSourceCaption(
+  value: TitleSource | null,
+): { caption: string; tooltip: string } {
+  switch (value) {
+    case "custom":
+      return {
+        caption: "Origin",
+        tooltip:
+          "Title brought in from the original coding session (e.g. Claude Code's customTitle record).",
+      };
+    case "first_user_message":
+      return {
+        caption: "Opening message",
+        tooltip: "Extracted from the first user message in this session.",
+      };
+    case "slug":
+      return {
+        caption: "Path slug",
+        tooltip:
+          "Derived from the session's source path as a fallback when no usable message text was found.",
+      };
+    case "generated":
+      return {
+        caption: "Generated",
+        tooltip:
+          "AI-generated title (reserved for a later phase; not produced in Phase 6).",
+      };
+    case null:
+      return {
+        caption: "Unknown",
+        tooltip:
+          "This session was imported before title-source tracking was added; rescan to populate.",
+      };
+  }
 }

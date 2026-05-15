@@ -51,7 +51,15 @@ Four tabs ordered: **Transcript**, **Skim**, **Raw**, **Metadata**. The default 
 
 ### Metadata tab
 
-- 18 `SessionRow` fields verbatim from Phase 4's drawer body — `session_key`, `session_uid`, `row_key`, `tool`, `source_session_id`, `presence`, `status`, `status_conflict`, `title`, `project_path`, `source_path` (labeled `Last seen source path` when `sourcePathIsStale` is true), `source_path_is_stale`, `source_fingerprint`, `has_subagent_sidecars`, `stored_raw_ref`, plus three timestamps annotated as either source-clock (`created_at`, `source_updated_at`) or backend-clock (`ingested_at`).
+- 19 `SessionRow` fields rendered as a `<dl class="metadata-meta">` — 18 verbatim from Phase 4's drawer body + the Phase 6 M2 "Title source" caption row inserted immediately after `title`:
+  - `session_key`, `session_uid`, `row_key`, `tool`, `source_session_id`, `presence`, `status`, `status_conflict`, `title`, **`Title source`** (Phase 6 M2), `project_path`, `source_path` (labeled `Last seen source path` when `sourcePathIsStale` is true), `source_path_is_stale`, `source_fingerprint`, `has_subagent_sidecars`, `stored_raw_ref`, plus three timestamps annotated as either source-clock (`created_at`, `source_updated_at`) or backend-clock (`ingested_at`).
+- **Title source caption row** (Phase 6 M2, Resolved Decision #12): maps the contract's `TitleSource | null` to a terse `<dd>` caption with a longer explanatory tooltip on the same `<dd>`'s native HTML `title=` attribute. Pure helper `titleSourceCaption(value)` in `SessionMetadata.tsx`; strings pinned verbatim to spec §Frontend Rendering caption table:
+  - `custom` → "Origin" / "Title brought in from the original coding session (e.g. Claude Code's customTitle record)."
+  - `first_user_message` → "Opening message" / "Extracted from the first user message in this session."
+  - `slug` → "Path slug" / "Derived from the session's source path as a fallback when no usable message text was found."
+  - `generated` → "Generated" / "AI-generated title (reserved for a later phase; not produced in Phase 6)."
+  - `null` (legacy row imported before title-source tracking) → "Unknown" / "This session was imported before title-source tracking was added; rescan to populate."
+  - No new component, no JS popover, no new tokens — the row reuses the existing `<dt>` / `<dd>` grid + native browser tooltip mechanism that mirrors the list-panel title-cell pattern.
 - Copy path button (Clipboard API + manual-select fallback for environments without `navigator.clipboard`).
 - Inline subagent sidecar badge alongside `has_subagent_sidecars` per Resolved Decision #8.
 - `View raw` anchor only when `storedSessionUid !== null`.

@@ -24,6 +24,10 @@
 //   10. Clicking the checkbox cell does NOT call `onSelectRow` (the
 //       importability rule's stopPropagation guard preserved verbatim
 //       from Phase 4).
+//   11. Phase 6 M2: the `.title-cell-title` span carries the full
+//       row title on the HTML `title=` attribute (Resolved Decision
+//       #7: CSS-only truncation; the full string stays available via
+//       the native tooltip + assistive tech).
 import { afterEach, expect, mock, test } from "bun:test";
 import { act, cleanup, render } from "@testing-library/react";
 import { SessionsTable } from "./SessionsTable";
@@ -43,6 +47,7 @@ function buildRow(overrides: Partial<SessionRow> = {}): SessionRow {
     tool: "claude_code",
     sourceSessionId: "row-1",
     title: "Row one",
+    titleSource: "first_user_message",
     projectPath: "/projects/row-1",
     sourcePath: "/srv/sessions/row-1.jsonl",
     sourcePathIsStale: false,
@@ -552,6 +557,54 @@ test("SessionsTable: clicking the checkbox cell calls onToggle but NOT onSelectR
   ).toBe("claude_code:checkbox-1");
   // Row-open path did NOT fire — the checkbox cell guard short-circuited.
   expect(onSelectRow).toHaveBeenCalledTimes(0);
+});
+
+test("SessionsTable: Phase 6 M2 — title cell carries the full row title on the HTML `title=` attribute (CSS-only truncation)", () => {
+  // Spec §Frontend Rendering — list panel (Resolved Decision #7):
+  // the visible truncation is a pure CSS rule on `.title-cell-title`.
+  // The full text always lands on the cell's `title=` so the native
+  // browser tooltip + assistive tech still expose it.
+  const fullTitle =
+    "Refactor the streaming raw-preview block so the byte-cap caption no longer flickers between renders when the user toggles the Skim tab quickly enough to coincide with a partial chunk arrival";
+  const rows: SessionRow[] = [
+    buildRow({
+      rowKey: "claude_code:p6-long-title",
+      sourceSessionKey: "claude_code:p6-long-title",
+      sourceSessionId: "p6-long-title",
+      title: fullTitle,
+    }),
+    // A null-title row stays well-defined: the visible "(untitled)"
+    // fallback is preserved; the `title=` attribute resolves to the
+    // empty string so no native tooltip pops on hover.
+    buildRow({
+      rowKey: "claude_code:p6-null-title",
+      sourceSessionKey: "claude_code:p6-null-title",
+      sourceSessionId: "p6-null-title",
+      title: null,
+    }),
+  ];
+  const { container } = render(
+    <SessionsTable
+      rows={rows}
+      selected={new Set()}
+      onToggle={mock(() => {})}
+      onToggleAll={mock(() => {})}
+      now={NOW}
+    />,
+  );
+  const titles = Array.from(
+    container.querySelectorAll<HTMLElement>(".title-cell-title"),
+  );
+  expect(titles.length).toBe(2);
+  // First row: title= attribute carries the FULL row title verbatim
+  // (no JS truncation, no character-count constant).
+  expect(titles[0]?.getAttribute("title")).toBe(fullTitle);
+  expect(titles[0]?.textContent).toBe(fullTitle);
+  // Second row: the null-title fallback "(untitled)" is the visible
+  // body; the `title=` attribute is the empty string per the
+  // `row.title ?? ""` recipe.
+  expect(titles[1]?.getAttribute("title")).toBe("");
+  expect(titles[1]?.textContent).toBe("(untitled)");
 });
 
 test("SessionsTable: inlined status badge renders all 4 variants with the correct class + label transform (M6 StatusBadge retirement)", () => {

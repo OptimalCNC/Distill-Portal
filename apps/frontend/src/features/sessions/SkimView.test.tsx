@@ -97,6 +97,7 @@ function buildRow(overrides: Partial<SessionRow> = {}): SessionRow {
     tool: "claude_code",
     sourceSessionId: "skim-fixture",
     title: "Skim fixture",
+    titleSource: null,
     projectPath: "/projects/skim",
     sourcePath: "/srv/sessions/skim-fixture.jsonl",
     sourcePathIsStale: false,

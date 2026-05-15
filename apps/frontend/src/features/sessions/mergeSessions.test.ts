@@ -61,6 +61,9 @@ function buildSource(
     source_updated_at: "2026-04-22T00:01:00Z",
     project_path: "/projects/src-1",
     title: "Source one",
+    // Phase 6 M1 added `title_source` to the contract. Factory default
+    // mirrors the most common Claude Code resolution path.
+    title_source: "first_user_message",
     has_subagent_sidecars: false,
     status: "not_stored",
     session_uid: null,
@@ -85,6 +88,7 @@ function buildStored(
     ingested_at: "2026-04-22T00:02:00Z",
     project_path: "/projects/src-1",
     title: "Stored one",
+    title_source: "first_user_message",
     has_subagent_sidecars: false,
     ...overrides,
   };
@@ -603,6 +607,76 @@ test("mergeSessions: same source_session_id under different tools does NOT join"
 // ---------------------------------------------------------------------------
 // isImportable rule
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Phase 6 M2 — titleSource propagation
+//
+// The Phase 6 spec §M2 (working/phase-6.md line 200) requires the new
+// `title_source` contract field to flow through the source ↔ stored
+// union without logic change. This test exercises all three merge
+// paths:
+//
+//   - presence === "both"        → titleSource pulled from `src.title_source`
+//   - presence === "source_only" → titleSource pulled from `src.title_source`
+//   - presence === "stored_only" → titleSource pulled from `st.title_source`
+//
+// Plus a legacy-row variant (`title_source: null`) to confirm the
+// nullable carry-through preserves NULL untouched.
+// ---------------------------------------------------------------------------
+
+test("mergeSessions: titleSource propagates through all three merge paths", () => {
+  const srcBoth = buildSource({
+    session_key: "claude_code:ts-both",
+    source_session_id: "ts-both",
+    title_source: "custom",
+    status: "up_to_date",
+    session_uid: "uid-ts-both",
+    stored_ingested_at: "2026-04-22T00:00:00Z",
+  });
+  const stBoth = buildStored({
+    source_session_id: "ts-both",
+    session_uid: "uid-ts-both",
+    title_source: "custom",
+    status: "up_to_date",
+  });
+  const srcOnly = buildSource({
+    session_key: "claude_code:ts-srconly",
+    source_session_id: "ts-srconly",
+    title_source: "slug",
+    status: "not_stored",
+    session_uid: null,
+    stored_ingested_at: null,
+  });
+  const stOnly = buildStored({
+    source_session_id: "ts-stonly",
+    session_uid: "uid-ts-stonly",
+    title_source: "generated",
+    status: "source_missing",
+  });
+  const stLegacy = buildStored({
+    source_session_id: "ts-legacy",
+    session_uid: "uid-ts-legacy",
+    title_source: null,
+    status: "source_missing",
+  });
+  const rows = mergeSessions([srcBoth, srcOnly], [stBoth, stOnly, stLegacy]);
+  const byKey = new Map(rows.map((r) => [r.rowKey, r]));
+  // both: source-side wins (matches spec: source-side data is
+  // authoritative when both are present; spec line 200 also confirms
+  // titleSource is the source-side value at the merge boundary).
+  expect(byKey.get("claude_code:ts-both")?.titleSource).toBe("custom");
+  expect(byKey.get("claude_code:ts-both")?.presence).toBe("both");
+  // source_only: titleSource from `src.title_source`.
+  expect(byKey.get("claude_code:ts-srconly")?.titleSource).toBe("slug");
+  expect(byKey.get("claude_code:ts-srconly")?.presence).toBe("source_only");
+  // stored_only: titleSource from `st.title_source`.
+  expect(byKey.get("stored:uid-ts-stonly")?.titleSource).toBe("generated");
+  expect(byKey.get("stored:uid-ts-stonly")?.presence).toBe("stored_only");
+  // stored_only + null (legacy pre-Phase-6 row): null carries through
+  // verbatim.
+  expect(byKey.get("stored:uid-ts-legacy")?.titleSource).toBeNull();
+  expect(byKey.get("stored:uid-ts-legacy")?.presence).toBe("stored_only");
+});
 
 test("isImportable: only rows with non-null sourceSessionKey AND status=not_stored|outdated are importable", () => {
   const cases: Array<{ presence: "source_only" | "both" | "stored_only"; status: SessionSyncStatus; importable: boolean }> = [

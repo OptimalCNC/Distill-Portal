@@ -61,6 +61,14 @@
 // preserved byte-for-byte at the call site so the DOM shape stays
 // `<span class="badge {variant}">{label}</span>`.
 //
+// As of Phase 6 M2 (Resolved Decision #7) the Title cell carries the
+// row's full title text on a native HTML `title=` attribute. The visible
+// truncation continues to be a pure-CSS rule (`overflow: hidden;
+// text-overflow: ellipsis; white-space: nowrap;` on `.title-cell-title`
+// in `SessionsTable.css`). No JS character-count constant, no second
+// display field — the full string stays available for hover + assistive
+// tech on the same cell.
+//
 // CSS lives in the sibling `SessionsTable.css` (selectors
 // `.table-wrap`, table chrome, `.badge.*`, `.title-cell*`,
 // `.select-col`).
@@ -246,7 +254,10 @@ export function SessionsTable({
                 <td>
                   <div className="title-cell">
                     <div className="title-cell-line1">
-                      <span className="title-cell-title">
+                      <span
+                        className="title-cell-title"
+                        title={row.title ?? ""}
+                      >
                         {row.title ?? "(untitled)"}
                       </span>
                       <span className="title-cell-tool">{row.tool}</span>

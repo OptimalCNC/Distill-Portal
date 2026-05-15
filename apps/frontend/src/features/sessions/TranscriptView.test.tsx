@@ -87,6 +87,7 @@ function buildRow(overrides: Partial<SessionRow> = {}): SessionRow {
     tool: "claude_code",
     sourceSessionId: "transcript-fixture",
     title: "Transcript fixture",
+    titleSource: null,
     projectPath: "/projects/transcript",
     sourcePath: "/srv/sessions/transcript-fixture.jsonl",
     sourcePathIsStale: false,

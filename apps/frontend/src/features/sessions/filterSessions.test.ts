@@ -31,6 +31,7 @@ function row(overrides: Partial<SessionRow> = {}): SessionRow {
     tool: "claude_code",
     sourceSessionId: "row-1",
     title: "Row one",
+    titleSource: null,
     projectPath: "/projects/alpha",
     sourcePath: "/srv/sessions/row-1.jsonl",
     sourcePathIsStale: false,
