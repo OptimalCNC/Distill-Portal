@@ -38,20 +38,41 @@ Legend: ✅ delivered · 📐 frozen spec (not yet implemented) · 🗓 planned 
 
 ## Frozen (spec landed, implementation pending)
 
-_(none — Phase 7 spec not yet drafted)_
+Order: `7a → 7b → 7c → 9a → 9b → 8`. Phase 7 split into 7a (event support matrix), 7b (parser correctness + warning taxonomy), and 7c (transcript rendering overhaul) on 2026-05-15. 9b lands right after 9a (decided 2026-05-15).
 
-## Upcoming (spec not yet drafted; agreed ordering)
+### 📐 Phase 7a — Event Support Matrix
+- **Goal**: Author `docs/features/parser-event-support.md` enumerating every event variant observed in real Claude Code + Codex sessions, with its current parser route, render path, status, and fixture pointer. Wire bidirectional links between matrix rows and parser/renderer source. **Author a fixture + parser test + (where treatment is specified) render test for every matrix row.**
+- **Status taxonomy** (5 values): `✅ supported` / `🔇 silenced` / `⚠ unknown` / `🚧 known-limitation` / `🎨 deferred to 7c`. Rows in `⚠ unknown` become 7b's worklist; rows in `🎨 deferred to 7c` become 7c's worklist.
+- **Scope**: doc + inline `/** Matrix: ... */` JSDoc links + enumeration script + fixture/test scaffolding. Pure observational on parser/renderer logic.
+- **Test scaffolding**: tests for `⚠ unknown` variants are `test.skip(...)` with `@unskip Phase 7b` markers; tests for `🎨 deferred to 7c` variants are `test.skip(...)` with `@unskip Phase 7c` markers. **`bun run test` MUST exit 0** — skipped tests are work-tracking, not failures. All pre-existing tests still pass.
+- **Bidirectional links**: every matrix row links to parser + render file:line; every parser switch arm + TranscriptView case branch carries an inline `Matrix:` anchor. Drift detectable via grep.
+- **Bans**: parser logic changes, renderer logic changes, `ParseWarning` shape changes, backend touch, new tools.
 
-Order: `7 → 9a → 9b → 8`. Locked 2026-05-15.
+### 📐 Phase 7b — Parser Correctness + Warning Taxonomy
+- **Depends on**: 7a closure (the matrix is the authoritative work list).
+- **Goal**: Drive every `⚠ unknown` matrix row to one of `✅ supported`, `🔇 silenced`, or `🚧 known-limitation`. Extend `ParseWarning` with severity + category + message-pointer. Drive warning emission to **zero** on current sessions. **Lift every `@unskip Phase 7b` marker** authored in 7a — each marker corresponds to a parser variant that needs fixing.
+- **Hard gate**: no current real session produces a parser warning before the phase closes. Noise-only warnings (e.g. "Skipping Claude-meta type 'X'") are removed; legitimate edge cases get parser fixes; truly anomalous data emits a structured warning whose shape 7c can render inline.
+- **Scope** (purely the data layer, no UI changes):
+  - Audit `apps/frontend/src/features/sessions/parsers/{claude_code,codex}.ts` warning emit sites (~14 + ~12 today). Each gets a KEEP / SILENCE / FIX decision recorded both in the progress log AND in the matrix row.
+  - Extend `ParseWarning` from `{ lineOrdinal, reason }` to `{ lineOrdinal, severity, category, reason, messageIndex? }`. Backwards-compatible at the consumer boundary; the existing banner keeps rendering.
+  - Reproducer fixture per surviving warning kind under `tests/fixtures/parser-warnings/`.
+  - Real-session sweep: a Bun script that walks the user's local Claude Code + Codex session directories, runs the parsers, and reports per-kind warning counts. The phase closes when the counts are zero.
+- **Bans**: any UI change, any rendering work, any `TranscriptView` edit, any Skim change, any backend touch. Pure parser + types + tests.
 
-### 🗓 Phase 7 — Transcript Rendering Overhaul
-- **Goal**: Fix parse-warning visibility (collapse-with-inspect; never silently hide) and group consecutive same-type message blocks (especially tool calls).
+### 📐 Phase 7c — Transcript Rendering Overhaul (UX)
+- **Depends on**: 7b closure (structured warning shape + zero-warning state).
+- **Goal**: Drive every `🎨 deferred to 7c` matrix row to `✅ supported`. Fix parse-warning visibility (loud session banner + new inline per-message surface) and group consecutive same-kind message blocks for easier skimming. **Lift every `@unskip Phase 7c` marker** authored in 7a — each marker corresponds to a render variant that needs proper treatment.
+- **Grouping shape** (locked 2026-05-15):
+  - Pair each `tool_use` with its matching `tool_result` into a "tool call lifecycle" card.
+  - Group consecutive lifecycles of the same tool into a single grouped card with count badge ("12 tool calls"); expand to inspect each call + its result individually.
+- **Warning UI** (locked 2026-05-15): keep the loud session-level banner (warnings stay visible until the platform stabilises), AND surface per-message inline warnings via the `render_hint` layer.
 - **Key directions** (from codex roadmap review):
   - Introduce a `render_hint` layer between parsers and `TranscriptView` rather than baking grouping rules into raw message kinds.
-  - Extend `ParseWarning { lineOrdinal, reason }` with severity / category / payload-pointer.
-  - Define a 4-bucket classification matrix: `render normally / collapse-by-default / hide-with-inspect / warning-only`.
-- **Bans**: Skim changes, parser rewrites for new tools, transcript-AST churn, search-within-transcript, inline diffing, message pinning.
-- **Open design call**: grouped card with count badge ("12 tool calls") vs. visually-unified-but-individually-addressable rows. Decide at the UI/UX gate.
+  - Apply a 4-bucket classification matrix: `render normally / collapse-by-default / hide-with-inspect / warning-only`.
+- **UI/UX design gate**: yes — design loop produces `working/phase-7c/designs/` artifacts (design.md / prototype.html / wireframes / WCAG) before implementation.
+- **Bans**: Skim changes, parser rewrites for new tools, transcript-AST churn, search-within-transcript, inline diffing, message pinning, virtualisation (escape-hatch dep already reserved in Phase 5 but only fires per its documented Chromium reproducer).
+
+## Upcoming (spec not yet drafted)
 
 ### 🗓 Phase 9a — Async Operations Ledger
 - **Goal**: Replace synchronous Import / Rescan endpoints with persisted async operations. Eliminates the "frozen button" UX without committing to a generalized jobs queue.
