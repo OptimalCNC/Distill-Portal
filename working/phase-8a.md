@@ -1,10 +1,12 @@
-# Phase 8: Raw View Polish
+# Phase 8a: Raw View Polish
 
 ## Status
 
 Frozen at the first commit landing this spec on `main`. Subsequent milestones reference that commit's SHA.
 
-**Depends on Phase 9b closure.** Phase 9b lands a bespoke pretty-JSON `<pre>` block inside Job Center expanded cards for `result_json` / `error_json`. Phase 8 replaces both that simple pretty-JSON `<pre>` and the existing Raw-tab line-by-line plain-text renderer with a shared bespoke NDJSON inspector. Sequencing 8 after 9a/9b keeps the inspector landing as a single coherent piece rather than being introduced and immediately replaced.
+**Depends on Phase 9b closure.** Phase 9b lands a bespoke pretty-JSON `<pre>` block inside Job Center expanded cards for `result_json` / `error_json`. Phase 8a replaces both that simple pretty-JSON `<pre>` and the existing Raw-tab line-by-line plain-text renderer with a shared bespoke NDJSON inspector. Sequencing 8a after 9a/9b keeps the inspector landing as a single coherent piece rather than being introduced and immediately replaced.
+
+**Followed by Phase 8b** (cross-tab Transcript ↔ Raw navigation). Phase 8b adds jump affordances between the Transcript and Raw tabs that scroll to + highlight the corresponding line/message. Phase 8a is purely about the visual + interaction polish of the Raw tab in isolation; Phase 8b is about the wiring between tabs and is grounded in 8a's collapsible-card semantics.
 
 ## Why this phase exists
 
@@ -12,13 +14,13 @@ The Raw tab today is the inspection surface's escape hatch: when the parser disa
 
 A typical Claude Code session line is several kilobytes of JSON with three levels of nesting: a `message` envelope wrapping `content[]` arrays of typed items wrapping multi-line text bodies. Rendered as a single line of plain text, that structure is illegible: the reader sees an unbroken `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"..."}, {"type":"tool_use","name":"...","input":{...}}]},"timestamp":"..."}` and has to manually find the boundaries between fields. The structure is there in the bytes; the renderer just doesn't show it.
 
-Phase 8 closes the gap with a **bespoke NDJSON inspector**: each parseable line becomes a collapsible JSON-tree card with subtle syntax color and a per-line copy button. Malformed lines (lexer failures — what Phase 7b would flag as `severity: error / category: lexer`) keep their existing plain-text row treatment so the reader can still see the bad bytes verbatim. Existing caps (20-line / 256 KB) and caption behavior are preserved verbatim — Phase 8 polishes presentation, not protocol.
+Phase 8a closes the gap with a **bespoke NDJSON inspector**: each parseable line becomes a collapsible JSON-tree card with subtle syntax color and a per-line copy button. Malformed lines (lexer failures — what Phase 7b would flag as `severity: error / category: lexer`) keep their existing plain-text row treatment so the reader can still see the bad bytes verbatim. Existing caps (20-line / 256 KB) and caption behavior are preserved verbatim — Phase 8a polishes presentation, not protocol.
 
 Per codex's review: **no library**. A general-purpose JSON viewer would add 20–80 KB to the bundle for a surface that needs four things — recursive render, collapse, syntax color, copy. A bespoke component fits the repo's existing token/hex/bundle discipline.
 
 ## Goal & Scope
 
-### In scope (must close in Phase 8)
+### In scope (must close in Phase 8a)
 
 - A new `JsonInspector` component (`apps/frontend/src/components/JsonInspector/`) rendering a single parsed JSON value with:
   - Recursive object / array / primitive rendering.
@@ -32,9 +34,9 @@ Per codex's review: **no library**. A general-purpose JSON viewer would add 20�
 - Long-line behavior: a JSON line whose pretty-printed form exceeds a threshold (~512 bytes, locked at M1 design) renders collapsed by default with the top-level keys visible (Claude Code style: top-level keys preview, click to expand). Short lines render expanded. Threshold value is a `const` in the inspector.
 - JobCenter integration (Phase 9b's expanded card body): the temporary pretty-JSON `<pre>` block in the operations Job Center is replaced with `<JsonInspector />` configured to operate on a single value (the `result_json` or `error_json`) rather than a stream of NDJSON lines.
 - Bidirectional reuse: the inspector is parameterised so RawTab and Job Center share the same component. RawTab passes one line at a time; Job Center passes the whole value.
-- UI/UX design gate produces `working/phase-8/designs/` (design.md, prototype.html, wireframes, wcag.py).
+- UI/UX design gate produces `working/phase-8a/designs/` (design.md, prototype.html, wireframes, wcag.py).
 - Documentation sweep across 4 surfaces (see §Documentation).
-- Progress log `progress/phase-8.progress.md` records every chunk + three-reviewer trail.
+- Progress log `progress/phase-8a.progress.md` records every chunk + three-reviewer trail.
 
 ### Out of scope (deferred)
 
@@ -99,7 +101,7 @@ docs/
 └── dev-commands.md                       # mention JsonInspector tests if relevant
 
 progress/
-└── phase-8.progress.md                   # NEW — chunk-by-chunk delivery log
+└── phase-8a.progress.md                   # NEW — chunk-by-chunk delivery log
 ```
 
 No files deleted. No new component crates. No backend touch.
@@ -145,7 +147,7 @@ The recursive render is one component file (`JsonValue.tsx`) ~150 lines.
 
 ## Caps + caption (preserve verbatim)
 
-The existing 20-line / 256 KB streaming caps and `describeCaption(...)` text are unchanged. Phase 8 only changes how each `kind: "json"` line renders. Specifically:
+The existing 20-line / 256 KB streaming caps and `describeCaption(...)` text are unchanged. Phase 8a only changes how each `kind: "json"` line renders. Specifically:
 
 - Byte-cap caption ("Stopped at byte cap — full payload not [shown]") — unchanged.
 - Line-cap caption ("Showing first N lines of the raw payload.") — unchanged.
@@ -157,7 +159,7 @@ The line cap of 20 means the Raw tab has at most 20 inspector instances mounted.
 
 ## UI/UX design gate
 
-The design loop produces `working/phase-8/designs/`:
+The design loop produces `working/phase-8a/designs/`:
 
 - `design.md`:
   - Visual identity of the inspector: hairline borders, subtle syntax color, collapse affordances, copy-button placement.
@@ -193,7 +195,7 @@ Two milestones. Two-commit pattern per chunk (impl + log). Three-reviewer rule a
 
 ### Milestone 1: UI/UX Design Gate
 
-- Design loop produces `working/phase-8/designs/` (design.md, prototype.html, wireframes, wcag.py).
+- Design loop produces `working/phase-8a/designs/` (design.md, prototype.html, wireframes, wcag.py).
 - The four open design decisions get locked in `design.md`:
   - Exact syntax-color tokens (count and values).
   - Long-string handling (wrap vs. truncate-with-expand + threshold).
@@ -203,7 +205,7 @@ Two milestones. Two-commit pattern per chunk (impl + log). Three-reviewer rule a
 - External reviewer signs off on design.
 
 Definition of done:
-- Four design artifacts exist under `working/phase-8/designs/`.
+- Four design artifacts exist under `working/phase-8a/designs/`.
 - The four operational decisions are recorded in `design.md`.
 - WCAG AA holds for every new visible foreground/background pair.
 
@@ -218,12 +220,12 @@ Definition of done:
 - `apps/frontend/src/features/operations/OperationCard.tsx` (Phase 9b file): the expanded-card pretty-JSON `<pre>` is replaced with `<JsonInspector />` configured for a single value (no NDJSON streaming context).
 - Existing `RawTab.test.tsx`: extended to assert each parsed line renders an inspector + the copy button copies the original raw string.
 - Documentation sweep (4 surfaces).
-- Final progress log entry recording the close of Phase 8.
+- Final progress log entry recording the close of Phase 8a.
 
 Definition of done:
 - All gates green (`cargo check --workspace`, `cargo test --workspace`, `bun test src`, `bunx tsc --noEmit`, `bun run build`, `bun run test:e2e`).
 - Hex literal count stays at 24 (or documented amendment with WCAG justification).
-- Token count: M1's locked additions land; documented in `tokens.css` and `progress/phase-8.progress.md`.
+- Token count: M1's locked additions land; documented in `tokens.css` and `progress/phase-8a.progress.md`.
 - RawTab regression: every existing RawTab test still passes (caps, caption, fallback-row, abort-on-unmount).
 - Job Center regression: every existing JobCenter test still passes; the result/error expanded body renders via JsonInspector.
 - 4-surface doc sweep complete.
@@ -231,7 +233,7 @@ Definition of done:
 
 ## Acceptance Criteria
 
-Phase 8 close is achieved when ALL of the following hold:
+Phase 8a close is achieved when ALL of the following hold:
 
 1. `apps/frontend/src/components/JsonInspector/` exists with `JsonInspector.tsx`, `JsonValue.tsx`, `CopyButton.tsx`, plus `.css` and `.test.tsx` siblings.
 2. RawTab renders each `kind: "json"` line via `<JsonInspector />`. Fallback rows remain plain-text per Phase 5.
@@ -240,9 +242,9 @@ Phase 8 close is achieved when ALL of the following hold:
 5. Copy button copies the ORIGINAL raw string passed via the `raw` prop — not the pretty-printed re-serialisation.
 6. Syntax color is applied via the tokens added in M1; AA contrast holds in both light and dark modes per `wcag.py`.
 7. Existing RawTab caps + caption behavior is byte-equivalent to Phase 5 + Phase 7c state.
-8. Four design artifacts exist under `working/phase-8/designs/`.
+8. Four design artifacts exist under `working/phase-8a/designs/`.
 9. Hex literal count stays at 24 (or documented amendment).
-10. Token count: M1's locked additions land; total documented in `progress/phase-8.progress.md`. Subsequent phases inherit the new token count.
+10. Token count: M1's locked additions land; total documented in `progress/phase-8a.progress.md`. Subsequent phases inherit the new token count.
 11. No new runtime dependencies.
 12. Bun-first invariant holds.
 13. 4-surface doc sweep complete.
@@ -268,7 +270,7 @@ Phase 8 close is achieved when ALL of the following hold:
 | Inspector replaces JobCenter's pretty-JSON `<pre>` but the rendering format differs subtly (e.g. quote escaping). | OperationCard test compares the rendered output's textual content against the input value's `JSON.stringify(value, null, 2)` to assert structural equivalence. |
 | `navigator.clipboard.writeText` requires user-gesture in some browser modes; test environment may not have it. | Use a mock in Bun's test environment; production browsers in the Playwright e2e environment provide it natively. The browser e2e exercises the copy path against real Chromium. |
 | Bundle size grows due to the new component. | The component is small (~300 lines TS + ~100 lines CSS). Tree-shaking handles unused branches. M2 measures build output; documented in progress log. |
-| Phase 7c's existing transcript rendering re-uses `<pre>` for code blocks; Phase 8 might tempt scope creep to apply JsonInspector there too. | Out-of-scope bans are explicit: no transcript changes in Phase 8. Code-fence rendering in transcript stays as-is. |
+| Phase 7c's existing transcript rendering re-uses `<pre>` for code blocks; Phase 8a might tempt scope creep to apply JsonInspector there too. | Out-of-scope bans are explicit: no transcript changes in Phase 8a. Code-fence rendering in transcript stays as-is. |
 
 ## Resolved Decisions
 
@@ -284,7 +286,7 @@ These are pre-decided. Planner does not re-litigate.
 8. **No per-node copy.** Per-line copy only. Per-node is a future polish.
 9. **Inspector is reused in JobCenter.** Phase 9b's pretty-JSON `<pre>` for `result_json` / `error_json` is replaced.
 10. **Up to 4 new syntax-color tokens** permitted under the Phase 5 amendment pattern, with WCAG-AA documentation. M1 locks the count.
-11. **UI/UX design gate is mandatory.** Phase 8 does not skip the design loop.
+11. **UI/UX design gate is mandatory.** Phase 8a does not skip the design loop.
 12. **Codex reasoning effort `medium`.** Carried from Phase 6 close.
 13. **Pure frontend phase.** No backend touch. No new component crate.
 14. **No new runtime dependencies.**

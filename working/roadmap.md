@@ -85,16 +85,29 @@ Order: `9a → 9b → 8`. 9b lands right after 9a (decided 2026-05-15). Phase 7 
 - **UI/UX design gate**: yes — design loop produces `working/phase-9b/designs/` artifacts.
 - **Defer beyond 9b**: full-history Operations route, advanced filters, batch cancel, auto-retry, per-unit progress, persisted tray open-state.
 
-### 📐 Phase 8 — Raw View Polish
-- **Depends on**: 9b closure (the bespoke NDJSON inspector replaces both RawTab's plain-text lines AND Job Center's expanded-card pretty-JSON `<pre>` — sequencing 8 after 9a/9b keeps the inspector landing as one coherent piece).
+### 📐 Phase 8a — Raw View Polish (Phase 8 split into 8a + 8b on 2026-05-17)
+- **Depends on**: 9b closure (the bespoke NDJSON inspector replaces both RawTab's plain-text lines AND Job Center's expanded-card pretty-JSON `<pre>` — sequencing 8a after 9a/9b keeps the inspector landing as one coherent piece).
 - **Goal**: Make the Raw tab render JSONL nicely; reuse the same inspector inside the Job Center for result_json / error_json display.
 - **Key directions** (locked 2026-05-16):
   - Bespoke `JsonInspector` component at `apps/frontend/src/components/JsonInspector/`. Recursive render; native `<details>` collapse; subtle syntax color via up to 4 new tokens (amended under Phase 5 amendment pattern, WCAG-AA documented).
   - Each `kind: "json"` line in RawTab → one inspector instance; `kind: "fallback"` rows keep their existing plain-text treatment.
   - Long lines default-collapsed above a byte threshold; locked at M1 design.
   - Copy button copies the ORIGINAL raw string (not the re-serialised pretty form).
-- **UI/UX design gate**: yes — design loop produces `working/phase-8/designs/` artifacts.
+- **UI/UX design gate**: yes — design loop produces `working/phase-8a/designs/` artifacts.
 - **Bans**: cross-line aggregation, schema-aware formatting, inline search, diff view, virtualized mega-viewer, protocol changes to support richer rendering, per-node copy buttons, any transcript-side reuse.
+
+### 📐 Phase 8b — Cross-tab Transcript ↔ Raw Navigation
+- **Depends on**: 8a closure (raw lines are now JsonInspector cards that can be scrolled to + expanded). Also depends on Phase 7c + 7d (already delivered) — every JSONL line has a transcript surface, so the Transcript ↔ Raw round-trip is now well-defined.
+- **Goal**: Wire jump affordances between the Transcript and Raw tabs. Reader can jump from any transcript message to its source raw line (and vice versa) without losing reading focus on the origin tab.
+- **Key directions** (locked 2026-05-17):
+  - URL-state driven: `?tab=...&focus=line:N|msg:N` is the source of truth. Reload + browser back work naturally.
+  - `history.pushState` per jump — browser back returns to origin tab + scroll position.
+  - Multi-message lines: Raw → Transcript jumps to the first message; highlight covers all messages from the same line.
+  - No-message lines (silenced, lexer-failed, known-limitation): the Raw-side affordance does NOT switch tabs; it surfaces an in-place hint.
+  - Transient highlight on arrival, respecting `prefers-reduced-motion`.
+  - Up to 1 new token (highlight color) under the Phase 5 amendment pattern.
+- **UI/UX design gate**: yes — design loop produces `working/phase-8b/designs/` artifacts. The spec defines REQUIREMENTS (discoverability, non-disruption, return mechanism, intuitive affordance); design loop decides visual treatment, motion, copy, keyboard shortcuts.
+- **Bans**: cross-session jumps, within-tab jumps, Skim or Metadata participation, side-by-side tab mode, persistent breadcrumb history, auto-scroll-sync, annotation, backend changes, protocol changes.
 
 ## Post-roadmap (no commitment, no order)
 
