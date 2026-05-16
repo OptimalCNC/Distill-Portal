@@ -101,6 +101,12 @@ export function parseClaudeCode(rawText: string): ParserOutput {
 
     switch (topType) {
       case "user": {
+        /**
+         * Matrix:
+         * - docs/features/parser-event-support.md#claude-code-user-message-content-string
+         * - docs/features/parser-event-support.md#claude-code-user-content-text
+         * - docs/features/parser-event-support.md#claude-code-user-content-tool-result
+         */
         const message = isObject(record["message"]) ? record["message"] : null;
         const content = message ? message["content"] : undefined;
 
@@ -197,6 +203,12 @@ export function parseClaudeCode(rawText: string): ParserOutput {
       }
 
       case "assistant": {
+        /**
+         * Matrix:
+         * - docs/features/parser-event-support.md#claude-code-assistant-content-text
+         * - docs/features/parser-event-support.md#claude-code-assistant-content-thinking
+         * - docs/features/parser-event-support.md#claude-code-assistant-content-tool-use
+         */
         const message = isObject(record["message"]) ? record["message"] : null;
         const content = message ? message["content"] : undefined;
 
@@ -307,6 +319,7 @@ export function parseClaudeCode(rawText: string): ParserOutput {
       }
 
       case "system": {
+        /** Matrix: docs/features/parser-event-support.md#claude-code-system */
         // Some Claude Code system records carry /content, others a short tag.
         let text = "";
         if (typeof record["content"] === "string") {
@@ -333,6 +346,11 @@ export function parseClaudeCode(rawText: string): ParserOutput {
 
       case "custom-title":
       case "permission-mode": {
+        /**
+         * Matrix:
+         * - docs/features/parser-event-support.md#claude-code-custom-title
+         * - docs/features/parser-event-support.md#claude-code-permission-mode
+         */
         // Session-level metadata; the Rust adapter consumes these for indexing
         // but they are not part of the message timeline. We log a low-severity
         // warning so we can audit parser silence in M3a evidence packs.
@@ -344,6 +362,15 @@ export function parseClaudeCode(rawText: string): ParserOutput {
       }
 
       default: {
+        /**
+         * Matrix:
+         * - docs/features/parser-event-support.md#claude-code-agent-name
+         * - docs/features/parser-event-support.md#claude-code-ai-title
+         * - docs/features/parser-event-support.md#claude-code-attachment
+         * - docs/features/parser-event-support.md#claude-code-file-history-snapshot
+         * - docs/features/parser-event-support.md#claude-code-last-prompt
+         * - docs/features/parser-event-support.md#claude-code-queue-operation
+         */
         warnings.push({
           lineOrdinal,
           reason: `unknown top-level type '${topType}'`,

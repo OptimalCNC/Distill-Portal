@@ -1,0 +1,1 @@
+{"type":"event_msg","payload":{"type":"exec_command_end","call_id":"call-1","exit_code":0,"output":"done"}}

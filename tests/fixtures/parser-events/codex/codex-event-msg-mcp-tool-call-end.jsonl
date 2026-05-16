@@ -1,0 +1,1 @@
+{"type":"event_msg","payload":{"type":"mcp_tool_call_end","tool_name":"list_resources","result":"ok"}}

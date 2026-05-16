@@ -39,6 +39,7 @@ Reusable, app-independent crates. Each owns its own README:
 - [`features/inspection-surface.md`](features/inspection-surface.md) — page ownership, API touchpoints, and tests for the inspection workflow
 - [`features/session-view.md`](features/session-view.md) — four-tab session view, parser registry, stream caps, expansion semantics
 - [`features/session-store.md`](features/session-store.md) — storage ownership, backend touchpoints, and tests for persisted session behavior
+- [`features/parser-event-support.md`](features/parser-event-support.md) — observed parser event matrix, fixtures, current routes, and Phase 7b/7c worklists
 
 ## Playbooks
 

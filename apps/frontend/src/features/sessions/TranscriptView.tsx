@@ -269,21 +269,89 @@ function ParseWarningsBanner({
   );
 }
 
+/**
+ * Matrix rows whose parser route is `(skipped)` have no `MessageRow`
+ * branch by design:
+ * - docs/features/parser-event-support.md#claude-code-custom-title
+ * - docs/features/parser-event-support.md#claude-code-permission-mode
+ * - docs/features/parser-event-support.md#codex-response-item-message-role-assistant
+ * - docs/features/parser-event-support.md#codex-response-item-message-role-user
+ * - docs/features/parser-event-support.md#codex-turn-context
+ */
 function MessageRow({ msg, now }: { msg: Message; now: string }) {
   switch (msg.kind) {
     case "user":
+      /**
+       * Matrix:
+       * - docs/features/parser-event-support.md#claude-code-user-message-content-string
+       * - docs/features/parser-event-support.md#claude-code-user-content-text
+       * - docs/features/parser-event-support.md#codex-event-msg-user-message
+       */
       return <UserMessage msg={msg} now={now} />;
     case "assistant":
+      /**
+       * Matrix:
+       * - docs/features/parser-event-support.md#claude-code-assistant-content-text
+       * - docs/features/parser-event-support.md#codex-event-msg-agent-message
+       * - docs/features/parser-event-support.md#codex-event-msg-agent-reasoning
+       */
       return <AssistantMessage msg={msg} now={now} />;
     case "tool_use":
+      /**
+       * Matrix:
+       * - docs/features/parser-event-support.md#claude-code-assistant-content-tool-use
+       * - docs/features/parser-event-support.md#codex-response-item-function-call
+       */
       return <ToolUseMessage msg={msg} now={now} />;
     case "tool_result":
+      /** Matrix: docs/features/parser-event-support.md#claude-code-user-content-tool-result */
       return <ToolResultMessage msg={msg} now={now} />;
     case "system":
+      /**
+       * Matrix:
+       * - docs/features/parser-event-support.md#claude-code-system
+       * - docs/features/parser-event-support.md#codex-event-msg-error
+       * - docs/features/parser-event-support.md#codex-event-msg-task-complete
+       * - docs/features/parser-event-support.md#codex-event-msg-task-started
+       * - docs/features/parser-event-support.md#codex-session-meta
+       */
       return <SystemMessage msg={msg} />;
     case "boundary":
+      /** Matrix: docs/features/parser-event-support.md#codex-session-meta */
       return <BoundaryMessage msg={msg} />;
     case "unknown":
+      /**
+       * Matrix:
+       * - docs/features/parser-event-support.md#claude-code-agent-name
+       * - docs/features/parser-event-support.md#claude-code-ai-title
+       * - docs/features/parser-event-support.md#claude-code-assistant-content-thinking
+       * - docs/features/parser-event-support.md#claude-code-attachment
+       * - docs/features/parser-event-support.md#claude-code-file-history-snapshot
+       * - docs/features/parser-event-support.md#claude-code-last-prompt
+       * - docs/features/parser-event-support.md#claude-code-queue-operation
+       * - docs/features/parser-event-support.md#codex-compacted
+       * - docs/features/parser-event-support.md#codex-event-msg-collab-agent-interaction-end
+       * - docs/features/parser-event-support.md#codex-event-msg-collab-agent-spawn-end
+       * - docs/features/parser-event-support.md#codex-event-msg-collab-close-end
+       * - docs/features/parser-event-support.md#codex-event-msg-collab-waiting-end
+       * - docs/features/parser-event-support.md#codex-event-msg-context-compacted
+       * - docs/features/parser-event-support.md#codex-event-msg-entered-review-mode
+       * - docs/features/parser-event-support.md#codex-event-msg-exec-command-end
+       * - docs/features/parser-event-support.md#codex-event-msg-exited-review-mode
+       * - docs/features/parser-event-support.md#codex-event-msg-item-completed
+       * - docs/features/parser-event-support.md#codex-event-msg-mcp-tool-call-end
+       * - docs/features/parser-event-support.md#codex-event-msg-patch-apply-end
+       * - docs/features/parser-event-support.md#codex-event-msg-thread-rolled-back
+       * - docs/features/parser-event-support.md#codex-event-msg-token-count
+       * - docs/features/parser-event-support.md#codex-event-msg-turn-aborted
+       * - docs/features/parser-event-support.md#codex-event-msg-web-search-end
+       * - docs/features/parser-event-support.md#codex-response-item-custom-tool-call
+       * - docs/features/parser-event-support.md#codex-response-item-custom-tool-call-output
+       * - docs/features/parser-event-support.md#codex-response-item-function-call-output
+       * - docs/features/parser-event-support.md#codex-response-item-message-role-developer
+       * - docs/features/parser-event-support.md#codex-response-item-reasoning
+       * - docs/features/parser-event-support.md#codex-response-item-web-search-call
+       */
       return <UnknownMessage msg={msg} />;
     default: {
       // Exhaustiveness: a future MessageKind without a render branch

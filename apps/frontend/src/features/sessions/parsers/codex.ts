@@ -105,6 +105,7 @@ export function parseCodex(rawText: string): ParserOutput {
 
     switch (topType) {
       case "session_meta": {
+        /** Matrix: docs/features/parser-event-support.md#codex-session-meta */
         if (!sessionMetaSeen) {
           sessionMetaSeen = true;
           const cwd =
@@ -148,6 +149,18 @@ export function parseCodex(rawText: string): ParserOutput {
       }
 
       case "response_item": {
+        /**
+         * Matrix:
+         * - docs/features/parser-event-support.md#codex-response-item-custom-tool-call
+         * - docs/features/parser-event-support.md#codex-response-item-custom-tool-call-output
+         * - docs/features/parser-event-support.md#codex-response-item-function-call
+         * - docs/features/parser-event-support.md#codex-response-item-function-call-output
+         * - docs/features/parser-event-support.md#codex-response-item-message-role-assistant
+         * - docs/features/parser-event-support.md#codex-response-item-message-role-developer
+         * - docs/features/parser-event-support.md#codex-response-item-message-role-user
+         * - docs/features/parser-event-support.md#codex-response-item-reasoning
+         * - docs/features/parser-event-support.md#codex-response-item-web-search-call
+         */
         if (!payload) {
           warnings.push({ lineOrdinal, reason: "response_item missing payload" });
           messages.push({
@@ -214,12 +227,37 @@ export function parseCodex(rawText: string): ParserOutput {
       }
 
       case "turn_context": {
+        /** Matrix: docs/features/parser-event-support.md#codex-turn-context */
         // Adapter metadata (project_path); not part of the message timeline.
         // Spec line 774. Silent skip — no warning, no message.
         break;
       }
 
       case "event_msg": {
+        /**
+         * Matrix:
+         * - docs/features/parser-event-support.md#codex-event-msg-agent-message
+         * - docs/features/parser-event-support.md#codex-event-msg-agent-reasoning
+         * - docs/features/parser-event-support.md#codex-event-msg-collab-agent-interaction-end
+         * - docs/features/parser-event-support.md#codex-event-msg-collab-agent-spawn-end
+         * - docs/features/parser-event-support.md#codex-event-msg-collab-close-end
+         * - docs/features/parser-event-support.md#codex-event-msg-collab-waiting-end
+         * - docs/features/parser-event-support.md#codex-event-msg-context-compacted
+         * - docs/features/parser-event-support.md#codex-event-msg-entered-review-mode
+         * - docs/features/parser-event-support.md#codex-event-msg-error
+         * - docs/features/parser-event-support.md#codex-event-msg-exec-command-end
+         * - docs/features/parser-event-support.md#codex-event-msg-exited-review-mode
+         * - docs/features/parser-event-support.md#codex-event-msg-item-completed
+         * - docs/features/parser-event-support.md#codex-event-msg-mcp-tool-call-end
+         * - docs/features/parser-event-support.md#codex-event-msg-patch-apply-end
+         * - docs/features/parser-event-support.md#codex-event-msg-task-complete
+         * - docs/features/parser-event-support.md#codex-event-msg-task-started
+         * - docs/features/parser-event-support.md#codex-event-msg-thread-rolled-back
+         * - docs/features/parser-event-support.md#codex-event-msg-token-count
+         * - docs/features/parser-event-support.md#codex-event-msg-turn-aborted
+         * - docs/features/parser-event-support.md#codex-event-msg-user-message
+         * - docs/features/parser-event-support.md#codex-event-msg-web-search-end
+         */
         const payloadType =
           payload && typeof payload["type"] === "string"
             ? (payload["type"] as string)
@@ -451,6 +489,7 @@ export function parseCodex(rawText: string): ParserOutput {
       }
 
       default: {
+        /** Matrix: docs/features/parser-event-support.md#codex-compacted */
         warnings.push({
           lineOrdinal,
           reason: `unknown top-level type '${topType}'`,
