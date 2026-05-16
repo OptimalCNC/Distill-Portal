@@ -97,15 +97,16 @@ Order: `7a → 7b → 7c → 9a → 9b → 8`. Phase 7 split into 7a (event supp
 - **UI/UX design gate**: yes — design loop produces `working/phase-9b/designs/` artifacts.
 - **Defer beyond 9b**: full-history Operations route, advanced filters, batch cancel, auto-retry, per-unit progress, persisted tray open-state.
 
-## Upcoming (spec not yet drafted)
-
-### 🗓 Phase 8 — Raw View Polish
-- **Goal**: Make the Raw tab render JSONL nicely (currently plain text per line).
-- **Key directions** (from codex review):
-  - Define unit of rendering as "one NDJSON line = one collapsible JSON object card; malformed lines remain plain-text rows."
-  - Build a bespoke NDJSON inspector — DO NOT import a library. Per-line parse + collapse + syntax color + copy fits the repo's bundle + token + hex discipline better than a generic JSON viewer.
-- **Bans**: cross-line aggregation, schema-aware formatting, inline search, diff view, virtualized mega-viewer, protocol changes.
-- **Why last**: most deferrable phase. Polish on an existing escape-hatch surface; least coupled to other phases.
+### 📐 Phase 8 — Raw View Polish
+- **Depends on**: 9b closure (the bespoke NDJSON inspector replaces both RawTab's plain-text lines AND Job Center's expanded-card pretty-JSON `<pre>` — sequencing 8 after 9a/9b keeps the inspector landing as one coherent piece).
+- **Goal**: Make the Raw tab render JSONL nicely; reuse the same inspector inside the Job Center for result_json / error_json display.
+- **Key directions** (locked 2026-05-16):
+  - Bespoke `JsonInspector` component at `apps/frontend/src/components/JsonInspector/`. Recursive render; native `<details>` collapse; subtle syntax color via up to 4 new tokens (amended under Phase 5 amendment pattern, WCAG-AA documented).
+  - Each `kind: "json"` line in RawTab → one inspector instance; `kind: "fallback"` rows keep their existing plain-text treatment.
+  - Long lines default-collapsed above a byte threshold; locked at M1 design.
+  - Copy button copies the ORIGINAL raw string (not the re-serialised pretty form).
+- **UI/UX design gate**: yes — design loop produces `working/phase-8/designs/` artifacts.
+- **Bans**: cross-line aggregation, schema-aware formatting, inline search, diff view, virtualized mega-viewer, protocol changes to support richer rendering, per-node copy buttons, any transcript-side reuse.
 
 ## Post-roadmap (no commitment, no order)
 
