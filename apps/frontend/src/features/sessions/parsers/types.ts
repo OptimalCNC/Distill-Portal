@@ -23,8 +23,9 @@ import type { Tool } from "../../../lib/contracts";
  *   Claude Code `summary`).
  * - `boundary`: chapter-break marker (Codex second `session_meta` →
  *   `session_resumed`; future `compacted` markers). Carries `boundarySubtype`.
- * - `unknown`: fallthrough for unrecognised top-level / payload shapes.
- *   Always paired with a `warnings[]` entry by the parser.
+ * - `unknown`: fallthrough for malformed or genuinely unrecognised
+ *   top-level / payload shapes. Expected metadata variants are explicit
+ *   silent routes instead of warning-producing unknown rows.
  */
 export type MessageKind =
   | "user"
@@ -101,16 +102,35 @@ export type SkimBlock = {
 };
 
 /**
- * One parser warning. Surfaced as a small dismissible banner in M4/M5.
- * Every malformed input (JSON parse failure, unknown shape, role
- * mismatch, low-severity Claude-meta type) lands here — parsers MUST
- * NEVER throw.
+ * Phase 7b warning taxonomy. Parser warnings are reserved for genuine
+ * anomalies; expected metadata and lifecycle records are handled by
+ * explicit parser routes without warning.
+ */
+export type ParseWarningSeverity = "error" | "warning" | "info";
+
+export type ParseWarningCategory =
+  | "lexer"
+  | "schema"
+  | "payload"
+  | "timestamp"
+  | "meta";
+
+/**
+ * One parser warning. Surfaced by the existing Transcript banner through
+ * `reason`; severity/category/messageIndex are carried forward for Phase 7c
+ * inline routing. Parsers MUST NEVER throw.
  */
 export type ParseWarning = {
   /** 0-indexed JSONL line number where the warning was raised. */
   lineOrdinal: number;
+  /** Drives future banner-vs-inline routing. */
+  severity: ParseWarningSeverity;
+  /** Groups warnings by parser failure domain. */
+  category: ParseWarningCategory;
   /** Human-readable reason; surfaced as a small dismissible banner. */
   reason: string;
+  /** Optional index into `messages[]` when the warning concerns an emitted message. */
+  messageIndex?: number;
 };
 
 /**

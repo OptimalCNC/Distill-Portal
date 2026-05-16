@@ -21,6 +21,21 @@ To add support for a new tool (a future `<tool>` discriminant in the `Tool` unio
 
 The parser-dispatch path is entirely separate from the Raw tab's `consumeRawPreview` (256 KB / 20-line preview). Skim and Transcript share one cached `ParsedSession` via `useParsedSession`'s LRU(5); the Raw tab runs its own consumer.
 
+## Parser warning audit pattern
+
+When a parser encounters a new real-world variant, start with [`../features/parser-event-support.md`](../features/parser-event-support.md). Add or update the matrix row, then make an explicit KEEP / SILENCE / FIX decision:
+
+- **SILENCE** expected metadata, telemetry, and duplicate anchor records by adding a named parser route that emits no message and no warning. This is the default for cases like Claude Code session-level control rows and Codex token accounting.
+- **FIX** variants that should be visible in the Transcript/Skim model by routing them to an existing `MessageKind` (`assistant`, `system`, `tool_use`, `tool_result`, `boundary`, etc.) and adding fixture coverage under `tests/fixtures/parser-events/`.
+- **KEEP** a parser warning only for genuine anomalies: malformed JSON, missing discriminators, unknown future variants, role mismatches, invalid payload content, or bad timestamps. Every kept warning must include `severity`, `category`, and `reason`, and should have a byte-small fixture under `tests/fixtures/parser-warnings/<tool>/`.
+
+After changing parser behavior, update both coverage tests:
+
+- `apps/frontend/src/features/sessions/parsers/event-support-coverage.test.ts` asserts the parser route and warning/silence decision.
+- `apps/frontend/src/features/sessions/TranscriptView.event-coverage.test.tsx` asserts the unchanged UI's render treatment for the resulting `MessageKind`.
+
+Before finishing a parser-warning change, run `bun run parser-warning-sweep` from `apps/frontend/`. The sweep walks the local Claude Code and Codex session roots and must exit zero unless a matrix row is explicitly documented as a known limitation.
+
 ## CSS-only truncation with full-text tooltip (Phase 6 worked example)
 
 When a list cell holds a string that may exceed the column's available width, do NOT introduce a JS character-count constant or a separate "display title" field. Two ingredients suffice:

@@ -31,6 +31,10 @@
 // 4. Top-level `/timestamp` preferred; falls back to `/payload/timestamp`.
 
 import type { Message, ParseWarning, ParserOutput } from "./types";
+import type {
+  ParseWarningCategory,
+  ParseWarningSeverity,
+} from "./types";
 
 type JsonValue =
   | string
@@ -65,7 +69,7 @@ export function parseCodex(rawText: string): ParserOutput {
       continue;
     }
     if (raw === "") {
-      warnings.push({ lineOrdinal, reason: "empty line" });
+      pushWarning(warnings, lineOrdinal, "error", "lexer", "empty line");
       continue;
     }
 
@@ -73,15 +77,18 @@ export function parseCodex(rawText: string): ParserOutput {
     try {
       record = JSON.parse(raw) as JsonValue;
     } catch {
-      warnings.push({ lineOrdinal, reason: "malformed JSON" });
+      pushWarning(warnings, lineOrdinal, "error", "lexer", "malformed JSON");
       continue;
     }
 
     if (!isObject(record)) {
-      warnings.push({
+      pushWarning(
+        warnings,
         lineOrdinal,
-        reason: "top-level JSON value is not an object",
-      });
+        "error",
+        "lexer",
+        "top-level JSON value is not an object",
+      );
       continue;
     }
 
@@ -90,7 +97,13 @@ export function parseCodex(rawText: string): ParserOutput {
     const timestamp = parseTimestamp(record, payload, lineOrdinal, warnings);
 
     if (topType === null) {
-      warnings.push({ lineOrdinal, reason: "missing top-level 'type' field" });
+      pushWarning(
+        warnings,
+        lineOrdinal,
+        "error",
+        "schema",
+        "missing top-level 'type' field",
+      );
       messages.push({
         lineOrdinal,
         messageIndex: nextMessageIndex++,
@@ -162,11 +175,18 @@ export function parseCodex(rawText: string): ParserOutput {
          * - docs/features/parser-event-support.md#codex-response-item-web-search-call
          */
         if (!payload) {
-          warnings.push({ lineOrdinal, reason: "response_item missing payload" });
           messages.push({
             lineOrdinal, messageIndex: nextMessageIndex++, timestamp,
             kind: "unknown", text: stringifyTruncated(record), raw, bytes: byteLength(raw),
           });
+          pushWarning(
+            warnings,
+            lineOrdinal,
+            "error",
+            "schema",
+            "response_item missing payload",
+            nextMessageIndex - 1,
+          );
           break;
         }
         const payloadType =
@@ -209,11 +229,88 @@ export function parseCodex(rawText: string): ParserOutput {
           break;
         }
 
+        if (payloadType === "custom_tool_call") {
+          const text = stringifyMessagePayload(
+            payload["input"] ?? payload["arguments"] ?? null,
+          );
+          messages.push({
+            lineOrdinal,
+            messageIndex: nextMessageIndex++,
+            timestamp,
+            kind: "tool_use",
+            toolName: stringField(payload, "name", "custom_tool_call"),
+            text,
+            raw,
+            bytes: byteLength(text),
+          });
+          break;
+        }
+
+        if (payloadType === "web_search_call") {
+          const text = stringifyMessagePayload(payload["query"] ?? payload);
+          messages.push({
+            lineOrdinal,
+            messageIndex: nextMessageIndex++,
+            timestamp,
+            kind: "tool_use",
+            toolName: "web_search",
+            text,
+            raw,
+            bytes: byteLength(text),
+          });
+          break;
+        }
+
+        if (
+          payloadType === "function_call_output" ||
+          payloadType === "custom_tool_call_output"
+        ) {
+          const text = stringifyMessagePayload(payload["output"] ?? payload["result"] ?? null);
+          messages.push({
+            lineOrdinal,
+            messageIndex: nextMessageIndex++,
+            timestamp,
+            kind: "tool_result",
+            toolName:
+              payloadType === "function_call_output"
+                ? stringField(payload, "name", "function_call")
+                : stringField(payload, "name", "custom_tool_call"),
+            text,
+            raw,
+            bytes: byteLength(text),
+          });
+          break;
+        }
+
+        if (payloadType === "message" && role === "developer") {
+          const text = contentArrayText(payload["content"], "developer message");
+          messages.push({
+            lineOrdinal,
+            messageIndex: nextMessageIndex++,
+            timestamp,
+            kind: "system",
+            text,
+            raw,
+            bytes: byteLength(text),
+          });
+          break;
+        }
+
+        if (payloadType === "reasoning") {
+          const text = reasoningText(payload);
+          messages.push({
+            lineOrdinal,
+            messageIndex: nextMessageIndex++,
+            timestamp,
+            kind: "assistant",
+            text,
+            raw,
+            bytes: byteLength(text),
+          });
+          break;
+        }
+
         // Unknown response_item shape (totality fallthrough).
-        warnings.push({
-          lineOrdinal,
-          reason: `unknown response_item payload.type '${payloadType ?? "(missing)"}'`,
-        });
         messages.push({
           lineOrdinal,
           messageIndex: nextMessageIndex++,
@@ -223,6 +320,14 @@ export function parseCodex(rawText: string): ParserOutput {
           raw,
           bytes: byteLength(raw),
         });
+        pushWarning(
+          warnings,
+          lineOrdinal,
+          "warning",
+          "schema",
+          `unknown response_item payload.type '${payloadType ?? "(missing)"}'`,
+          nextMessageIndex - 1,
+        );
         break;
       }
 
@@ -264,10 +369,6 @@ export function parseCodex(rawText: string): ParserOutput {
             : null;
 
         if (payloadType === null) {
-          warnings.push({
-            lineOrdinal,
-            reason: "event_msg missing payload.type",
-          });
           messages.push({
             lineOrdinal,
             messageIndex: nextMessageIndex++,
@@ -277,6 +378,14 @@ export function parseCodex(rawText: string): ParserOutput {
             raw,
             bytes: byteLength(raw),
           });
+          pushWarning(
+            warnings,
+            lineOrdinal,
+            "error",
+            "schema",
+            "event_msg missing payload.type",
+            nextMessageIndex - 1,
+          );
           break;
         }
 
@@ -287,10 +396,13 @@ export function parseCodex(rawText: string): ParserOutput {
             if (typeof m === "string") {
               text = m;
             } else {
-              warnings.push({
+              pushWarning(
+                warnings,
                 lineOrdinal,
-                reason: "event_msg.user_message missing or non-string payload.message",
-              });
+                "warning",
+                "payload",
+                "event_msg.user_message missing or non-string payload.message",
+              );
             }
             messages.push({
               lineOrdinal,
@@ -310,10 +422,13 @@ export function parseCodex(rawText: string): ParserOutput {
             if (typeof m === "string") {
               text = m;
             } else {
-              warnings.push({
+              pushWarning(
+                warnings,
                 lineOrdinal,
-                reason: "event_msg.agent_message missing or non-string payload.message",
-              });
+                "warning",
+                "payload",
+                "event_msg.agent_message missing or non-string payload.message",
+              );
             }
             messages.push({
               lineOrdinal,
@@ -338,11 +453,13 @@ export function parseCodex(rawText: string): ParserOutput {
             } else if (typeof m === "string") {
               text = m;
             } else {
-              warnings.push({
+              pushWarning(
+                warnings,
                 lineOrdinal,
-                reason:
-                  "event_msg.agent_reasoning missing or non-string payload.text and payload.message",
-              });
+                "warning",
+                "payload",
+                "event_msg.agent_reasoning missing or non-string payload.text and payload.message",
+              );
             }
             messages.push({
               lineOrdinal,
@@ -396,10 +513,13 @@ export function parseCodex(rawText: string): ParserOutput {
           case "exec_command": {
             const rawCommand = payload ? payload["command"] : null;
             if (rawCommand === null || rawCommand === undefined) {
-              warnings.push({
+              pushWarning(
+                warnings,
                 lineOrdinal,
-                reason: "event_msg.exec_command missing payload.command",
-              });
+                "warning",
+                "payload",
+                "event_msg.exec_command missing payload.command",
+              );
             }
             // Normalize undefined → null so JSON.stringify always returns a string
             // (JSON.stringify(undefined) === undefined, which would violate Message.text: string).
@@ -422,10 +542,13 @@ export function parseCodex(rawText: string): ParserOutput {
           case "exec_command_output": {
             const rawOutput = payload ? payload["output"] : null;
             if (rawOutput === null || rawOutput === undefined) {
-              warnings.push({
+              pushWarning(
+                warnings,
                 lineOrdinal,
-                reason: "event_msg.exec_command_output missing payload.output",
-              });
+                "warning",
+                "payload",
+                "event_msg.exec_command_output missing payload.output",
+              );
             }
             // Spec line 779: `text: ... / payload.output` — for exec_command_output the raw
             // string passes through (no JSON.stringify wrapper, unlike exec_command). Non-string
@@ -448,15 +571,118 @@ export function parseCodex(rawText: string): ParserOutput {
             break;
           }
 
+          case "exec_command_end": {
+            const text = eventResultText(payload);
+            messages.push({
+              lineOrdinal,
+              messageIndex: nextMessageIndex++,
+              timestamp,
+              kind: "tool_result",
+              toolName: "exec",
+              text,
+              raw,
+              bytes: byteLength(text),
+            });
+            break;
+          }
+
+          case "mcp_tool_call_end": {
+            const text = eventResultText(payload);
+            messages.push({
+              lineOrdinal,
+              messageIndex: nextMessageIndex++,
+              timestamp,
+              kind: "tool_result",
+              toolName: stringField(payload, "tool_name", "mcp"),
+              text,
+              raw,
+              bytes: byteLength(text),
+            });
+            break;
+          }
+
+          case "patch_apply_end": {
+            const text = eventResultText(payload);
+            messages.push({
+              lineOrdinal,
+              messageIndex: nextMessageIndex++,
+              timestamp,
+              kind: "tool_result",
+              toolName: "apply_patch",
+              text,
+              raw,
+              bytes: byteLength(text),
+            });
+            break;
+          }
+
+          case "web_search_end": {
+            const text = eventResultText(payload);
+            messages.push({
+              lineOrdinal,
+              messageIndex: nextMessageIndex++,
+              timestamp,
+              kind: "tool_result",
+              toolName: "web_search",
+              text,
+              raw,
+              bytes: byteLength(text),
+            });
+            break;
+          }
+
+          case "context_compacted":
+          case "thread_rolled_back": {
+            const text =
+              payloadType === "context_compacted"
+                ? "conversation compacted"
+                : "thread rolled back";
+            messages.push({
+              lineOrdinal,
+              messageIndex: nextMessageIndex++,
+              timestamp,
+              kind: "boundary",
+              boundarySubtype: "compacted",
+              text,
+              raw,
+              bytes: byteLength(text),
+            });
+            break;
+          }
+
+          case "collab_agent_interaction_end":
+          case "collab_agent_spawn_end":
+          case "collab_close_end":
+          case "collab_waiting_end":
+          case "entered_review_mode":
+          case "exited_review_mode":
+          case "item_completed":
+          case "turn_aborted": {
+            const text = systemEventText(payloadType, payload);
+            messages.push({
+              lineOrdinal,
+              messageIndex: nextMessageIndex++,
+              timestamp,
+              kind: "system",
+              text,
+              raw,
+              bytes: byteLength(text),
+            });
+            break;
+          }
+
+          case "token_count": {
+            /** Matrix: docs/features/parser-event-support.md#codex-event-msg-token-count */
+            // Phase 7b audit: token accounting is expected telemetry, not a
+            // timeline message or parser anomaly.
+            break;
+          }
+
           case "error": {
             const errMsg =
               payload && typeof payload["message"] === "string"
                 ? (payload["message"] as string)
                 : "(no error message)";
-            warnings.push({
-              lineOrdinal,
-              reason: `event_msg.error: ${errMsg}`,
-            });
             messages.push({
               lineOrdinal,
               messageIndex: nextMessageIndex++,
@@ -470,10 +696,6 @@ export function parseCodex(rawText: string): ParserOutput {
           }
 
           default: {
-            warnings.push({
-              lineOrdinal,
-              reason: `unknown event_msg payload.type '${payloadType}'`,
-            });
             messages.push({
               lineOrdinal,
               messageIndex: nextMessageIndex++,
@@ -483,17 +705,39 @@ export function parseCodex(rawText: string): ParserOutput {
               raw,
               bytes: byteLength(raw),
             });
+            pushWarning(
+              warnings,
+              lineOrdinal,
+              "warning",
+              "schema",
+              `unknown event_msg payload.type '${payloadType}'`,
+              nextMessageIndex - 1,
+            );
           }
         }
         break;
       }
 
-      default: {
+      case "compacted": {
         /** Matrix: docs/features/parser-event-support.md#codex-compacted */
-        warnings.push({
+        const text =
+          payload && typeof payload["message"] === "string"
+            ? (payload["message"] as string)
+            : "conversation compacted";
+        messages.push({
           lineOrdinal,
-          reason: `unknown top-level type '${topType}'`,
+          messageIndex: nextMessageIndex++,
+          timestamp,
+          kind: "boundary",
+          boundarySubtype: "compacted",
+          text,
+          raw,
+          bytes: byteLength(text),
         });
+        break;
+      }
+
+      default: {
         messages.push({
           lineOrdinal,
           messageIndex: nextMessageIndex++,
@@ -503,6 +747,14 @@ export function parseCodex(rawText: string): ParserOutput {
           raw,
           bytes: byteLength(raw),
         });
+        pushWarning(
+          warnings,
+          lineOrdinal,
+          "warning",
+          "schema",
+          `unknown top-level type '${topType}'`,
+          nextMessageIndex - 1,
+        );
       }
     }
   }
@@ -525,13 +777,22 @@ function parseTimestamp(
   if (typeof top === "string") {
     const millis = Date.parse(top);
     if (!Number.isNaN(millis)) return top;
-    warnings.push({
+    pushWarning(
+      warnings,
       lineOrdinal,
-      reason: `unparseable RFC3339 top-level timestamp '${top}'`,
-    });
+      "warning",
+      "timestamp",
+      `unparseable RFC3339 top-level timestamp '${top}'`,
+    );
     // Fall through to payload check.
   } else if (top !== undefined && top !== null) {
-    warnings.push({ lineOrdinal, reason: "top-level timestamp is not a string" });
+    pushWarning(
+      warnings,
+      lineOrdinal,
+      "warning",
+      "timestamp",
+      "top-level timestamp is not a string",
+    );
   }
 
   if (payload) {
@@ -539,16 +800,99 @@ function parseTimestamp(
     if (typeof inner === "string") {
       const millis = Date.parse(inner);
       if (!Number.isNaN(millis)) return inner;
-      warnings.push({
+      pushWarning(
+        warnings,
         lineOrdinal,
-        reason: `unparseable RFC3339 payload.timestamp '${inner}'`,
-      });
+        "warning",
+        "timestamp",
+        `unparseable RFC3339 payload.timestamp '${inner}'`,
+      );
     } else if (inner !== undefined && inner !== null) {
-      warnings.push({ lineOrdinal, reason: "payload.timestamp is not a string" });
+      pushWarning(
+        warnings,
+        lineOrdinal,
+        "warning",
+        "timestamp",
+        "payload.timestamp is not a string",
+      );
     }
   }
 
   return null;
+}
+
+function pushWarning(
+  warnings: ParseWarning[],
+  lineOrdinal: number,
+  severity: ParseWarningSeverity,
+  category: ParseWarningCategory,
+  reason: string,
+  messageIndex?: number,
+): void {
+  warnings.push({
+    lineOrdinal,
+    severity,
+    category,
+    reason,
+    ...(messageIndex === undefined ? {} : { messageIndex }),
+  });
+}
+
+function stringField(
+  object: JsonObject | null,
+  field: string,
+  fallback: string,
+): string {
+  return object && typeof object[field] === "string"
+    ? (object[field] as string)
+    : fallback;
+}
+
+function stringifyMessagePayload(value: JsonValue | undefined): string {
+  if (typeof value === "string") return value;
+  return JSON.stringify(value ?? null);
+}
+
+function eventResultText(payload: JsonObject | null): string {
+  if (!payload) return "";
+  const candidate =
+    payload["output"] ?? payload["result"] ?? payload["message"] ?? payload["status"] ?? payload;
+  return stringifyMessagePayload(candidate);
+}
+
+function systemEventText(payloadType: string, payload: JsonObject | null): string {
+  if (!payload) return payloadType;
+  const status = typeof payload["status"] === "string" ? ` · ${payload["status"]}` : "";
+  const reason = typeof payload["reason"] === "string" ? ` · ${payload["reason"]}` : "";
+  const agent = typeof payload["agent_id"] === "string" ? ` · ${payload["agent_id"]}` : "";
+  const item = typeof payload["item_id"] === "string" ? ` · ${payload["item_id"]}` : "";
+  return `${payloadType}${agent}${item}${status}${reason}`;
+}
+
+function contentArrayText(value: JsonValue | undefined, fallback: string): string {
+  if (typeof value === "string") return value;
+  if (!Array.isArray(value)) return fallback;
+  const parts = value.flatMap((item) => {
+    if (!isObject(item)) return [];
+    const text = item["text"];
+    return typeof text === "string" ? [text] : [];
+  });
+  return parts.length > 0 ? parts.join("\n") : fallback;
+}
+
+function reasoningText(payload: JsonObject): string {
+  const text = payload["text"] ?? payload["message"];
+  if (typeof text === "string") return text;
+  const summary = payload["summary"];
+  if (Array.isArray(summary)) {
+    const parts = summary.flatMap((item) => {
+      if (!isObject(item)) return [];
+      const summaryText = item["text"];
+      return typeof summaryText === "string" ? [summaryText] : [];
+    });
+    if (parts.length > 0) return parts.join("\n");
+  }
+  return stringifyMessagePayload(payload);
 }
 
 function byteLength(text: string): number {

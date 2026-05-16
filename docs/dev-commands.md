@@ -25,6 +25,8 @@ bun install
 bun run dev
 bun run build
 bun run test
+bun run test:scripts
+bun run parser-warning-sweep
 ```
 
 - `bun run dev` starts the Vite dev server on `http://127.0.0.1:4100` with `strictPort: true` so a port collision fails fast.
@@ -41,6 +43,8 @@ bun run test
   - **Unified session feature** — `apps/frontend/src/features/sessions/`: `SessionsTable.test.tsx`, `SessionFilters.test.tsx`, `SessionsView.test.tsx`, `SessionView.test.tsx`, `SessionMetadata.test.tsx`, `RawTab.test.tsx`, `TranscriptView.test.tsx`, `SkimView.test.tsx`, `BoundaryRow.test.tsx`, plus pure helpers (`mergeSessions.test.ts`, `filterSessions.test.ts`, `applyPagination.test.ts`, `relativeTime.test.ts`, `useSessionFilters.test.ts`, `useToastQueue.test.ts`, `lastRescan.test.ts`, `rawPreview.test.ts`, `useSelectedSession.test.ts`, `streamRawText.test.ts`, `useParsedSession.test.ts`) and the per-tool parser suites under `parsers/`.
   - **Shared React primitives** — `apps/frontend/src/components/`: `ActionBar.test.tsx`, `Tabs.test.tsx`, `Pagination.test.tsx`, `Toast.test.tsx`, `ScanErrorsCallout.test.tsx`. The Phase-4 `Drawer.test.tsx` was deleted at Phase 5 M6.
   - The variant-matrix `StatusBadge.test.tsx` from Phase 4 M2 was retired in Phase 4 M6 (Chunk G); the four-variant DOM-shape contract is preserved by a dedicated test in `SessionsTable.test.tsx`. `App.test.tsx` continues to assert the `up-to-date` variant at the integration level.
+- `bun run test:scripts` runs Bun tests for frontend tooling scripts.
+- `bun run parser-warning-sweep` walks local Claude Code and Codex JSONL session roots, runs the frontend parsers, prints per-`tool/severity/category` warning counts, and exits non-zero if any parser warning fires. Defaults: `~/.config/claude-code/projects`, `~/.claude/projects`, and `~/.codex/sessions`; override with repeated `--claude-root <path>` and `--codex-root <path>` flags.
 
 ## Dev Topology
 
@@ -102,6 +106,16 @@ See `playwright.config.ts` for the full configuration.
 cargo test -p distill-portal-collector-runtime --test parsers
 cargo test -p distill-portal-backend --test http_api
 cargo test -p distill-portal-e2e --test inspection_surface
+```
+
+Frontend targeted commands (run from `apps/frontend/`):
+
+```bash
+bun run test
+bun run test:scripts
+bun run parser-warning-sweep
+bunx tsc --noEmit
+bun run build
 ```
 
 ## TypeScript Contract Bindings

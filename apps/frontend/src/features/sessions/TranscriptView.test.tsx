@@ -501,11 +501,26 @@ test("state success (not truncated) → NO truncation banner", () => {
 // ==========================================================================
 
 const ONE_WARNING: ParseWarning[] = [
-  { lineOrdinal: 12, reason: "unknown role" },
+  {
+    lineOrdinal: 12,
+    severity: "warning",
+    category: "schema",
+    reason: "unknown role",
+  },
 ];
 const TWO_WARNINGS: ParseWarning[] = [
-  { lineOrdinal: 12, reason: "unknown role" },
-  { lineOrdinal: 47, reason: "missing field" },
+  {
+    lineOrdinal: 12,
+    severity: "warning",
+    category: "schema",
+    reason: "unknown role",
+  },
+  {
+    lineOrdinal: 47,
+    severity: "error",
+    category: "payload",
+    reason: "missing field",
+  },
 ];
 
 test("warnings.length > 0 → banner renders with the verbatim spec copy ('1 parse warnings' for N=1)", () => {

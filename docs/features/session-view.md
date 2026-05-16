@@ -77,6 +77,26 @@ Per-tool architecture under `apps/frontend/src/features/sessions/parsers/`:
 
 Parsers are pure (no I/O), total (never throw — failures go to `warnings[]`), and synchronous. Adding a third tool is one registry entry plus a new `parsers/<tool>.ts` file plus a co-located test file — NOT a control-flow edit anywhere else.
 
+### Warning taxonomy
+
+Phase 7b extended `ParseWarning` to carry `severity`, `category`, and optional `messageIndex` in addition to the banner-visible `lineOrdinal` and `reason`. The current Transcript and Skim warning banners still render only `reason`; the extra fields are carried for Phase 7c's inline routing.
+
+Severity values:
+
+- `error` — the parser could not reliably inspect the line, such as malformed JSON, an empty mid-document line, a non-object top-level JSON value, or a missing required discriminator.
+- `warning` — the line was parsed, but its schema or payload is anomalous and may indicate source drift or corrupt data.
+- `info` — reserved for unusual-but-handled parser observations. Phase 7b does not intentionally emit info warnings for expected metadata.
+
+Category values:
+
+- `lexer` — failures before object inspection, including empty lines, malformed JSON, and top-level non-objects.
+- `schema` — top-level discriminator or shape drift, including missing `type`, unknown top-level type, unknown `event_msg` type, or unknown `response_item` payload type.
+- `payload` — message-body or sub-field anomalies, including role mismatches, invalid content item shapes, missing command/output fields, or missing event message text.
+- `timestamp` — unparseable or non-string timestamp fields.
+- `meta` — reserved for session-level metadata anomalies. Expected Claude Code and Codex metadata is explicitly routed and silenced instead.
+
+The Phase 7b invariant is that the real local corpus sweep emits zero parser warnings. Run `bun run parser-warning-sweep` from `apps/frontend/`; it walks Claude Code and Codex JSONL roots, prints per-`tool/severity/category` counts, and exits non-zero if any warning fires. Synthetic warning fixtures live under `tests/fixtures/parser-warnings/` and are excluded from the real-session sweep.
+
 ## Stream caps
 
 - **Skim / Transcript full-payload fetch**: 5 MB cap via `streamRawText.ts` (constant `STREAM_RAW_TEXT_BYTE_CAP`). Multi-byte UTF-8 character straddling the boundary may yield `U+FFFD` per spec line 402 (byte-anchored contract). Cap-equality is exact: `totalBytes === STREAM_RAW_TEXT_BYTE_CAP` when truncated. `reader.cancel()` fires at cap trip. Listener cleanup in `finally`.

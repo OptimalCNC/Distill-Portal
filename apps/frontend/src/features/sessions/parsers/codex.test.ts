@@ -15,7 +15,7 @@
 //  13. event_msg.task_complete → system
 //  14. event_msg.exec_command → tool_use toolName="exec"
 //  15. event_msg.exec_command_output → tool_result toolName="exec"
-//  16. event_msg.error → system + warning
+//  16. event_msg.error → system
 //  17. event_msg unknown payload.type → unknown + warning
 //  18. event_msg missing payload.type → unknown + warning
 //  19. malformed JSON → warning, skipped, sequential messageIndex preserved
@@ -25,7 +25,6 @@
 //  23. End-to-end real fixture: anchor principle skips response_item.user
 
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseCodex } from "./codex";
 
@@ -136,6 +135,7 @@ test("response_item missing payload entirely emits unknown + warning (totality)"
   const out = parseCodex(raw);
   expect(out.messages).toHaveLength(1);
   expect(out.messages[0].kind).toBe("unknown");
+  expect(out.warnings[0]).toMatchObject({ severity: "error", category: "schema" });
   expect(out.warnings.some((w) => w.reason === "response_item missing payload")).toBe(true);
 });
 
@@ -157,6 +157,7 @@ test("response_item with unknown payload type emits unknown + warning", () => {
   expect(out.messages).toHaveLength(1);
   expect(out.messages[0].kind).toBe("unknown");
   expect(out.warnings).toHaveLength(1);
+  expect(out.warnings[0]).toMatchObject({ severity: "warning", category: "schema" });
   expect(out.warnings[0].reason).toContain("unknown response_item payload.type");
 });
 
@@ -216,6 +217,7 @@ test("event_msg.user_message missing payload.message warns + emits empty-text us
   const raw = JSON.stringify({ type: "event_msg", payload: { type: "user_message" } });
   const out = parseCodex(raw);
   expect(out.messages[0]).toMatchObject({ kind: "user", text: "" });
+  expect(out.warnings[0]).toMatchObject({ severity: "warning", category: "payload" });
   expect(out.warnings.some((w) => w.reason.includes("user_message missing"))).toBe(true);
 });
 
@@ -223,6 +225,7 @@ test("event_msg.agent_message missing payload.message warns", () => {
   const raw = JSON.stringify({ type: "event_msg", payload: { type: "agent_message" } });
   const out = parseCodex(raw);
   expect(out.messages[0]).toMatchObject({ kind: "assistant", text: "" });
+  expect(out.warnings[0]).toMatchObject({ severity: "warning", category: "payload" });
   expect(out.warnings.some((w) => w.reason.includes("agent_message missing"))).toBe(true);
 });
 
@@ -230,6 +233,7 @@ test("event_msg.agent_reasoning missing both payload.text and payload.message wa
   const raw = JSON.stringify({ type: "event_msg", payload: { type: "agent_reasoning" } });
   const out = parseCodex(raw);
   expect(out.messages[0]).toMatchObject({ kind: "assistant", text: "" });
+  expect(out.warnings[0]).toMatchObject({ severity: "warning", category: "payload" });
   expect(out.warnings.some((w) => w.reason.includes("agent_reasoning missing"))).toBe(true);
 });
 
@@ -300,6 +304,7 @@ test("event_msg.exec_command_output with non-string output JSON.stringify-wraps 
 test("event_msg.exec_command missing payload.command warns AND emits text='null' (string, not undefined)", () => {
   const raw = JSON.stringify({ type: "event_msg", payload: { type: "exec_command" } });
   const out = parseCodex(raw);
+  expect(out.warnings[0]).toMatchObject({ severity: "warning", category: "payload" });
   expect(out.warnings.some((w) => w.reason.includes("exec_command missing payload.command"))).toBe(true);
   // Regression: Message.text MUST be a string (JSON.stringify(undefined) returns undefined; we normalise to null first).
   expect(typeof out.messages[0].text).toBe("string");
@@ -309,20 +314,20 @@ test("event_msg.exec_command missing payload.command warns AND emits text='null'
 test("event_msg.exec_command_output missing payload.output warns AND emits text='null' (string, not undefined)", () => {
   const raw = JSON.stringify({ type: "event_msg", payload: { type: "exec_command_output" } });
   const out = parseCodex(raw);
+  expect(out.warnings[0]).toMatchObject({ severity: "warning", category: "payload" });
   expect(out.warnings.some((w) => w.reason.includes("exec_command_output missing payload.output"))).toBe(true);
   expect(typeof out.messages[0].text).toBe("string");
   expect(out.messages[0].text).toBe("null");
 });
 
-test("event_msg.error emits a system message AND a warning", () => {
+test("event_msg.error emits a system message without a parser warning", () => {
   const raw = JSON.stringify({
     type: "event_msg",
     payload: { type: "error", message: "rate limited" },
   });
   const out = parseCodex(raw);
   expect(out.messages[0]).toMatchObject({ kind: "system", text: "rate limited" });
-  expect(out.warnings).toHaveLength(1);
-  expect(out.warnings[0].reason).toContain("rate limited");
+  expect(out.warnings).toEqual([]);
 });
 
 test("event_msg with unknown payload.type emits unknown + warning", () => {
@@ -332,6 +337,7 @@ test("event_msg with unknown payload.type emits unknown + warning", () => {
   });
   const out = parseCodex(raw);
   expect(out.messages[0].kind).toBe("unknown");
+  expect(out.warnings[0]).toMatchObject({ severity: "warning", category: "schema" });
   expect(out.warnings[0].reason).toContain("unknown event_msg payload.type 'novel_event'");
 });
 
@@ -339,6 +345,7 @@ test("event_msg missing payload.type emits unknown + warning", () => {
   const raw = JSON.stringify({ type: "event_msg", payload: {} });
   const out = parseCodex(raw);
   expect(out.messages[0].kind).toBe("unknown");
+  expect(out.warnings[0]).toMatchObject({ severity: "error", category: "schema" });
   expect(out.warnings[0].reason).toContain("event_msg missing payload.type");
 });
 
@@ -353,13 +360,19 @@ test("malformed JSON line warns and the next line still parses", () => {
   expect(out.messages[0].text).toBe("first");
   expect(out.messages[1].text).toBe("third");
   expect(out.messages[1].messageIndex).toBe(1);
-  expect(out.warnings[0]).toEqual({ lineOrdinal: 1, reason: "malformed JSON" });
+  expect(out.warnings[0]).toEqual({
+    lineOrdinal: 1,
+    severity: "error",
+    category: "lexer",
+    reason: "malformed JSON",
+  });
 });
 
 test("unknown top-level type emits unknown + warning", () => {
   const raw = JSON.stringify({ type: "totally_new_kind", foo: 1 });
   const out = parseCodex(raw);
   expect(out.messages[0].kind).toBe("unknown");
+  expect(out.warnings[0]).toMatchObject({ severity: "warning", category: "schema" });
   expect(out.warnings[0].reason).toContain("unknown top-level type 'totally_new_kind'");
 });
 
@@ -375,6 +388,7 @@ test("non-object top-level JSON warns and skips", () => {
   const out = parseCodex(raw);
   expect(out.messages).toEqual([]);
   expect(out.warnings).toHaveLength(1);
+  expect(out.warnings[0]).toMatchObject({ severity: "error", category: "lexer" });
   expect(out.warnings[0].reason).toContain("not an object");
 });
 
@@ -464,7 +478,14 @@ test("empty mid-document line emits an 'empty line' warning", () => {
   ].join("\n");
   const out = parseCodex(raw);
   expect(out.messages).toHaveLength(2);
-  expect(out.warnings).toEqual([{ lineOrdinal: 1, reason: "empty line" }]);
+  expect(out.warnings).toEqual([
+    {
+      lineOrdinal: 1,
+      severity: "error",
+      category: "lexer",
+      reason: "empty line",
+    },
+  ]);
 });
 
 // ===== Totality =====
@@ -487,12 +508,12 @@ test("totality: parser does not throw on adversarial input", () => {
 });
 
 // ===== Anchor principle: end-to-end fixture =====
-test("end-to-end: real fixture verifies anchor principle (response_item.user is SKIPPED)", () => {
+test("end-to-end: real fixture verifies anchor principle (response_item.user is SKIPPED)", async () => {
   const fixturePath = join(
     process.cwd(),
     "../../tests/fixtures/codex/sample_session.jsonl",
   );
-  const raw = readFileSync(fixturePath, "utf8");
+  const raw = await Bun.file(fixturePath).text();
   const out = parseCodex(raw);
 
   // 4 lines:
@@ -551,4 +572,27 @@ test("CODEX_FORKED_FIXTURE-style stream emits a session_resumed boundary on the 
   expect(out.messages[1].kind).toBe("boundary");
   expect(out.messages[1].boundarySubtype).toBe("session_resumed");
   expect(out.messages[2]).toMatchObject({ kind: "user", text: "child prompt" });
+});
+
+test("parser warning fixtures all emit structured warnings", async () => {
+  const fixtureRoot = join(
+    process.cwd(),
+    "../../tests/fixtures/parser-warnings/codex",
+  );
+  for (const entry of new Bun.Glob("*.jsonl").scanSync({ cwd: fixtureRoot })) {
+    const raw = await Bun.file(join(fixtureRoot, entry)).text();
+    const out = parseCodex(raw);
+    expect(out.warnings.length, entry).toBeGreaterThan(0);
+    for (const warning of out.warnings) {
+      expect(warning.severity, entry).toBeOneOf(["error", "warning", "info"]);
+      expect(warning.category, entry).toBeOneOf([
+        "lexer",
+        "schema",
+        "payload",
+        "timestamp",
+        "meta",
+      ]);
+      expect(warning.reason.length, entry).toBeGreaterThan(0);
+    }
+  }
 });

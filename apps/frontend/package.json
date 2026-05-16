@@ -8,6 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "bun test src",
+    "test:scripts": "bun test scripts",
+    "parser-warning-sweep": "bun scripts/parser-warning-sweep.ts",
     "test:e2e": "bun --bun x playwright test",
     "test:e2e:install": "playwright install chromium"
   },

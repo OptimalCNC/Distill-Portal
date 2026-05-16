@@ -132,11 +132,15 @@ test("dispatchParser totality: does not throw on any combination of inputs", () 
 
 test("dispatchParser preserves parser warnings on the result", () => {
   const raw = JSON.stringify({
-    type: "custom-title",
-    customTitle: "x",
+    type: "totally-new",
+    value: "x",
   });
   const result = dispatchParser("claude_code", raw, { totalBytes: 0, truncated: false });
-  expect(result.messages).toEqual([]);
+  expect(result.messages).toHaveLength(1);
   expect(result.warnings).toHaveLength(1);
-  expect(result.warnings[0].reason).toContain("Skipping Claude-meta type");
+  expect(result.warnings[0]).toMatchObject({
+    severity: "warning",
+    category: "schema",
+  });
+  expect(result.warnings[0].reason).toContain("unknown top-level type");
 });

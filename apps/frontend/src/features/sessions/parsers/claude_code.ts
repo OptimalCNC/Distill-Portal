@@ -4,8 +4,9 @@
 // entries per the truth table in `working/phase-5.md` lines 750-757.
 //
 // Hard rules:
-// 1. NEVER throws. Every malformed input is captured as a warning + the
-//    line is skipped from `messages`. The "totality" test asserts this.
+// 1. NEVER throws. Malformed input is captured as a structured warning + the
+//    line is skipped or preserved as an unknown message. The "totality" test
+//    asserts this.
 // 2. `messageIndex` is sequential across the entire stream and increments
 //    once per emitted `Message`. `lineOrdinal` is the 0-indexed JSONL line
 //    number — multiple messages emitted from the same line share their
@@ -15,13 +16,19 @@
 //    adapter at components/collector-runtime/src/adapters/claude_code.rs:151).
 //    `/message/role` is consulted only as a sanity check; mismatch warns
 //    but the parser still emits using `type`.
-// 4. `custom-title` and `permission-mode` records emit NO `Message` but DO
-//    add a low-severity `warnings[]` entry so we can audit parser silence.
-// 5. Unknown top-level `type` → `Message{kind: "unknown"}` + warning.
+// 4. Session-level metadata records emit NO `Message` and NO warning.
+// 5. Genuinely unknown top-level `type` → `Message{kind: "unknown"}` +
+//    structured warning.
 //
 // Field paths verified against `tests/fixtures/claude_code/sample_session.jsonl`.
 
-import type { Message, ParseWarning, ParserOutput } from "./types";
+import type {
+  Message,
+  ParseWarning,
+  ParseWarningCategory,
+  ParseWarningSeverity,
+  ParserOutput,
+} from "./types";
 
 type JsonValue =
   | string
@@ -62,7 +69,7 @@ export function parseClaudeCode(rawText: string): ParserOutput {
     }
     // Empty mid-document line → warn but continue.
     if (raw === "") {
-      warnings.push({ lineOrdinal, reason: "empty line" });
+      pushWarning(warnings, lineOrdinal, "error", "lexer", "empty line");
       continue;
     }
 
@@ -70,15 +77,18 @@ export function parseClaudeCode(rawText: string): ParserOutput {
     try {
       record = JSON.parse(raw) as JsonValue;
     } catch {
-      warnings.push({ lineOrdinal, reason: "malformed JSON" });
+      pushWarning(warnings, lineOrdinal, "error", "lexer", "malformed JSON");
       continue;
     }
 
     if (!isObject(record)) {
-      warnings.push({
+      pushWarning(
+        warnings,
         lineOrdinal,
-        reason: "top-level JSON value is not an object",
-      });
+        "error",
+        "lexer",
+        "top-level JSON value is not an object",
+      );
       continue;
     }
 
@@ -86,7 +96,13 @@ export function parseClaudeCode(rawText: string): ParserOutput {
     const timestamp = parseTimestamp(record, lineOrdinal, warnings);
 
     if (topType === null) {
-      warnings.push({ lineOrdinal, reason: "missing top-level 'type' field" });
+      pushWarning(
+        warnings,
+        lineOrdinal,
+        "error",
+        "schema",
+        "missing top-level 'type' field",
+      );
       messages.push({
         lineOrdinal,
         messageIndex: nextMessageIndex++,
@@ -116,10 +132,13 @@ export function parseClaudeCode(rawText: string): ParserOutput {
           typeof message["role"] === "string" &&
           message["role"] !== "user"
         ) {
-          warnings.push({
+          pushWarning(
+            warnings,
             lineOrdinal,
-            reason: `top-level type 'user' but /message/role is '${message["role"]}'`,
-          });
+            "warning",
+            "schema",
+            `top-level type 'user' but /message/role is '${message["role"]}'`,
+          );
         }
 
         if (typeof content === "string") {
@@ -135,7 +154,13 @@ export function parseClaudeCode(rawText: string): ParserOutput {
         } else if (Array.isArray(content)) {
           for (const item of content) {
             if (!isObject(item)) {
-              warnings.push({ lineOrdinal, reason: "non-object item in content array" });
+              pushWarning(
+                warnings,
+                lineOrdinal,
+                "warning",
+                "payload",
+                "non-object item in content array",
+              );
               continue;
             }
             const itemType = typeof item["type"] === "string" ? item["type"] : null;
@@ -169,10 +194,6 @@ export function parseClaudeCode(rawText: string): ParserOutput {
               });
             } else {
               // Unknown content-array shape inside a user record → warn + unknown row.
-              warnings.push({
-                lineOrdinal,
-                reason: `unknown user content item type '${itemType ?? "(missing)"}'`,
-              });
               messages.push({
                 lineOrdinal,
                 messageIndex: nextMessageIndex++,
@@ -182,13 +203,17 @@ export function parseClaudeCode(rawText: string): ParserOutput {
                 raw,
                 bytes: byteLength(raw),
               });
+              pushWarning(
+                warnings,
+                lineOrdinal,
+                "warning",
+                "payload",
+                `unknown user content item type '${itemType ?? "(missing)"}'`,
+                nextMessageIndex - 1,
+              );
             }
           }
         } else {
-          warnings.push({
-            lineOrdinal,
-            reason: "user record /message/content is neither string nor array",
-          });
           messages.push({
             lineOrdinal,
             messageIndex: nextMessageIndex++,
@@ -198,6 +223,14 @@ export function parseClaudeCode(rawText: string): ParserOutput {
             raw,
             bytes: byteLength(raw),
           });
+          pushWarning(
+            warnings,
+            lineOrdinal,
+            "warning",
+            "payload",
+            "user record /message/content is neither string nor array",
+            nextMessageIndex - 1,
+          );
         }
         break;
       }
@@ -217,10 +250,13 @@ export function parseClaudeCode(rawText: string): ParserOutput {
           typeof message["role"] === "string" &&
           message["role"] !== "assistant"
         ) {
-          warnings.push({
+          pushWarning(
+            warnings,
             lineOrdinal,
-            reason: `top-level type 'assistant' but /message/role is '${message["role"]}'`,
-          });
+            "warning",
+            "schema",
+            `top-level type 'assistant' but /message/role is '${message["role"]}'`,
+          );
         }
 
         if (typeof content === "string") {
@@ -236,7 +272,13 @@ export function parseClaudeCode(rawText: string): ParserOutput {
         } else if (Array.isArray(content)) {
           for (const item of content) {
             if (!isObject(item)) {
-              warnings.push({ lineOrdinal, reason: "non-object item in content array" });
+              pushWarning(
+                warnings,
+                lineOrdinal,
+                "warning",
+                "payload",
+                "non-object item in content array",
+              );
               continue;
             }
             const itemType = typeof item["type"] === "string" ? item["type"] : null;
@@ -265,11 +307,23 @@ export function parseClaudeCode(rawText: string): ParserOutput {
                 raw,
                 bytes: byteLength(text),
               });
-            } else {
-              warnings.push({
+            } else if (itemType === "thinking") {
+              const thinking =
+                typeof item["thinking"] === "string"
+                  ? (item["thinking"] as string)
+                  : typeof item["text"] === "string"
+                    ? (item["text"] as string)
+                    : "";
+              messages.push({
                 lineOrdinal,
-                reason: `unknown assistant content item type '${itemType ?? "(missing)"}'`,
+                messageIndex: nextMessageIndex++,
+                timestamp,
+                kind: "assistant",
+                text: thinking,
+                raw,
+                bytes: byteLength(thinking),
               });
+            } else {
               messages.push({
                 lineOrdinal,
                 messageIndex: nextMessageIndex++,
@@ -279,13 +333,17 @@ export function parseClaudeCode(rawText: string): ParserOutput {
                 raw,
                 bytes: byteLength(raw),
               });
+              pushWarning(
+                warnings,
+                lineOrdinal,
+                "warning",
+                "payload",
+                `unknown assistant content item type '${itemType ?? "(missing)"}'`,
+                nextMessageIndex - 1,
+              );
             }
           }
         } else {
-          warnings.push({
-            lineOrdinal,
-            reason: "assistant record /message/content is neither string nor array",
-          });
           messages.push({
             lineOrdinal,
             messageIndex: nextMessageIndex++,
@@ -295,6 +353,14 @@ export function parseClaudeCode(rawText: string): ParserOutput {
             raw,
             bytes: byteLength(raw),
           });
+          pushWarning(
+            warnings,
+            lineOrdinal,
+            "warning",
+            "payload",
+            "assistant record /message/content is neither string nor array",
+            nextMessageIndex - 1,
+          );
         }
         break;
       }
@@ -344,37 +410,35 @@ export function parseClaudeCode(rawText: string): ParserOutput {
         break;
       }
 
+      case "agent-name":
+      case "ai-title":
+      case "attachment":
       case "custom-title":
+      case "file-history-snapshot":
+      case "last-prompt":
+      case "queue-operation":
       case "permission-mode": {
-        /**
-         * Matrix:
-         * - docs/features/parser-event-support.md#claude-code-custom-title
-         * - docs/features/parser-event-support.md#claude-code-permission-mode
-         */
-        // Session-level metadata; the Rust adapter consumes these for indexing
-        // but they are not part of the message timeline. We log a low-severity
-        // warning so we can audit parser silence in M3a evidence packs.
-        warnings.push({
-          lineOrdinal,
-          reason: `Skipping Claude-meta type '${topType}' (session-level metadata, not a timeline message)`,
-        });
-        break;
-      }
-
-      default: {
         /**
          * Matrix:
          * - docs/features/parser-event-support.md#claude-code-agent-name
          * - docs/features/parser-event-support.md#claude-code-ai-title
          * - docs/features/parser-event-support.md#claude-code-attachment
+         * - docs/features/parser-event-support.md#claude-code-custom-title
          * - docs/features/parser-event-support.md#claude-code-file-history-snapshot
          * - docs/features/parser-event-support.md#claude-code-last-prompt
+         * - docs/features/parser-event-support.md#claude-code-permission-mode
          * - docs/features/parser-event-support.md#claude-code-queue-operation
          */
-        warnings.push({
-          lineOrdinal,
-          reason: `unknown top-level type '${topType}'`,
-        });
+        // Phase 7b audit: session-level metadata/control records are expected
+        // Claude Code stream noise, not timeline messages or anomalies.
+        break;
+      }
+
+      default: {
+        /**
+         * Matrix: future Claude Code top-level discriminator not yet present in
+         * docs/features/parser-event-support.md.
+         */
         messages.push({
           lineOrdinal,
           messageIndex: nextMessageIndex++,
@@ -384,6 +448,14 @@ export function parseClaudeCode(rawText: string): ParserOutput {
           raw,
           bytes: byteLength(raw),
         });
+        pushWarning(
+          warnings,
+          lineOrdinal,
+          "warning",
+          "schema",
+          `unknown top-level type '${topType}'`,
+          nextMessageIndex - 1,
+        );
       }
     }
   }
@@ -410,15 +482,44 @@ function parseTimestamp(
     return null;
   }
   if (typeof value !== "string") {
-    warnings.push({ lineOrdinal, reason: "timestamp field is not a string" });
+    pushWarning(
+      warnings,
+      lineOrdinal,
+      "warning",
+      "timestamp",
+      "timestamp field is not a string",
+    );
     return null;
   }
   const millis = Date.parse(value);
   if (Number.isNaN(millis)) {
-    warnings.push({ lineOrdinal, reason: `unparseable RFC3339 timestamp '${value}'` });
+    pushWarning(
+      warnings,
+      lineOrdinal,
+      "warning",
+      "timestamp",
+      `unparseable RFC3339 timestamp '${value}'`,
+    );
     return null;
   }
   return value;
+}
+
+function pushWarning(
+  warnings: ParseWarning[],
+  lineOrdinal: number,
+  severity: ParseWarningSeverity,
+  category: ParseWarningCategory,
+  reason: string,
+  messageIndex?: number,
+): void {
+  warnings.push({
+    lineOrdinal,
+    severity,
+    category,
+    reason,
+    ...(messageIndex === undefined ? {} : { messageIndex }),
+  });
 }
 
 /** Approximate UTF-8 byte length without instantiating a TextEncoder per call. */

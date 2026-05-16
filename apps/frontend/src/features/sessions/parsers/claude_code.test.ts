@@ -7,8 +7,8 @@
 //   4. assistant with array content (text + tool_use) → 2 messages, second carries toolName
 //   5. summary → system message with leafUuid: prefix
 //   6. system → system message
-//   7. custom-title → no message but warning emitted
-//   8. permission-mode → no message but warning emitted
+//   7. custom-title → no message and no warning
+//   8. permission-mode → no message and no warning
 //   9. unknown top-level type → unknown message + warning
 //  10. malformed JSON line → warning, no message; subsequent lines parsed
 //  11. role mismatch (top-level type=user, /message/role=assistant) → warning + emit using top-level type
@@ -18,7 +18,6 @@
 //  15. End-to-end fixture (tests/fixtures/claude_code/sample_session.jsonl)
 
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseClaudeCode } from "./claude_code";
 
@@ -78,6 +77,7 @@ test("user content array with unknown item type emits unknown row + warning", ()
   });
   const out = parseClaudeCode(raw);
   expect(out.warnings).toHaveLength(1);
+  expect(out.warnings[0]).toMatchObject({ severity: "warning", category: "payload" });
   expect(out.warnings[0].reason).toContain("unknown user content item type");
   expect(out.messages).toHaveLength(1);
   expect(out.messages[0].kind).toBe("unknown");
@@ -90,7 +90,12 @@ test("user content array with primitive (non-object) item emits warning + skips 
   });
   const out = parseClaudeCode(raw);
   expect(out.warnings).toEqual([
-    { lineOrdinal: 0, reason: "non-object item in content array" },
+    {
+      lineOrdinal: 0,
+      severity: "warning",
+      category: "payload",
+      reason: "non-object item in content array",
+    },
   ]);
   expect(out.messages).toHaveLength(1);
   expect(out.messages[0].text).toBe("kept");
@@ -157,6 +162,7 @@ test("assistant content array with unknown item type emits unknown row + warning
   });
   const out = parseClaudeCode(raw);
   expect(out.warnings).toHaveLength(1);
+  expect(out.warnings[0]).toMatchObject({ severity: "warning", category: "payload" });
   expect(out.warnings[0].reason).toContain("unknown assistant content item type");
   expect(out.messages).toHaveLength(1);
   expect(out.messages[0].kind).toBe("unknown");
@@ -169,7 +175,12 @@ test("assistant content array with non-object item emits warning + skips item", 
   });
   const out = parseClaudeCode(raw);
   expect(out.warnings).toEqual([
-    { lineOrdinal: 0, reason: "non-object item in content array" },
+    {
+      lineOrdinal: 0,
+      severity: "warning",
+      category: "payload",
+      reason: "non-object item in content array",
+    },
   ]);
   expect(out.messages).toHaveLength(1);
   expect(out.messages[0].text).toBe("kept");
@@ -201,23 +212,21 @@ test("system record emits a system message with content", () => {
   });
 });
 
-test("custom-title is silenced from messages but warned", () => {
+test("custom-title is silenced from messages and warnings", () => {
   const raw = JSON.stringify({
     type: "custom-title",
     customTitle: "phase-1-backend-foundation",
   });
   const out = parseClaudeCode(raw);
   expect(out.messages).toEqual([]);
-  expect(out.warnings).toHaveLength(1);
-  expect(out.warnings[0].reason).toContain("Skipping Claude-meta type 'custom-title'");
+  expect(out.warnings).toEqual([]);
 });
 
-test("permission-mode is silenced from messages but warned", () => {
+test("permission-mode is silenced from messages and warnings", () => {
   const raw = JSON.stringify({ type: "permission-mode", permissionMode: "default" });
   const out = parseClaudeCode(raw);
   expect(out.messages).toEqual([]);
-  expect(out.warnings).toHaveLength(1);
-  expect(out.warnings[0].reason).toContain("Skipping Claude-meta type 'permission-mode'");
+  expect(out.warnings).toEqual([]);
 });
 
 test("unknown top-level type emits unknown row + warning", () => {
@@ -226,6 +235,7 @@ test("unknown top-level type emits unknown row + warning", () => {
   expect(out.messages).toHaveLength(1);
   expect(out.messages[0].kind).toBe("unknown");
   expect(out.warnings).toHaveLength(1);
+  expect(out.warnings[0]).toMatchObject({ severity: "warning", category: "schema" });
   expect(out.warnings[0].reason).toContain("unknown top-level type 'totally_new_kind'");
 });
 
@@ -243,7 +253,12 @@ test("malformed JSON line is captured as warning and subsequent lines still pars
   expect(out.messages[1].lineOrdinal).toBe(2);
   expect(out.messages[1].messageIndex).toBe(1); // sequential — no gap from skipped line
   expect(out.warnings).toHaveLength(1);
-  expect(out.warnings[0]).toEqual({ lineOrdinal: 1, reason: "malformed JSON" });
+  expect(out.warnings[0]).toEqual({
+    lineOrdinal: 1,
+    severity: "error",
+    category: "lexer",
+    reason: "malformed JSON",
+  });
 });
 
 test("role mismatch warns but emits using top-level type", () => {
@@ -255,6 +270,7 @@ test("role mismatch warns but emits using top-level type", () => {
   expect(out.messages).toHaveLength(1);
   expect(out.messages[0].kind).toBe("user"); // top-level type is authoritative
   expect(out.warnings).toHaveLength(1);
+  expect(out.warnings[0]).toMatchObject({ severity: "warning", category: "schema" });
   expect(out.warnings[0].reason).toContain("/message/role is 'assistant'");
 });
 
@@ -277,6 +293,7 @@ test("unparseable timestamp warns and yields null Message.timestamp", () => {
   const out = parseClaudeCode(raw);
   expect(out.messages[0].timestamp).toBeNull();
   expect(out.warnings).toHaveLength(1);
+  expect(out.warnings[0]).toMatchObject({ severity: "warning", category: "timestamp" });
   expect(out.warnings[0].reason).toContain("unparseable RFC3339 timestamp");
 });
 
@@ -351,7 +368,14 @@ test("empty mid-document line emits an 'empty line' warning", () => {
   ].join("\n");
   const out = parseClaudeCode(raw);
   expect(out.messages).toHaveLength(2);
-  expect(out.warnings).toEqual([{ lineOrdinal: 1, reason: "empty line" }]);
+  expect(out.warnings).toEqual([
+    {
+      lineOrdinal: 1,
+      severity: "error",
+      category: "lexer",
+      reason: "empty line",
+    },
+  ]);
 });
 
 // ===== Totality =====
@@ -373,19 +397,19 @@ test("totality: parser does not throw on adversarial input", () => {
 });
 
 // ===== End-to-end fixture =====
-test("end-to-end: real fixture (tests/fixtures/claude_code/sample_session.jsonl)", () => {
+test("end-to-end: real fixture (tests/fixtures/claude_code/sample_session.jsonl)", async () => {
   const fixturePath = join(
     process.cwd(),
     "../../tests/fixtures/claude_code/sample_session.jsonl",
   );
-  const raw = readFileSync(fixturePath, "utf8");
+  const raw = await Bun.file(fixturePath).text();
   const out = parseClaudeCode(raw);
 
-  // 4 lines. permission-mode (line 0) → silenced + warning;
+  // 4 lines. permission-mode (line 0) → silenced;
   // user (line 1) → 1 user msg;
   // assistant (line 2) → 1 assistant msg;
-  // custom-title (line 3) → silenced + warning.
-  // Expected: 2 messages, 2 warnings.
+  // custom-title (line 3) → silenced.
+  // Expected: 2 messages, 0 warnings.
   expect(out.messages).toHaveLength(2);
   expect(out.messages[0]).toMatchObject({
     kind: "user",
@@ -399,9 +423,28 @@ test("end-to-end: real fixture (tests/fixtures/claude_code/sample_session.jsonl)
     lineOrdinal: 2,
     messageIndex: 1,
   });
-  expect(out.warnings).toHaveLength(2);
-  expect(out.warnings[0]).toMatchObject({ lineOrdinal: 0 });
-  expect(out.warnings[1]).toMatchObject({ lineOrdinal: 3 });
-  expect(out.warnings[0].reason).toContain("permission-mode");
-  expect(out.warnings[1].reason).toContain("custom-title");
+  expect(out.warnings).toEqual([]);
+});
+
+test("parser warning fixtures all emit structured warnings", async () => {
+  const fixtureRoot = join(
+    process.cwd(),
+    "../../tests/fixtures/parser-warnings/claude_code",
+  );
+  for (const entry of new Bun.Glob("*.jsonl").scanSync({ cwd: fixtureRoot })) {
+    const raw = await Bun.file(join(fixtureRoot, entry)).text();
+    const out = parseClaudeCode(raw);
+    expect(out.warnings.length, entry).toBeGreaterThan(0);
+    for (const warning of out.warnings) {
+      expect(warning.severity, entry).toBeOneOf(["error", "warning", "info"]);
+      expect(warning.category, entry).toBeOneOf([
+        "lexer",
+        "schema",
+        "payload",
+        "timestamp",
+        "meta",
+      ]);
+      expect(warning.reason.length, entry).toBeGreaterThan(0);
+    }
+  }
 });

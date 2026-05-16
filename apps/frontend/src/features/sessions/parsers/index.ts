@@ -54,7 +54,12 @@ export function dispatchParser(
     : {
         messages: [],
         warnings: [
-          { lineOrdinal: 0, reason: `No parser registered for tool "${tool}"` },
+          {
+            lineOrdinal: 0,
+            severity: "error",
+            category: "schema",
+            reason: `No parser registered for tool "${tool}"`,
+          },
         ],
       };
 
@@ -80,6 +85,8 @@ export type {
   ParsedSession,
   ParserOutput,
   ParseWarning,
+  ParseWarningCategory,
+  ParseWarningSeverity,
   SkimBlock,
   StreamMeta,
 } from "./types";
