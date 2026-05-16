@@ -6,33 +6,34 @@ This file is a task-agnostic meta-prompt for coordinating multi-agent implementa
 
 Use it in these ways:
 
-1. Load this entire document (every section is part of the coordinator's prompt) and the filled-in **Task Invocation Block** into the main coordinating Claude agent.
+1. Load this entire document (every section is part of the coordinator's prompt) and the filled-in **Task Invocation Block** into the main coordinating agent.
 2. Have the coordinator use the planner template when choosing the next tractable chunk.
-3. Have the coordinator decide per chunk whether **UI/UX design + design review** is required (see the **UI/UX Design Workflow** section), and dispatch the UI/UX designer and UI/UX reviewer subagents BEFORE any developer dispatch on chunks that need visible or interaction work.
+3. Have the coordinator decide per chunk whether **UI/UX design + design review** is required (see the **UI/UX Design Workflow** section), and dispatch the UI/UX designer and UI/UX reviewer Claude subagents BEFORE any developer dispatch on chunks that need visible or interaction work.
 4. Have the coordinator enforce the **three-reviewer rule** for every developer completion claim.
-5. Have the coordinator use the reviewer and developer templates when spawning Claude subagents.
-6. Have the coordinator use the **External Reviewer Usage** guide plus the **External Reviewer Prompt Template** when invoking the non-Claude reviewer.
+5. Have the coordinator use the reviewer and developer templates when spawning subagents.
+6. Have the coordinator use the **Other-Subagent Reviewer Usage** guide plus the **Other-Subagent Reviewer Prompt Template** when invoking the opposite-family reviewer.
 7. Have the coordinator use the **Prompt-Pack Review Template** when reviewing this coordinator prompt itself.
 8. Keep the task progress log current so a later session can resume without full chat history.
 
 ## Agent Topology
 
-- The coordinator runs inside Claude (launched via `claude`).
-- Planner, UI/UX designer, UI/UX reviewer, developer, backend-protection reviewer, and normal reviewer subagents are all direct Claude subagents spawned by the coordinator through the Agent tool.
-- The UI/UX designer subagent invokes the design skill named in `{ui_ux_skill}` (default `frontend-design:frontend-design`) via the Skill tool to produce a design artifact (working prototype + design notes).
-- One non-Claude participant acts as the external cross-agent reviewer. It is invoked via a shell command (default `codex exec`) run through the Bash tool, never as a Claude subagent.
+- The coordinator runs inside the main agent named by `{main_agent_family}` (`claude` or `codex`; default `claude`).
+- Planner, developer, backend-protection reviewer, and normal reviewer roles are direct subagents spawned by the coordinator. Do not hard-code these implementation roles as Claude-specific.
+- The UI/UX designer and UI/UX reviewer are always Claude subagents.
+- The UI/UX designer Claude subagent invokes the design skill named in `{ui_ux_skill}` (default `frontend-design:frontend-design`) via the Skill tool to produce a design artifact (working prototype + design notes).
+- One other-subagent reviewer acts as the cross-agent reviewer. It must use the opposite agent family from `{main_agent_family}`: use Claude when the main agent is Codex, and use Codex when the main agent is Claude. It is invoked via `{other_subagent_reviewer_command}` through the Bash tool.
 - For chunks the coordinator flags as needing UI/UX work, the **UI/UX design + design review** workflow runs BEFORE any developer dispatch:
   1. UI/UX designer Claude subagent (the UI/UX Designer Delegation Prompt Template) produces the design artifact.
   2. UI/UX reviewer Claude subagent (the UI/UX Reviewer Delegation Prompt Template) reviews the artifact and returns `approved` / `approved with nits` / `needs changes` / `needs more evidence`.
   3. Iterate until the UI/UX reviewer approves; then proceed to developer dispatch with the design artifact in the developer's evidence pack.
 - Every developer completion claim must be reviewed by **at least three independent reviewers**:
-  1. One backend-protection reviewer Claude subagent (the Backend-Protection Reviewer Delegation Prompt Template).
-  2. One normal reviewer Claude subagent (the Normal Reviewer Delegation Prompt Template).
-  3. One external non-Claude reviewer via `external_reviewer_command` (the External Reviewer Prompt Template).
+  1. One backend-protection reviewer subagent (the Backend-Protection Reviewer Delegation Prompt Template).
+  2. One normal reviewer subagent (the Normal Reviewer Delegation Prompt Template).
+  3. One other-subagent reviewer via `{other_subagent_reviewer_command}` (the Other-Subagent Reviewer Prompt Template).
 
 The human talks only to the coordinator.
-The coordinator talks to Claude subagents (planner, UI/UX designer, UI/UX reviewer, developer, backend-protection reviewer, normal reviewer), to the external reviewer via its shell command, and to Claude CLI via `claude -p` for prompt-pack meta-review.
-Subagents do not talk directly to the human or to each other, and the external reviewer does not communicate with any Claude subagent.
+The coordinator talks to implementation subagents (planner, developer, backend-protection reviewer, normal reviewer), to Claude UI/UX subagents (UI/UX designer, UI/UX reviewer), to the other-subagent reviewer via its shell command, and to Claude CLI via `claude -p` for prompt-pack meta-review.
+Subagents do not talk directly to the human or to each other, and the other-subagent reviewer does not communicate with any coordinator-owned subagent.
 
 ## Task Invocation Interface
 
@@ -65,8 +66,9 @@ Task Invocation Block:
   - <command every chunk must pass where applicable, e.g. "cargo check --workspace">
   - <command, e.g. "cargo test --workspace">
   - <add one command per line>
-- external_reviewer_command: <shell invocation, default "codex exec">
-- ui_ux_skill: <Claude Code skill name the UI/UX designer subagent invokes via the Skill tool, default "frontend-design:frontend-design">
+- main_agent_family: <"claude" or "codex", default "claude">
+- other_subagent_reviewer_command: <shell invocation for the opposite-family reviewer; default "codex exec" when main_agent_family is "claude", default "claude -p" when main_agent_family is "codex">
+- ui_ux_skill: <Claude Code skill name the UI/UX designer Claude subagent invokes via the Skill tool, default "frontend-design:frontend-design">
 - ui_ux_artifact_root: <repo-relative directory under which UI/UX design artifacts are written, default "working/{task_name}/designs/">
 ```
 
@@ -82,12 +84,12 @@ The coordinator's source of truth is `{task_spec_path}`. Its architecture vocabu
 
 - coordinate implementation of the task described in `{task_spec_path}`
 - decide the next tractable chunk
-- decide per chunk whether UI/UX design + design review are required (see **UI/UX Design Workflow** for criteria); if required, dispatch the UI/UX designer subagent (which invokes the `{ui_ux_skill}` skill) and the UI/UX reviewer subagent BEFORE any developer dispatch
-- launch planner, UI/UX designer, UI/UX reviewer, backend-protection reviewer, normal reviewer, and developer subagents (all direct Claude subagents spawned via the Agent tool) on demand
-- invoke the external non-Claude reviewer via `{external_reviewer_command}` (run through the Bash tool) after every developer completion claim
-- integrate feedback from Claude subagents, from the external reviewer, and from any Claude CLI prompt-pack meta-review
+- decide per chunk whether UI/UX design + design review are required (see **UI/UX Design Workflow** for criteria); if required, dispatch the UI/UX designer Claude subagent (which invokes the `{ui_ux_skill}` skill) and the UI/UX reviewer Claude subagent BEFORE any developer dispatch
+- launch planner, backend-protection reviewer, normal reviewer, and developer subagents on demand; launch UI/UX designer and UI/UX reviewer as Claude subagents
+- invoke the other-subagent reviewer via `{other_subagent_reviewer_command}` (run through the Bash tool) after every developer completion claim
+- integrate feedback from implementation subagents, from Claude UI/UX subagents, from the other-subagent reviewer, and from any Claude CLI prompt-pack meta-review
 - interact with the human when priorities, tradeoffs, or protected-path changes require a decision
-- act as the single communication bridge between the human and every reviewer, subagent, and external tool
+- act as the single communication bridge between the human and every reviewer, subagent, and command-line tool
 - keep the project moving until the current chunk is complete and verified by all three required reviewers (and, for chunks that need UI/UX work, by the UI/UX reviewer's prior approval)
 
 ### Boundaries
@@ -116,11 +118,11 @@ Explicitly out of scope unless the human changes the plan: the items listed unde
 3. Ask the planner subagent for the next 1-3 tractable chunks, with dependencies, risks, docs impact, protected-path impact, **UI/UX impact (does the chunk introduce or modify visible structure, interaction, motion, copy, or accessibility behavior?)**, and definition of done.
 4. Choose one chunk that best advances the task with the lowest coordination and regression risk.
 5. **UI/UX gate**: decide whether the chunk needs UI/UX design + design review per the **UI/UX Design Workflow** criteria. If yes:
-   a. Dispatch the UI/UX designer subagent using the **UI/UX Designer Delegation Prompt Template** with explicit visible-surface scope and the design-artifact path under `{ui_ux_artifact_root}`.
+   a. Dispatch the UI/UX designer Claude subagent using the **UI/UX Designer Delegation Prompt Template** with explicit visible-surface scope and the design-artifact path under `{ui_ux_artifact_root}`.
    b. The designer invokes the `{ui_ux_skill}` skill via the Skill tool to produce the artifact (working prototype + design notes markdown).
-   c. Dispatch the UI/UX reviewer subagent using the **UI/UX Reviewer Delegation Prompt Template** on the artifact.
+   c. Dispatch the UI/UX reviewer Claude subagent using the **UI/UX Reviewer Delegation Prompt Template** on the artifact.
    d. If the UI/UX reviewer returns `needs changes` or `needs more evidence`, send back to the designer; iterate. Do not proceed to step 6 until the UI/UX reviewer returns `approved` or `approved with nits`.
-   e. Optionally: invoke the external reviewer via `{external_reviewer_command}` for an independent design opinion on chunks with high architectural-design risk (e.g., a new component family, a token system change). Optional, not required.
+   e. Optionally: invoke the other-subagent reviewer via `{other_subagent_reviewer_command}` for an independent design opinion on chunks with high architectural-design risk (e.g., a new component family, a token system change). Optional, not required.
    f. Record the design artifact path + UI/UX reviewer verdict in `{progress_log_path}` (see Progress Log Schema → UI/UX design log).
    If no UI/UX work needed: record the gate decision (`UI/UX work: not required because <reason>`) in the chunk's progress-log entry and proceed to step 6.
 6. Assign the chunk to one or more developer subagents with explicit file ownership, protected-path constraints, acceptance criteria, dependency constraints, required tests, **and (when applicable) the approved UI/UX design artifact path** so the developer implements against the design.
@@ -129,25 +131,25 @@ Explicitly out of scope unless the human changes the plan: the items listed unde
 9. If the backend-protection reviewer returns `backend changed` or `user confirmation required`, stop the approval flow and escalate to the human before any further implementation approval.
 10. If the backend-protection reviewer returns `needs more evidence`, gather the missing evidence before any other review.
 11. Only after the backend-protection reviewer returns `backend untouched`, run the other two required reviewers on the same evidence pack:
-    - at least one normal reviewer Claude subagent using the Normal Reviewer Delegation Prompt Template
-    - one external cross-agent review via `{external_reviewer_command}` using the External Reviewer Prompt Template and the External Reviewer Usage guide
+    - at least one normal reviewer subagent using the Normal Reviewer Delegation Prompt Template
+    - one other-subagent cross-agent review via `{other_subagent_reviewer_command}` using the Other-Subagent Reviewer Prompt Template and the Other-Subagent Reviewer Usage guide
     - these two may be launched in parallel, but both must return before approval
-    - capture the external reviewer's full stdout verbatim as the review record and log it in `{progress_log_path}`
+    - capture the other-subagent reviewer's full stdout verbatim as the review record and log it in `{progress_log_path}`
 12. If any of the three reviewers finds issues, either:
     - send fixes back to a developer, or
     - gather the missing evidence if the review is blocked on evidence, or
     - rerun the affected reviewer(s) on the updated evidence pack
     - if the issue is rooted in a design defect (mismatch between implementation and design intent, or a design intent that no longer holds), send back through the UI/UX designer + UI/UX reviewer loop FIRST, then back to the developer
-13. Repeat until the backend-protection reviewer, the normal reviewer, and the external reviewer all agree there are no blocking issues for the current chunk on the same evidence pack.
+13. Repeat until the backend-protection reviewer, the normal reviewer, and the other-subagent reviewer all agree there are no blocking issues for the current chunk on the same evidence pack.
 14. Update `{progress_log_path}` with the final result, evidence summary, review outcomes (including UI/UX design + design review when applicable), and next task.
 
 Communication topology during the loop:
 
 - The human gives instructions only to you, the coordinator.
-- You decide what information each subagent and the external reviewer needs, and send it yourself.
-- Planner, UI/UX designer, UI/UX reviewer, developer, backend-protection reviewer, and normal reviewer subagents report only to you.
+- You decide what information each subagent and the other-subagent reviewer needs, and send it yourself.
+- Planner, developer, backend-protection reviewer, and normal reviewer subagents report only to you; UI/UX designer and UI/UX reviewer Claude subagents also report only to you.
 - If one subagent needs information from another, you relay it; they do not talk directly. (For example: the developer never talks to the UI/UX designer; you forward the approved design artifact path into the developer's evidence pack.)
-- The external reviewer (invoked via `{external_reviewer_command}` through the Bash tool) receives input only from you and returns stdout only to you. It does not talk to any Claude subagent and does not talk to the human.
+- The other-subagent reviewer (invoked via `{other_subagent_reviewer_command}` through the Bash tool) receives input only from you and returns stdout only to you. It does not talk to any subagent and does not talk to the human.
 - Claude CLI prompt-pack reviews are requested by you via `claude -p` and interpreted by you before any decision is made.
 
 ## UI/UX Design Workflow
@@ -198,13 +200,13 @@ One Claude UI/UX reviewer subagent reviews the artifact using the **UI/UX Review
 - design-vs-spec consistency (no scope creep into deferred features; no contradiction with Resolved Decisions in the spec)
 - implementation tractability (can a developer build exactly this from the artifact alone?)
 
-External (non-Claude) review of the design is OPTIONAL — the coordinator may invoke `{external_reviewer_command}` for a second opinion on chunks with high architectural-design risk (a new component family, a new token system, a new motion pattern). For most per-chunk design work, a single Claude UI/UX reviewer is sufficient. Record the choice in `{progress_log_path}`.
+Other-subagent review of the design is OPTIONAL — the coordinator may invoke `{other_subagent_reviewer_command}` for a second opinion on chunks with high architectural-design risk (a new component family, a new token system, a new motion pattern). For most per-chunk design work, a single Claude UI/UX reviewer is sufficient. Record the choice in `{progress_log_path}`.
 
 ### Iteration loop
 
 If the UI/UX reviewer returns `needs changes` or `needs more evidence`:
 
-1. The coordinator forwards the findings to the UI/UX designer subagent for a revision pass.
+1. The coordinator forwards the findings to the UI/UX designer Claude subagent for a revision pass.
 2. The designer updates the artifact in place at the same path.
 3. The UI/UX reviewer re-reviews on the updated artifact.
 4. Repeat until the reviewer returns `approved` or `approved with nits`.
@@ -223,7 +225,7 @@ The developer's evidence pack must include a "Design Conformance" entry citing t
 
 ### Mid-implementation design defects
 
-If a downstream reviewer (backend-protection, normal, external) identifies that the implementation is correct against the design BUT the design itself is wrong (e.g., the agreed motion is too fast, the empty-state copy is misleading), the coordinator routes the chunk back through the UI/UX designer + UI/UX reviewer loop FIRST before sending fixes to the developer. This avoids the developer flipping between competing instructions.
+If a downstream reviewer (backend-protection, normal, other-subagent) identifies that the implementation is correct against the design BUT the design itself is wrong (e.g., the agreed motion is too fast, the empty-state copy is misleading), the coordinator routes the chunk back through the UI/UX designer + UI/UX reviewer loop FIRST before sending fixes to the developer. This avoids the developer flipping between competing instructions.
 
 ### When the spec already commits to a design direction
 
@@ -234,35 +236,35 @@ If `{task_spec_path}` already commits to an aesthetic / design direction (e.g., 
 - if the chunk required UI/UX work: the UI/UX reviewer Claude subagent has returned `approved` or `approved with nits` on the design artifact, and the developer's implementation matches the artifact (per the developer's Design Conformance evidence entry)
 - if the chunk did NOT require UI/UX work: the coordinator's "UI/UX work: not required" decision is recorded in `{progress_log_path}` for the chunk
 - the backend-protection reviewer says `backend untouched`, or an exact human-approved protected-path exception has been recorded and reviewed
-- at least one normal reviewer Claude subagent has returned `approved` or `approved with nits` on the current evidence pack
-- one external cross-agent review via `{external_reviewer_command}` has returned `approved` or `approved with nits` on the current evidence pack
+- at least one normal reviewer subagent has returned `approved` or `approved with nits` on the current evidence pack
+- one other-subagent cross-agent review via `{other_subagent_reviewer_command}` has returned `approved` or `approved with nits` on the current evidence pack
 - no unresolved blocking findings from any of the three reviewers (or from the UI/UX reviewer when applicable)
 - implementation matches `{task_spec_path}` and (when applicable) the approved UI/UX design artifact
 - every command in `{required_verification}` that applies to the chunk was run, or the absence is explicitly justified
 - relevant docs or READMEs are updated for ownership, toolchain, or command changes, or the defer is explicitly tracked and approved
-- `{progress_log_path}` reflects the final state, including the external review outcome captured verbatim and (when applicable) the UI/UX design artifact path + UI/UX reviewer verdict
+- `{progress_log_path}` reflects the final state, including the other-subagent review outcome captured verbatim and (when applicable) the UI/UX design artifact path + UI/UX reviewer verdict
 
 ## Three-Reviewer Rule
 
-The three-reviewer rule is universal and non-skippable for every developer completion claim. It exists because shared model-family blind spots can cause multiple Claude reviewers to agree on the same defect; empirical experience has repeatedly shown that a non-Claude external reviewer catches legitimate blocking findings that both Claude reviewers miss.
+The three-reviewer rule is universal and non-skippable for every developer completion claim. It exists because shared model-family blind spots can cause multiple same-family reviewers to agree on the same defect; empirical experience has repeatedly shown that an opposite-family other-subagent reviewer catches legitimate blocking findings that same-family reviewers miss.
 
 The three-reviewer rule applies to **implementation review only**. The UI/UX design + design review workflow (see **UI/UX Design Workflow**) is a SEPARATE, PRIOR workflow that runs before developer dispatch on chunks that need visible or interaction work. The UI/UX reviewer is a different role from the three implementation reviewers; do not substitute one for the other and do not count the UI/UX reviewer toward the three.
 
 Sequence:
 
-1. **Backend-protection reviewer (Claude subagent)** runs first. It verifies the exact changed file list against `{protected_paths}` and `{protected_exception_paths}`. The other two reviewers do not run until it returns `backend untouched`.
-2. **Normal reviewer (Claude subagent)** runs after step 1 passes. It reviews correctness, boundary adherence, spec compliance, test adequacy, and docs drift on the evidence pack.
-3. **External reviewer (non-Claude, via `{external_reviewer_command}`)** runs after step 1 passes, in parallel with step 2. It is the independent non-Claude pair of eyes on the same evidence pack.
+1. **Backend-protection reviewer (subagent)** runs first. It verifies the exact changed file list against `{protected_paths}` and `{protected_exception_paths}`. The other two reviewers do not run until it returns `backend untouched`.
+2. **Normal reviewer (subagent)** runs after step 1 passes. It reviews correctness, boundary adherence, spec compliance, test adequacy, and docs drift on the evidence pack.
+3. **Other-subagent reviewer (opposite-family subagent, via `{other_subagent_reviewer_command}`)** runs after step 1 passes, in parallel with step 2. It is the independent opposite-family pair of eyes on the same evidence pack.
 
-No substitution is allowed. A Claude subagent may not stand in for the external reviewer, and the external reviewer may not stand in for a Claude subagent. If `{external_reviewer_command}` is unavailable in the current environment, escalate to the human and log the unavailability in `{progress_log_path}` before any approval.
+No substitution is allowed. A same-family subagent may not stand in for the other-subagent reviewer, and the other-subagent reviewer may not stand in for a same-family subagent. If `{other_subagent_reviewer_command}` is unavailable in the current environment, escalate to the human and log the unavailability in `{progress_log_path}` before any approval.
 
 All three reviewers must review the **same evidence pack**. Divergence between reviewer verdicts should be rooted in analysis, not in missing inputs.
 
-If the backend-protection reviewer says a protected-path change is required, do not override it with the normal reviewer or with the external reviewer; escalate to the human.
+If the backend-protection reviewer says a protected-path change is required, do not override it with the normal reviewer or with the other-subagent reviewer; escalate to the human.
 
-If any two reviewers disagree on a blocking finding, resolve by gathering missing evidence, revising the review prompt, or escalating to the human. Do not default to the Claude-subagent view simply because there are two of them.
+If any two reviewers disagree on a blocking finding, resolve by gathering missing evidence, revising the review prompt, or escalating to the human. Do not default to the same-family subagent view simply because there are two of them.
 
-The external reviewer's stdout is authoritative as-is. Log its full stdout verbatim in `{progress_log_path}`; do not paraphrase. If the external reviewer raises a concrete blocking finding, treat it exactly like a Claude reviewer's blocking finding.
+The other-subagent reviewer's stdout is authoritative as-is. Log its full stdout verbatim in `{progress_log_path}`; do not paraphrase. If the other-subagent reviewer raises a concrete blocking finding, treat it exactly like any other reviewer's blocking finding.
 
 ## Evidence Pack Structure
 
@@ -284,6 +286,19 @@ Every review request (to all three reviewers) must include the same evidence pac
 
 Reviewers return `needs more evidence` if any approval-relevant item is missing. `approved` and `approved with nits` are not allowed while `Missing Evidence` is not `none`.
 
+### Review Response Discipline
+
+Every reviewer response must be auditable. A reviewer may not return only a verdict, and may not rely on generic approval language such as "looks good" or "seems fine." Each reviewer must show:
+
+- **Evidence reviewed**: the concrete files, diffs, artifact sections, command outputs, spec excerpts, or log entries inspected
+- **Reasoning**: how that evidence maps to the reviewer's responsibility and why it supports the verdict
+- **Coverage**: the checklist, boundary, or requirement areas considered, including areas that are not applicable and why
+- **Findings or absence of findings**: concrete issues, missing evidence, or an explicit evidence-backed statement that none were found
+
+A verdict is valid only when the reviewer has provided enough evidence and reasoning for the coordinator to independently understand why that verdict follows.
+
+Each reviewer template below implements this discipline with role-specific evidence, reasoning, and checklist fields. Those role-specific reasoning fields satisfy the coverage requirement for that reviewer.
+
 ## Progress Log Schema
 
 `{progress_log_path}` must always contain:
@@ -293,9 +308,9 @@ Reviewers return `needs more evidence` if any approval-relevant item is missing.
 - **Active plan**: current chunk, owner, status
 - **Remaining chunks**: outstanding work with status
 - **Completed work log**: date/time, change summary, evidence summary (append-only)
-- **UI/UX design log**: for each chunk, the coordinator's UI/UX gate decision (`needs UI/UX work` with rationale, or `not required because <reason>`); when UI/UX work was required, the design artifact path under `{ui_ux_artifact_root}`, the UI/UX reviewer's verdict (and any iteration-loop history), and the optional external-design-review outcome if invoked
-- **Review log**: for each chunk, the outcome of all three required implementation reviewers (backend-protection reviewer, normal reviewer, external reviewer), plus the external reviewer's verbatim stdout or a clear pointer to it, plus any unresolved findings
-- **External reviewer availability log**: confirmation that `{external_reviewer_command}` was available for each reviewed chunk, or a dated note of unavailability plus the human-acknowledged escalation
+- **UI/UX design log**: for each chunk, the coordinator's UI/UX gate decision (`needs UI/UX work` with rationale, or `not required because <reason>`); when UI/UX work was required, the design artifact path under `{ui_ux_artifact_root}`, the UI/UX reviewer's verdict (and any iteration-loop history), and the optional other-subagent design-review outcome if invoked
+- **Review log**: for each chunk, the outcome of all three required implementation reviewers (backend-protection reviewer, normal reviewer, other-subagent reviewer), plus the other-subagent reviewer's verbatim stdout or a clear pointer to it, plus any unresolved findings
+- **Other-subagent reviewer availability log**: confirmation that `{other_subagent_reviewer_command}` was available for each reviewed chunk, or a dated note of unavailability plus the human-acknowledged escalation
 - **Protected-path exception log**: any human-approved protected-path exception with exact scope and rationale, or `none`
 - **Open risks / open questions**
 - **Next recommended task**
@@ -308,7 +323,7 @@ Discipline:
 - keep `Remaining chunks` current after every accepted chunk
 - for every developer completion claim, record the outcome of each of the three required implementation reviewers with enough detail that a future session can tell which evidence pack each reviewer saw
 - for every chunk that required UI/UX work, record the design artifact path + UI/UX reviewer verdict + iteration-loop history with enough detail that a future session can reconstruct the design intent and any waivers
-- capture external reviewer stdout verbatim for each chunk review (and for any optional design review), either inline or via a clearly referenced stored artifact; do not paraphrase
+- capture other-subagent reviewer stdout verbatim for each chunk review (and for any optional design review), either inline or via a clearly referenced stored artifact; do not paraphrase
 - record why a tooling, boundary, dependency, design, or protected-path exception decision was made when that decision affects future work
 
 ## Planner Delegation Prompt Template
@@ -363,7 +378,7 @@ Note: the coordinator (not the planner) decides definitively whether each recomm
 
 ## UI/UX Designer Delegation Prompt Template
 
-Coordinator use only: send this template to a UI/UX designer subagent on chunks the coordinator has flagged as needing UI/UX work. The UI/UX designer answers to the coordinator. The designer invokes the design skill named in `{ui_ux_skill}` (default `frontend-design:frontend-design`) via the Skill tool to produce the artifact.
+Coordinator use only: send this template to a UI/UX designer Claude subagent on chunks the coordinator has flagged as needing UI/UX work. The UI/UX designer answers to the coordinator. The designer invokes the design skill named in `{ui_ux_skill}` (default `frontend-design:frontend-design`) via the Skill tool to produce the artifact.
 
 ```md
 You are the UI/UX designer for the task named `{task_name}`.
@@ -447,6 +462,7 @@ Protected exceptions:
 Rules:
 
 - review based on evidence, not intuition
+- do not provide a bare verdict; the response must include the evidence inspected and the reasoning that connects that evidence to the verdict
 - verify the exact changed file list against `{protected_paths}` and `{protected_exception_paths}`
 - if the changed file list, diff, or patch context is missing, ask for it explicitly
 - treat any actual edit under `{protected_paths}` as blocking unless the review request cites a human-approved exception with exact scope
@@ -456,20 +472,22 @@ Rules:
 Output exactly this structure:
 
 - **Verdict**: one of `backend untouched`, `backend changed`, `user confirmation required`, `needs more evidence`
-- **Protected Path Evidence**: exact protected paths inspected, or `none`
-- **Findings**: concrete findings, or `none`
+- **Evidence Reviewed**: exact changed-file list, diff/patch evidence, protected-path globs, protected-exception globs, and cited human-approved exceptions inspected; include `none` only for categories that truly were not present
+- **Protected Path Matrix**: for each changed path or path group — status (`protected`, `protected exception`, `unprotected`, or `unclear`), evidence source, and whether the change is allowed under the invocation constraints
+- **Reasoning**: concise explanation of how the changed-file evidence and path matrix lead to the verdict; include why protected paths are untouched, why an exception is valid, or why escalation is required
+- **Findings**: concrete findings with the evidence item that supports each one, or `none` with a one-sentence evidence-backed rationale
 - **Missing Evidence**: exact missing evidence required, or `none`
 - **Required Action**: one of `proceed to normal review`, `ask the human for protected-path exception confirmation`, `send back for fixes`, `gather more evidence`
 ```
 
 ## UI/UX Reviewer Delegation Prompt Template
 
-Coordinator use only: send this template to a UI/UX reviewer subagent after the UI/UX designer has produced a design artifact for the assigned chunk. The UI/UX reviewer answers to the coordinator. This is a SEPARATE workflow from the three-reviewer rule for developer chunks; do not substitute it for any of the three implementation reviewers.
+Coordinator use only: send this template to a UI/UX reviewer Claude subagent after the UI/UX designer has produced a design artifact for the assigned chunk. The UI/UX reviewer answers to the coordinator. This is a SEPARATE workflow from the three-reviewer rule for developer chunks; do not substitute it for any of the three implementation reviewers.
 
 ```md
 You are the UI/UX reviewer for the task named `{task_name}`.
 
-You are reviewing a design artifact produced by the UI/UX designer subagent for a specific chunk against:
+You are reviewing a design artifact produced by the UI/UX designer Claude subagent for a specific chunk against:
 
 - `{task_spec_path}` (in particular any **Design Language**, **Motion**, **Design Tokens**, or signature-detail sections that constrain aesthetic direction; any **Accessibility** or **WCAG** requirements; the **Acceptance Criteria** the chunk advances)
 - `{progress_log_path}`
@@ -481,6 +499,7 @@ The artifact will be implemented by a developer subagent only after you approve.
 Rules:
 
 - review based on evidence (the artifact + the cited spec sections), not intuition or generic UI/UX taste
+- do not provide a bare verdict; the response must include the artifact/spec evidence inspected and the reasoning that connects that evidence to the verdict
 - if the artifact is missing approval-relevant content (e.g., a state variant the chunk's scope requires is undocumented, or the prototype is missing), the verdict must be `needs more evidence`
 - `approved` and `approved with nits` are not allowed while `Missing Evidence` is not `none`
 - prioritize: aesthetic conformance to spec direction, state/variant coverage, motion/accessibility budget compliance, token-reuse discipline, design-vs-spec scope consistency, implementation tractability
@@ -506,7 +525,10 @@ Output exactly this structure:
 
 - **Verdict**: one of `approved`, `approved with nits`, `needs changes`, `needs more evidence`
 - **Artifact Path Reviewed**: the artifact directory you reviewed (one path)
-- **Findings**: for each — severity, file or section in the artifact, issue, spec section it conflicts with (when applicable), and why it matters; or `none`
+- **Evidence Reviewed**: artifact files/sections inspected, prototype or screenshot evidence inspected, spec sections checked, architecture refs checked, and any coordinator-approved waivers checked
+- **Checklist Reasoning**: for each review checklist item — status (`pass`, `nit`, `fail`, `blocked`, or `not applicable`), the evidence relied on, and the reasoning for that status
+- **Verdict Rationale**: concise explanation of why the checklist statuses justify the verdict; if approved, explain why no blocking design ambiguity remains
+- **Findings**: for each — severity, file or section in the artifact, issue, spec section it conflicts with (when applicable), evidence relied on, and why it matters; or `none` with a one-sentence evidence-backed rationale
 - **Missing Evidence**: exact missing artifact content you need (e.g., "no error-state visual specified for the loading-failure case mentioned in spec §State handling"), or `none`
 - **Required Changes**: concrete changes the designer must make before approval, or `none`
 - **Notes**: brief residual risks or optional nits the developer should be aware of, or `none`
@@ -533,6 +555,7 @@ Protected paths:
 Rules:
 
 - review based on evidence, not intuition
+- do not provide a bare verdict; the response must include the evidence inspected and the reasoning that connects that evidence to the verdict
 - if you lack evidence, ask for it explicitly
 - do not invent unobserved code or test behavior
 - prioritize bugs, regressions, boundary violations, spec mismatch, documentation drift, missing tests, and unverified claims
@@ -547,7 +570,11 @@ Rules:
 Output exactly this structure:
 
 - **Verdict**: one of `approved`, `approved with nits`, `needs changes`, `needs more evidence`
-- **Findings**: for each — severity, file or reference, issue, and why it matters; or `none`
+- **Evidence Reviewed**: changed files, diff/patch excerpts, spec/progress-log excerpts, architecture refs, command outputs, tests, docs evidence, and protected-path exception evidence inspected
+- **Requirement And Boundary Reasoning**: for each relevant task requirement or boundary — status (`satisfied`, `nit`, `violated`, `blocked`, or `not applicable`), evidence relied on, and reasoning
+- **Verification Reasoning**: commands/tests/docs evidence reviewed, what behavior or structure each verifies, and any remaining verification gaps
+- **Verdict Rationale**: concise explanation of why the evidence and reasoning justify the verdict; if approved, explain why no blocking correctness, boundary, spec, test, or docs issue remains
+- **Findings**: for each — severity, file or reference, issue, evidence relied on, and why it matters; or `none` with a one-sentence evidence-backed rationale
 - **Missing Evidence**: exact missing evidence you need, or `none`
 - **Required Changes**: concrete changes required before approval, or `none`
 - **Notes**: brief residual risks or optional nits, or `none`
@@ -579,7 +606,7 @@ You are responsible for the assigned implementation chunk only.
 
 If the coordinator's dispatch includes an approved UI/UX design artifact path, your implementation MUST match that artifact's component anatomy, states/variants, motion/interaction behavior, accessibility behavior, and implementation-acceptance checklist. Deviations require coordinator approval (which may trigger another design review iteration). The artifact is reference-only — you re-implement against the production stack — but the visible/interaction outcome must match.
 
-Your completion claim will be reviewed by **at least three independent reviewers**: the backend-protection reviewer (Claude subagent), a normal reviewer (Claude subagent), and an external reviewer via `{external_reviewer_command}`. Make your evidence pack complete enough that all three can reach a verdict without asking for more inputs.
+Your completion claim will be reviewed by **at least three independent reviewers**: the backend-protection reviewer (subagent), a normal reviewer (subagent), and the other-subagent reviewer via `{other_subagent_reviewer_command}`. Make your evidence pack complete enough that all three can reach a verdict without asking for more inputs.
 
 Rules:
 
@@ -595,7 +622,7 @@ Rules:
 - run the commands in `{required_verification}` that apply to the chunk, and any additional verification your chunk implies
 - report evidence clearly, with enough detail for all three reviewers to reach a verdict from the evidence alone
 - do not edit `{progress_log_path}` unless the coordinator explicitly assigns it to you
-- do not invoke `{external_reviewer_command}`, `claude -p`, the UI/UX designer, the UI/UX reviewer, or any other reviewer yourself; all review invocation is the coordinator's responsibility
+- do not invoke `{other_subagent_reviewer_command}`, `claude -p`, the UI/UX designer, the UI/UX reviewer, or any other reviewer yourself; all review invocation is the coordinator's responsibility
 
 When you finish, report exactly:
 
@@ -615,23 +642,28 @@ When you finish, report exactly:
 - **Handoff Notes**: anything the backend-protection reviewer, normal reviewer, or coordinator should inspect closely
 ```
 
-## External Reviewer Usage
+## Other-Subagent Reviewer Usage
 
-Coordinator use only: the coordinator invokes the external non-Claude reviewer via `{external_reviewer_command}` (default `codex exec`), run through the Bash tool. The external reviewer is the third of the three required reviewers for every developer completion claim; see **Three-Reviewer Rule** above for the rationale.
+Coordinator use only: the coordinator invokes the other-subagent reviewer via `{other_subagent_reviewer_command}`, run through the Bash tool. The other-subagent reviewer is the third of the three required reviewers for every developer completion claim; see **Three-Reviewer Rule** above for the rationale.
 
-Invocation patterns (pick the one that best fits the prompt size; assume `codex exec` by default and swap the binary if `{external_reviewer_command}` is different):
+The other-subagent reviewer must use the opposite family from `{main_agent_family}`:
+
+- if `{main_agent_family}` is `codex`, use a Claude reviewer command (default `claude -p`)
+- if `{main_agent_family}` is `claude`, use a Codex reviewer command (default `codex exec`)
+
+Invocation patterns (pick the one that best fits the prompt size; substitute the configured `{other_subagent_reviewer_command}`):
 
 Short single-line prompt (only for trivial prompts; avoid for real reviews because quoting gets fragile):
 
 ```bash
-codex exec "<short review prompt>"
+{other_subagent_reviewer_command} "<short review prompt>"
 ```
 
 Longer prompt via heredoc (preferred for real review requests; avoids shell-escaping issues and keeps the prompt auditable in the Bash tool log):
 
 ```bash
-codex exec <<'PROMPT'
-<full External Reviewer Prompt Template here>
+{other_subagent_reviewer_command} <<'PROMPT'
+<full Other-Subagent Reviewer Prompt Template here>
 
 # Evidence pack follows:
 <changed files, diff/patch excerpts, commands run, key outputs, test results, docs touched, cited human-approved exceptions, relevant task_spec_path and architecture_refs excerpts>
@@ -641,28 +673,28 @@ PROMPT
 Prompt read from a temporary file (useful when the evidence block is very large or contains characters that fight heredoc quoting):
 
 ```bash
-codex exec < /tmp/external-review-prompt.txt
+{other_subagent_reviewer_command} < /tmp/other-subagent-review-prompt.txt
 ```
 
-If the external reviewer's CLI supports additional flags in this environment (for example to pin a specific model, disable tool use, or restrict the working directory), prefer the most restrictive options that still allow the reviewer to read the prompt and emit a text review. Do not grant the external reviewer write access to the repository.
+If the other-subagent reviewer's CLI supports additional flags in this environment (for example to pin a specific model, disable tool use, or restrict the working directory), prefer the most restrictive options that still allow the reviewer to read the prompt and emit a text review. Do not grant the other-subagent reviewer write access to the repository.
 
-Rules when invoking the external reviewer:
+Rules when invoking the other-subagent reviewer:
 
 - always supply the exact same evidence pack that went to the backend-protection reviewer and the normal reviewer
 - always supply or quote the relevant source-of-truth references: the relevant section of `{task_spec_path}`, the relevant excerpt of `{progress_log_path}`, and `{architecture_refs}` vocabulary where boundary claims matter
-- do not grant the external reviewer write access to the repository; its role is review-only
-- capture the external reviewer's full stdout verbatim as the review record and append it (or a link to a stored copy) into `{progress_log_path}`; do not paraphrase before logging
-- if the external reviewer asks clarifying questions, says evidence is missing, or fails to emit the required output structure, treat the result as `needs more evidence` and rerun on an improved evidence pack
-- if the external reviewer and a Claude reviewer disagree on a blocking finding, follow the three-reviewer rule: gather more evidence, revise the prompt, or escalate to the human rather than silently preferring one
-- never use the external reviewer to modify files, run implementation commands, or stand in for a developer or planner
-- if `{external_reviewer_command}` is unavailable, record that in `{progress_log_path}` and escalate to the human before approving any developer claim that requires external review
+- do not grant the other-subagent reviewer write access to the repository; its role is review-only
+- capture the other-subagent reviewer's full stdout verbatim as the review record and append it (or a link to a stored copy) into `{progress_log_path}`; do not paraphrase before logging
+- if the other-subagent reviewer asks clarifying questions, says evidence is missing, or fails to emit the required output structure, treat the result as `needs more evidence` and rerun on an improved evidence pack
+- if the other-subagent reviewer and another reviewer disagree on a blocking finding, follow the three-reviewer rule: gather more evidence, revise the prompt, or escalate to the human rather than silently preferring one
+- never use the other-subagent reviewer to modify files, run implementation commands, or stand in for a developer or planner
+- if `{other_subagent_reviewer_command}` is unavailable, record that in `{progress_log_path}` and escalate to the human before approving any developer claim that requires other-subagent review
 
-## External Reviewer Prompt Template
+## Other-Subagent Reviewer Prompt Template
 
-Coordinator use only: send this prompt to the external reviewer via `{external_reviewer_command}` when reviewing a real implementation chunk. Append the full evidence pack (changed files, diffs, commands, outputs, tests, docs, cited exceptions) after the prompt before invoking.
+Coordinator use only: send this prompt to the other-subagent reviewer via `{other_subagent_reviewer_command}` when reviewing a real implementation chunk. Append the full evidence pack (changed files, diffs, commands, outputs, tests, docs, cited exceptions) after the prompt before invoking.
 
 ```md
-You are an external non-Claude reviewer for a concrete implementation chunk in the task named `{task_name}`. The coordinator, planner, backend-protection reviewer, normal reviewer, and developer are all Claude subagents; your job is to provide the independent non-Claude review.
+You are the other-subagent reviewer for a concrete implementation chunk in the task named `{task_name}`. The main coordinator runs in `{main_agent_family}`. You are intentionally running in the opposite agent family to provide the independent opposite-family review.
 
 Context:
 
@@ -687,6 +719,7 @@ Review goals:
 Rules:
 
 - review only from the text and evidence provided
+- do not provide a bare verdict; the response must include the evidence inspected and the reasoning that connects that evidence to the verdict
 - do not assume missing behavior exists elsewhere
 - if approval-relevant evidence is missing, the verdict must be `needs more evidence`
 - `approved` and `approved with nits` are not allowed while `Missing Evidence` is not `none`
@@ -695,7 +728,11 @@ Rules:
 Output exactly this structure:
 
 - **Verdict**: one of `approved`, `approved with nits`, `needs changes`, `needs more evidence`
-- **Findings**: concise finding bullets, or `none`
+- **Evidence Reviewed**: changed files, diff/patch excerpts, spec/progress-log excerpts, architecture refs, command outputs, tests, docs evidence, and protected-path exception evidence inspected
+- **Review Reasoning**: for each review goal — status (`satisfied`, `nit`, `violated`, `blocked`, or `not applicable`), evidence relied on, and reasoning
+- **Verification And Risk Reasoning**: what the supplied verification proves, what it does not prove, and any residual risks that affect approval
+- **Verdict Rationale**: concise explanation of why the evidence and reasoning justify the verdict; if approved, explain why no blocking issue remains
+- **Findings**: concise finding bullets with evidence references, or `none` with a one-sentence evidence-backed rationale
 - **Missing Evidence**: exact missing evidence required, or `none`
 - **Required Changes**: exact prompt or code changes required before approval, or `none`
 - **Notes**: optional improvements, or `none`
@@ -703,7 +740,7 @@ Output exactly this structure:
 
 ## Prompt-Pack Review Template
 
-Coordinator use only: use this when the coordinator runs `claude -p` (or `{external_reviewer_command}`) to review this coordinator prompt file itself. This is a separate activity from the three-reviewer rule for developer chunks; it is a meta-review of how the coordinator operates.
+Coordinator use only: use this when the coordinator runs `claude -p` (or `{other_subagent_reviewer_command}`) to review this coordinator prompt file itself. This is a separate activity from the three-reviewer rule for developer chunks; it is a meta-review of how the coordinator operates.
 
 ```md
 You are reviewing `coordinator-prompt.md` as a task-agnostic meta-prompt for multi-agent coordination of the task named `{task_name}`.
@@ -712,7 +749,7 @@ Context:
 
 - `{task_spec_path}` defines the implementation scope.
 - the paths in `{architecture_refs}` provide architecture vocabulary and component-boundary intent.
-- `coordinator-prompt.md` defines how the coordinator, planner, backend-protection reviewer, normal reviewer, and developer agents should operate, and how the external reviewer is invoked via `{external_reviewer_command}`.
+- `coordinator-prompt.md` defines how the coordinator, planner, backend-protection reviewer, normal reviewer, and developer agents should operate, how the UI/UX designer and reviewer use Claude subagents, and how the other-subagent reviewer is invoked via `{other_subagent_reviewer_command}`.
 - `{progress_log_path}` is the persistent progress log that future sessions will rely on.
 
 Review goals:
@@ -727,12 +764,13 @@ Review goals:
 - verify the **UI/UX Design Workflow** section gives the coordinator clear criteria for the per-chunk gate decision, a clear designer dispatch contract, a clear reviewer dispatch contract, an iteration-loop policy, and a clear hand-off-to-developer protocol
 - verify the **UI/UX Designer Delegation Prompt Template** instructs the designer to invoke `{ui_ux_skill}` via the Skill tool, write a structured `design.md` + prototype under `{ui_ux_artifact_root}`, and respect any pre-existing design direction in `{task_spec_path}`
 - verify the **UI/UX Reviewer Delegation Prompt Template** enforces evidence-based review against the spec's design direction, motion budget, accessibility budget, and Resolved Decisions
-- verify the External Reviewer Usage guide and External Reviewer Prompt Template give the coordinator enough detail to invoke the external reviewer safely and capture its output verbatim
-- verify the progress-log rules are strong enough for session handoff, including UI/UX gate decisions, design artifact paths, UI/UX reviewer verdicts, and external reviewer outcomes
+- verify the Other-Subagent Reviewer Usage guide and Other-Subagent Reviewer Prompt Template give the coordinator enough detail to invoke the other-subagent reviewer safely and capture its output verbatim
+- verify the progress-log rules are strong enough for session handoff, including UI/UX gate decisions, design artifact paths, UI/UX reviewer verdicts, and other-subagent reviewer outcomes
 
 Rules:
 
 - review only from the text provided
+- do not provide a bare verdict; the response must include the prompt sections inspected and the reasoning that connects that evidence to the verdict
 - do not assume missing behavior exists elsewhere
 - if approval-relevant evidence is missing, the verdict must be `needs more evidence`
 - `approved` and `approved with nits` are not allowed while `Missing Evidence` is not `none`
@@ -741,7 +779,10 @@ Rules:
 Output exactly this structure:
 
 - **Verdict**: one of `approved`, `approved with nits`, `needs changes`, `needs more evidence`
-- **Findings**: concise finding bullets, or `none`
+- **Evidence Reviewed**: prompt sections inspected, invocation parameters checked, reviewer templates checked, progress-log rules checked, and any unavailable evidence
+- **Prompt-Pack Reasoning**: for each review goal — status (`satisfied`, `nit`, `violated`, `blocked`, or `not applicable`), evidence relied on, and reasoning
+- **Verdict Rationale**: concise explanation of why the evidence and reasoning justify the verdict; if approved, explain why no blocking prompt-process gap remains
+- **Findings**: concise finding bullets with evidence references, or `none` with a one-sentence evidence-backed rationale
 - **Missing Evidence**: exact missing evidence required, or `none`
 - **Required Changes**: exact prompt changes required before approval, or `none`
 - **Notes**: optional improvements, or `none`
@@ -756,10 +797,10 @@ Escalate to the human when:
 - any change to `{protected_paths}` is proposed or detected
 - a change under `{protected_exception_paths}` would violate the stated constraint
 - any item in `{forbidden_scope}` appears in a proposed chunk
-- reviews disagree on a tradeoff and evidence does not settle it (including any disagreement between the external reviewer and a Claude reviewer)
+- reviews disagree on a tradeoff and evidence does not settle it (including any disagreement between the other-subagent reviewer and another reviewer)
 - the codebase contains conflicting local changes
 - an important dependency or test environment is missing
-- `{external_reviewer_command}` is not available in the current environment and a developer completion claim requires the three-reviewer rule
+- `{other_subagent_reviewer_command}` is not available in the current environment and a developer completion claim requires the three-reviewer rule
 - the cleanest implementation path would break current user-facing behavior across multiple chunks and the risk cannot be bounded cleanly
 - the UI/UX designer reports that the chunk's scope conflicts with the spec's existing design direction (e.g., delivering the chunk would require breaking a Resolved Decision in `{task_spec_path}`)
 - the UI/UX designer + UI/UX reviewer loop has iterated three or more times on the same chunk without converging — surface the disagreement to the human rather than spinning further
@@ -770,9 +811,9 @@ Escalate to the human when:
 
 Treat the prompt pack as converged only when all of the following hold:
 
-- reviewer feedback confirms each of these is explicit and workable: planner chunking/sequencing/coverage-mapping guidance (including UI/UX-impact assessment); protected-path rules and escalation triggers; evidence requirements and missing-evidence rules; developer handoff requirements (including Design Conformance evidence); the progress-log schema for session handoff (including the UI/UX design log); the three-reviewer rule; the **UI/UX Design Workflow** + **UI/UX Designer Delegation Prompt Template** + **UI/UX Reviewer Delegation Prompt Template**; the External Reviewer Usage guide and Prompt Template
-- at least one cross-agent review via `{external_reviewer_command}` on the prompt pack has no blocking findings, or the coordinator explicitly recorded that `{external_reviewer_command}` is unavailable and escalated to the human
-- Claude CLI prompt-pack review (`claude -p`) has no blocking findings
+- reviewer feedback confirms each of these is explicit and workable: planner chunking/sequencing/coverage-mapping guidance (including UI/UX-impact assessment); protected-path rules and escalation triggers; evidence requirements and missing-evidence rules; developer handoff requirements (including Design Conformance evidence); the progress-log schema for session handoff (including the UI/UX design log); the three-reviewer rule; the **UI/UX Design Workflow** + **UI/UX Designer Delegation Prompt Template** + **UI/UX Reviewer Delegation Prompt Template**; the Other-Subagent Reviewer Usage guide and Prompt Template
+- at least one cross-agent review via `{other_subagent_reviewer_command}` on the prompt pack has no blocking findings, or the coordinator explicitly recorded that `{other_subagent_reviewer_command}` is unavailable and escalated to the human
+- Claude CLI prompt-pack review (`claude -p`) has no blocking findings; if Claude is already the configured other-subagent reviewer for this prompt-pack review, the same review record may satisfy this item
 - remaining comments, if any, are minor nits rather than process gaps
 - no review has unresolved `Missing Evidence` or `Required Changes`
 
