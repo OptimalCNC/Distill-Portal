@@ -212,21 +212,127 @@ test("system record emits a system message with content", () => {
   });
 });
 
-test("custom-title is silenced from messages and warnings", () => {
+test("custom-title emits metadata title hairline (Phase 7d)", () => {
   const raw = JSON.stringify({
     type: "custom-title",
     customTitle: "phase-1-backend-foundation",
   });
   const out = parseClaudeCode(raw);
-  expect(out.messages).toEqual([]);
+  expect(out.messages).toHaveLength(1);
+  expect(out.messages[0]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "title",
+  });
+  expect(out.messages[0].text).toContain("custom title");
+  expect(out.messages[0].text).toContain("phase-1-backend-foundation");
   expect(out.warnings).toEqual([]);
 });
 
-test("permission-mode is silenced from messages and warnings", () => {
+test("permission-mode emits metadata control hairline (Phase 7d)", () => {
   const raw = JSON.stringify({ type: "permission-mode", permissionMode: "default" });
   const out = parseClaudeCode(raw);
-  expect(out.messages).toEqual([]);
+  expect(out.messages).toHaveLength(1);
+  expect(out.messages[0]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "control",
+    text: "permission mode → default",
+  });
   expect(out.warnings).toEqual([]);
+});
+
+test("agent-name emits metadata agent hairline (Phase 7d)", () => {
+  const raw = JSON.stringify({ type: "agent-name", name: "phase-agent" });
+  const out = parseClaudeCode(raw);
+  expect(out.messages).toHaveLength(1);
+  expect(out.messages[0]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "agent",
+    text: "agent → phase-agent",
+  });
+});
+
+test("ai-title emits metadata title hairline (Phase 7d)", () => {
+  const raw = JSON.stringify({ type: "ai-title", title: "Investigate parser matrix" });
+  const out = parseClaudeCode(raw);
+  expect(out.messages).toHaveLength(1);
+  expect(out.messages[0]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "title",
+  });
+  expect(out.messages[0].text).toContain("auto title");
+  expect(out.messages[0].text).toContain("Investigate parser matrix");
+});
+
+test("attachment emits metadata attachment hairline (Phase 7d)", () => {
+  const raw = JSON.stringify({
+    type: "attachment",
+    fileName: "notes.txt",
+    mimeType: "text/plain",
+  });
+  const out = parseClaudeCode(raw);
+  expect(out.messages).toHaveLength(1);
+  expect(out.messages[0]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "attachment",
+    text: "attachment → notes.txt (text/plain)",
+  });
+});
+
+test("file-history-snapshot emits metadata attachment hairline with file count (Phase 7d)", () => {
+  const raw = JSON.stringify({
+    type: "file-history-snapshot",
+    files: [
+      { path: "README.md", status: "modified" },
+      { path: "AGENTS.md", status: "modified" },
+      { path: "ARCH.md", status: "modified" },
+    ],
+  });
+  const out = parseClaudeCode(raw);
+  expect(out.messages).toHaveLength(1);
+  expect(out.messages[0]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "attachment",
+  });
+  // 3 files total → text shows the count + first two paths + "…"
+  expect(out.messages[0].text).toContain("file snapshot → 3 files");
+  expect(out.messages[0].text).toContain("README.md");
+  expect(out.messages[0].text).toContain("AGENTS.md");
+  expect(out.messages[0].text).toContain("…");
+});
+
+test("last-prompt emits metadata prompt hairline (Phase 7d)", () => {
+  const raw = JSON.stringify({ type: "last-prompt", prompt: "Deliver phase 7a." });
+  const out = parseClaudeCode(raw);
+  expect(out.messages).toHaveLength(1);
+  expect(out.messages[0]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "prompt",
+  });
+  expect(out.messages[0].text).toContain("last prompt");
+  expect(out.messages[0].text).toContain("Deliver phase 7a.");
+});
+
+test("queue-operation emits metadata control hairline + optional prompt (Phase 7d)", () => {
+  const raw = JSON.stringify({
+    type: "queue-operation",
+    operation: "enqueue",
+    prompt: "Review the matrix.",
+  });
+  const out = parseClaudeCode(raw);
+  expect(out.messages).toHaveLength(1);
+  expect(out.messages[0]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "control",
+  });
+  expect(out.messages[0].text).toContain("queue → enqueue");
+  expect(out.messages[0].text).toContain("Review the matrix.");
+});
+
+test("queue-operation without a prompt omits the optional suffix", () => {
+  const raw = JSON.stringify({ type: "queue-operation", operation: "dequeue" });
+  const out = parseClaudeCode(raw);
+  expect(out.messages).toHaveLength(1);
+  expect(out.messages[0].text).toBe("queue → dequeue");
 });
 
 test("unknown top-level type emits unknown row + warning", () => {
@@ -405,23 +511,36 @@ test("end-to-end: real fixture (tests/fixtures/claude_code/sample_session.jsonl)
   const raw = await Bun.file(fixturePath).text();
   const out = parseClaudeCode(raw);
 
-  // 4 lines. permission-mode (line 0) → silenced;
-  // user (line 1) → 1 user msg;
-  // assistant (line 2) → 1 assistant msg;
-  // custom-title (line 3) → silenced.
-  // Expected: 2 messages, 0 warnings.
-  expect(out.messages).toHaveLength(2);
+  // 4 lines. Phase 7d surfaces what was previously silenced:
+  //   permission-mode (line 0) → metadata/control;
+  //   user (line 1)            → user;
+  //   assistant (line 2)       → assistant;
+  //   custom-title (line 3)    → metadata/title.
+  // Expected: 4 messages, 0 warnings.
+  expect(out.messages).toHaveLength(4);
   expect(out.messages[0]).toMatchObject({
-    kind: "user",
-    text: "Build the phase 1 backend foundation.",
-    lineOrdinal: 1,
+    kind: "metadata",
+    metaCategory: "control",
+    lineOrdinal: 0,
     messageIndex: 0,
   });
   expect(out.messages[1]).toMatchObject({
+    kind: "user",
+    text: "Build the phase 1 backend foundation.",
+    lineOrdinal: 1,
+    messageIndex: 1,
+  });
+  expect(out.messages[2]).toMatchObject({
     kind: "assistant",
     text: "Implementing the storage-first slice.",
     lineOrdinal: 2,
-    messageIndex: 1,
+    messageIndex: 2,
+  });
+  expect(out.messages[3]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "title",
+    lineOrdinal: 3,
+    messageIndex: 3,
   });
   expect(out.warnings).toEqual([]);
 });

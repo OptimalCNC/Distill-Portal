@@ -90,6 +90,35 @@ export function buildSkim(messages: Message[], threshold: number): SkimBlock[] {
       continue;
     }
 
+    if (m.kind === "metadata") {
+      // Phase 7d — metadata Messages are session-level chrome
+      // (Claude Code session settings, Codex telemetry / context /
+      // duplicate-anchor rows). They do NOT participate in the
+      // user_turn / agent_only partition because they are not
+      // timeline turn participants — they're marginalia rendered
+      // beside the timeline in TranscriptView. Skip them here so the
+      // partition's truth-table rows (system → user → assistant)
+      // remain unaffected.
+      //
+      // The metadata row's `messageIndex` remains addressable inside
+      // any enclosing user_turn / agent_only block range — the range
+      // is still inclusive `[start, end]`, and a metadata message at
+      // index k between start and end is simply rendered inside the
+      // scoped TranscriptView when the user expands the block. The
+      // block-kind partition treats it as "extend whichever region is
+      // currently open"; an isolated metadata message at the head of
+      // the stream opens an `agent_only` block of length 1 like any
+      // other non-user prelude.
+      if (openUserTurnStart !== null) {
+        // Inside a user_turn → keep extending; no state change.
+        continue;
+      }
+      if (openAgentOnlyStart === null) {
+        openAgentOnlyStart = i;
+      }
+      continue;
+    }
+
     if (m.kind === "user") {
       if (m.bytes > threshold) {
         closeOpenRegions(i - 1);

@@ -68,7 +68,7 @@ test("second session_meta in stream becomes a boundary message of subtype sessio
   expect(out.messages[1].boundarySubtype).toBe("session_resumed");
 });
 
-test("anchor principle: response_item.message role=user is SKIPPED (no message, no warning)", () => {
+test("anchor principle: response_item.message role=user emits a metadata echo (Phase 7d)", () => {
   const raw = JSON.stringify({
     timestamp: "2026-04-11T11:05:37.642Z",
     type: "response_item",
@@ -79,11 +79,17 @@ test("anchor principle: response_item.message role=user is SKIPPED (no message, 
     },
   });
   const out = parseCodex(raw);
-  expect(out.messages).toEqual([]);
+  expect(out.messages).toHaveLength(1);
+  expect(out.messages[0]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "echo",
+    text: "",
+    echoOf: { lineOrdinal: 0, canonicalKind: "user" },
+  });
   expect(out.warnings).toEqual([]);
 });
 
-test("anchor principle: response_item.message role=assistant is also SKIPPED", () => {
+test("anchor principle: response_item.message role=assistant emits a metadata echo (Phase 7d)", () => {
   const raw = JSON.stringify({
     timestamp: "2026-04-11T11:05:38.000Z",
     type: "response_item",
@@ -94,8 +100,150 @@ test("anchor principle: response_item.message role=assistant is also SKIPPED", (
     },
   });
   const out = parseCodex(raw);
-  expect(out.messages).toEqual([]);
+  expect(out.messages).toHaveLength(1);
+  expect(out.messages[0]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "echo",
+    text: "",
+    echoOf: { lineOrdinal: 0, canonicalKind: "assistant" },
+  });
   expect(out.warnings).toEqual([]);
+});
+
+test("Phase 7d codex-external catch: echo's echoOf.lineOrdinal resolves FORWARD to the canonical event_msg row's line, not the duplicate's own line", () => {
+  // Real Codex shape: the duplicate-anchor `response_item.message`
+  // emits FIRST (e.g. on line 0), then the canonical
+  // `event_msg.user_message` emits AFTER (on line 1). The echo's
+  // back-pointer must resolve to the canonical's line, NOT the
+  // duplicate's own line — otherwise the tooltip "duplicate of
+  // event_msg.user_message at line N" is misleading (it would
+  // point at the duplicate's own line).
+  const lines = [
+    JSON.stringify({
+      timestamp: "2026-04-11T11:05:37.642Z",
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "Ping" }],
+      },
+    }),
+    JSON.stringify({
+      timestamp: "2026-04-11T11:05:38.000Z",
+      type: "event_msg",
+      payload: { type: "user_message", message: "Ping" },
+    }),
+  ].join("\n");
+  const out = parseCodex(lines);
+  expect(out.messages).toHaveLength(2);
+  expect(out.messages[0]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "echo",
+    // Echo on line 0 — its echoOf.lineOrdinal points at line 1 (the
+    // canonical row's line), NOT line 0 (its own line).
+    echoOf: { lineOrdinal: 1, canonicalKind: "user" },
+  });
+  expect(out.messages[1]).toMatchObject({
+    kind: "user",
+    lineOrdinal: 1,
+    text: "Ping",
+  });
+});
+
+test("Phase 7d codex-external catch r2: echo-boundary suppresses the backward fallback (multi-echo case)", () => {
+  // Codex external review round 2 caught that an unconditional
+  // backward fallback could mis-associate when the forward search
+  // bailed at an echo boundary. Stream shape:
+  //   [canonicalA(line 0), echo_dup_1(line 1), echo_dup_2(line 2),
+  //    canonicalB(line 3)]
+  // echo_dup_1's forward search hits echo_dup_2 (same canonicalKind)
+  // and stops at the boundary. WITHOUT the fix, the backward fallback
+  // would then mis-associate echo_dup_1 → canonicalA (line 0). WITH
+  // the fix, the boundary suppresses the backward search and
+  // echoOf.lineOrdinal stays at the duplicate's own line (line 1).
+  const lines = [
+    JSON.stringify({
+      timestamp: "2026-04-11T11:05:36.000Z",
+      type: "event_msg",
+      payload: { type: "user_message", message: "A" },
+    }),
+    JSON.stringify({
+      timestamp: "2026-04-11T11:05:37.000Z",
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "dup1" }],
+      },
+    }),
+    JSON.stringify({
+      timestamp: "2026-04-11T11:05:38.000Z",
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "dup2" }],
+      },
+    }),
+    JSON.stringify({
+      timestamp: "2026-04-11T11:05:39.000Z",
+      type: "event_msg",
+      payload: { type: "user_message", message: "B" },
+    }),
+  ].join("\n");
+  const out = parseCodex(lines);
+  expect(out.messages).toHaveLength(4);
+  // echo_dup_1 (line 1): forward stops at echo_dup_2 boundary;
+  // backward fallback suppressed; stays at duplicate's own line.
+  expect(out.messages[1]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "echo",
+    lineOrdinal: 1,
+    echoOf: { lineOrdinal: 1, canonicalKind: "user" },
+  });
+  // echo_dup_2 (line 2): forward finds canonicalB at line 3.
+  expect(out.messages[2]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "echo",
+    lineOrdinal: 2,
+    echoOf: { lineOrdinal: 3, canonicalKind: "user" },
+  });
+});
+
+test("Phase 7d codex-external catch: echo's echoOf.lineOrdinal resolves BACKWARD when canonical precedes duplicate", () => {
+  // Defensive backward-search test. The post-parse pass prefers a
+  // forward match (typical Codex shape) but falls back to backward
+  // search if the canonical was already emitted before the duplicate.
+  const lines = [
+    JSON.stringify({
+      timestamp: "2026-04-11T11:05:37.642Z",
+      type: "event_msg",
+      payload: { type: "agent_message", message: "Hello" },
+    }),
+    JSON.stringify({
+      timestamp: "2026-04-11T11:05:38.000Z",
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "Hello" }],
+      },
+    }),
+  ].join("\n");
+  const out = parseCodex(lines);
+  expect(out.messages).toHaveLength(2);
+  expect(out.messages[0]).toMatchObject({
+    kind: "assistant",
+    lineOrdinal: 0,
+    text: "Hello",
+  });
+  expect(out.messages[1]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "echo",
+    // Echo on line 1 — its echoOf.lineOrdinal points BACKWARD at
+    // line 0 (the canonical preceded it). No forward canonical exists.
+    echoOf: { lineOrdinal: 0, canonicalKind: "assistant" },
+  });
 });
 
 test("response_item.function_call emits a tool_use with toolName from payload.name", () => {
@@ -161,14 +309,74 @@ test("response_item with unknown payload type emits unknown + warning", () => {
   expect(out.warnings[0].reason).toContain("unknown response_item payload.type");
 });
 
-test("turn_context is silently skipped (adapter metadata, not timeline)", () => {
+test("turn_context emits metadata context hairline (Phase 7d)", () => {
+  const raw = JSON.stringify({
+    type: "turn_context",
+    payload: {
+      cwd: "/a",
+      current_date: "2026-04-11",
+      model: "gpt-5",
+      sandbox: "read-only",
+      approval: "on-request",
+    },
+  });
+  const out = parseCodex(raw);
+  expect(out.messages).toHaveLength(1);
+  expect(out.messages[0]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "context",
+  });
+  // current_date is dropped per design §3.4; cwd / model / sandbox /
+  // approval appear in that order.
+  expect(out.messages[0].text).toBe(
+    "turn context → cwd /a · model gpt-5 · sandbox read-only · approval on-request",
+  );
+  expect(out.warnings).toEqual([]);
+});
+
+test("turn_context with only cwd emits a minimal metadata hairline", () => {
   const raw = JSON.stringify({
     type: "turn_context",
     payload: { cwd: "/a", current_date: "2026-04-11" },
   });
   const out = parseCodex(raw);
-  expect(out.messages).toEqual([]);
+  expect(out.messages).toHaveLength(1);
+  expect(out.messages[0]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "context",
+    text: "turn context → cwd /a",
+  });
+});
+
+test("event_msg.token_count emits a metadata telemetry hairline (Phase 7d)", () => {
+  const raw = JSON.stringify({
+    type: "event_msg",
+    payload: {
+      type: "token_count",
+      input_tokens: 100,
+      output_tokens: 50,
+      cached_input_tokens: 20,
+      reasoning_output_tokens: 5,
+    },
+  });
+  const out = parseCodex(raw);
+  expect(out.messages).toHaveLength(1);
+  expect(out.messages[0]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "telemetry",
+    text: "tokens: 100↓ 50↑ 20≈ 5†",
+  });
   expect(out.warnings).toEqual([]);
+});
+
+test("event_msg.token_count without cached or reasoning counts skips those suffixes", () => {
+  const raw = JSON.stringify({
+    type: "event_msg",
+    payload: { type: "token_count", input_tokens: 10, output_tokens: 5 },
+  });
+  const out = parseCodex(raw);
+  expect(out.messages).toHaveLength(1);
+  expect(out.messages[0].text).toBe("tokens: 10↓ 5↑");
 });
 
 test("event_msg.user_message emits a user message", () => {
@@ -508,7 +716,7 @@ test("totality: parser does not throw on adversarial input", () => {
 });
 
 // ===== Anchor principle: end-to-end fixture =====
-test("end-to-end: real fixture verifies anchor principle (response_item.user is SKIPPED)", async () => {
+test("end-to-end: real fixture verifies anchor principle (response_item.user emits echo metadata, Phase 7d)", async () => {
   const fixturePath = join(
     process.cwd(),
     "../../tests/fixtures/codex/sample_session.jsonl",
@@ -518,11 +726,12 @@ test("end-to-end: real fixture verifies anchor principle (response_item.user is 
 
   // 4 lines:
   //   0: session_meta            → system (kept)
-  //   1: response_item.user      → SKIPPED by anchor principle (no msg, no warning)
+  //   1: response_item.user      → metadata/echo (Phase 7d; was silently skipped)
   //   2: event_msg.user_message  → user (kept) — CANONICAL
-  //   3: turn_context            → silently skipped
-  // Expect 2 messages: system + user; no warnings.
-  expect(out.messages).toHaveLength(2);
+  //   3: turn_context            → metadata/context (Phase 7d; was silently skipped)
+  // Expect 4 messages: system + metadata/echo + user + metadata/context;
+  // no warnings.
+  expect(out.messages).toHaveLength(4);
   expect(out.messages[0]).toMatchObject({
     kind: "system",
     lineOrdinal: 0,
@@ -531,10 +740,29 @@ test("end-to-end: real fixture verifies anchor principle (response_item.user is 
   expect(out.messages[0].text).toContain("/home/huwei/ai_codings/oh-my-codex");
   expect(out.messages[0].text).toContain("0.120.0");
   expect(out.messages[1]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "echo",
+    lineOrdinal: 1,
+    messageIndex: 1,
+    // Phase 7d codex-external catch (2026-05-16): echoOf.lineOrdinal
+    // resolves to the CANONICAL `event_msg.user_message` row's
+    // line (line 2 in this fixture), NOT the duplicate's own line
+    // (which would be 1). The post-parse `resolveEchoBackPointers`
+    // pass walks the message stream and rewrites the lineOrdinal
+    // to point at the matching canonical.
+    echoOf: { lineOrdinal: 2, canonicalKind: "user" },
+  });
+  expect(out.messages[2]).toMatchObject({
     kind: "user",
-    lineOrdinal: 2, // skipped lines do NOT shift lineOrdinal
-    messageIndex: 1, // sequential after the system
+    lineOrdinal: 2,
+    messageIndex: 2,
     text: "Introduce omx and its subcommands.",
+  });
+  expect(out.messages[3]).toMatchObject({
+    kind: "metadata",
+    metaCategory: "context",
+    lineOrdinal: 3,
+    messageIndex: 3,
   });
   expect(out.warnings).toEqual([]);
 });

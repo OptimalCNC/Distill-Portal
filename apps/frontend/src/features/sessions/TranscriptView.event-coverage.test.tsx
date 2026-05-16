@@ -20,7 +20,15 @@ type RenderTreatment =
   | "system_with_boundary"
   | "unknown"
   | "skipped"
-  | "task_lifecycle";
+  | "task_lifecycle"
+  | "metadata-hairline-control"
+  | "metadata-hairline-telemetry"
+  | "metadata-hairline-title"
+  | "metadata-hairline-attachment"
+  | "metadata-hairline-agent"
+  | "metadata-hairline-prompt"
+  | "metadata-hairline-context"
+  | "metadata-echo";
 
 type RenderMatrixRow = {
   anchor: string;
@@ -70,17 +78,17 @@ const FIXTURE_ROOT = join(
 );
 
 const ROWS: RenderMatrixRow[] = [
-  { anchor: "claude-code-agent-name", tool: "claude_code", treatment: "skipped" },
-  { anchor: "claude-code-ai-title", tool: "claude_code", treatment: "skipped" },
+  { anchor: "claude-code-agent-name", tool: "claude_code", treatment: "metadata-hairline-agent" },
+  { anchor: "claude-code-ai-title", tool: "claude_code", treatment: "metadata-hairline-title" },
   { anchor: "claude-code-assistant-content-text", tool: "claude_code", treatment: "assistant" },
   { anchor: "claude-code-assistant-content-thinking", tool: "claude_code", treatment: "assistant" },
   { anchor: "claude-code-assistant-content-tool-use", tool: "claude_code", treatment: "tool_use" },
-  { anchor: "claude-code-attachment", tool: "claude_code", treatment: "skipped" },
-  { anchor: "claude-code-custom-title", tool: "claude_code", treatment: "skipped" },
-  { anchor: "claude-code-file-history-snapshot", tool: "claude_code", treatment: "skipped" },
-  { anchor: "claude-code-last-prompt", tool: "claude_code", treatment: "skipped" },
-  { anchor: "claude-code-permission-mode", tool: "claude_code", treatment: "skipped" },
-  { anchor: "claude-code-queue-operation", tool: "claude_code", treatment: "skipped" },
+  { anchor: "claude-code-attachment", tool: "claude_code", treatment: "metadata-hairline-attachment" },
+  { anchor: "claude-code-custom-title", tool: "claude_code", treatment: "metadata-hairline-title" },
+  { anchor: "claude-code-file-history-snapshot", tool: "claude_code", treatment: "metadata-hairline-attachment" },
+  { anchor: "claude-code-last-prompt", tool: "claude_code", treatment: "metadata-hairline-prompt" },
+  { anchor: "claude-code-permission-mode", tool: "claude_code", treatment: "metadata-hairline-control" },
+  { anchor: "claude-code-queue-operation", tool: "claude_code", treatment: "metadata-hairline-control" },
   { anchor: "claude-code-system", tool: "claude_code", treatment: "system" },
   { anchor: "claude-code-user-content-text", tool: "claude_code", treatment: "user" },
   { anchor: "claude-code-user-content-tool-result", tool: "claude_code", treatment: "tool_result" },
@@ -100,10 +108,10 @@ const ROWS: RenderMatrixRow[] = [
   { anchor: "codex-event-msg-item-completed", tool: "codex", treatment: "system" },
   { anchor: "codex-event-msg-mcp-tool-call-end", tool: "codex", treatment: "tool_result" },
   { anchor: "codex-event-msg-patch-apply-end", tool: "codex", treatment: "tool_result" },
-  { anchor: "codex-event-msg-task-complete", skipMarker: "@unskip Phase 7c", tool: "codex", treatment: "task_lifecycle" },
-  { anchor: "codex-event-msg-task-started", skipMarker: "@unskip Phase 7c", tool: "codex", treatment: "task_lifecycle" },
+  { anchor: "codex-event-msg-task-complete", tool: "codex", treatment: "task_lifecycle" },
+  { anchor: "codex-event-msg-task-started", tool: "codex", treatment: "task_lifecycle" },
   { anchor: "codex-event-msg-thread-rolled-back", tool: "codex", treatment: "boundary" },
-  { anchor: "codex-event-msg-token-count", tool: "codex", treatment: "skipped" },
+  { anchor: "codex-event-msg-token-count", tool: "codex", treatment: "metadata-hairline-telemetry" },
   { anchor: "codex-event-msg-turn-aborted", tool: "codex", treatment: "system" },
   { anchor: "codex-event-msg-user-message", tool: "codex", treatment: "user" },
   { anchor: "codex-event-msg-web-search-end", tool: "codex", treatment: "tool_result" },
@@ -111,13 +119,13 @@ const ROWS: RenderMatrixRow[] = [
   { anchor: "codex-response-item-custom-tool-call-output", tool: "codex", treatment: "tool_result" },
   { anchor: "codex-response-item-function-call", tool: "codex", treatment: "tool_use" },
   { anchor: "codex-response-item-function-call-output", tool: "codex", treatment: "tool_result" },
-  { anchor: "codex-response-item-message-role-assistant", tool: "codex", treatment: "skipped" },
+  { anchor: "codex-response-item-message-role-assistant", tool: "codex", treatment: "metadata-echo" },
   { anchor: "codex-response-item-message-role-developer", tool: "codex", treatment: "system" },
-  { anchor: "codex-response-item-message-role-user", tool: "codex", treatment: "skipped" },
+  { anchor: "codex-response-item-message-role-user", tool: "codex", treatment: "metadata-echo" },
   { anchor: "codex-response-item-reasoning", tool: "codex", treatment: "assistant" },
   { anchor: "codex-response-item-web-search-call", tool: "codex", treatment: "tool_use" },
   { anchor: "codex-session-meta", tool: "codex", treatment: "system_with_boundary" },
-  { anchor: "codex-turn-context", tool: "codex", treatment: "skipped" },
+  { anchor: "codex-turn-context", tool: "codex", treatment: "metadata-hairline-context" },
 ];
 
 for (const row of ROWS) {
@@ -170,9 +178,19 @@ function assertTreatment(container: HTMLElement, treatment: RenderTreatment) {
       expect(container.querySelector(".msg-assistant")).not.toBeNull();
       break;
     case "tool_use":
-      expect(container.querySelector(".msg-tool-use")).not.toBeNull();
+      // Phase 7c: a `tool_use` Message with no following adjacent
+      // `tool_result` renders as an orphan lifecycle card
+      // (`.msg-lifecycle[data-status="in-flight"]`) per design.md
+      // §3.5. The Phase-7c lifecycle pairing pass collapses
+      // `tool_use + tool_result` pairs into a single `.msg-lifecycle`
+      // card; lone `tool_use` rows surface here as orphan lifecycles.
+      expect(container.querySelector(".msg-lifecycle")).not.toBeNull();
       break;
     case "tool_result":
+      // Phase 7c: a lone `tool_result` Message renders as the
+      // existing `.msg-tool-result` standalone shell (the orphan
+      // tool_result path; the renderHints layer attaches a
+      // `stray-result` chip but the panel class is unchanged).
       expect(container.querySelector(".msg-tool-result")).not.toBeNull();
       break;
     case "system":
@@ -193,6 +211,46 @@ function assertTreatment(container: HTMLElement, treatment: RenderTreatment) {
       break;
     case "task_lifecycle":
       expect(container.querySelector(".msg-task-lifecycle")).not.toBeNull();
+      break;
+    case "metadata-hairline-control":
+      expect(
+        container.querySelector('.msg-metadata[data-meta-category="control"]'),
+      ).not.toBeNull();
+      break;
+    case "metadata-hairline-telemetry":
+      expect(
+        container.querySelector('.msg-metadata[data-meta-category="telemetry"]'),
+      ).not.toBeNull();
+      break;
+    case "metadata-hairline-title":
+      expect(
+        container.querySelector('.msg-metadata[data-meta-category="title"]'),
+      ).not.toBeNull();
+      break;
+    case "metadata-hairline-attachment":
+      expect(
+        container.querySelector('.msg-metadata[data-meta-category="attachment"]'),
+      ).not.toBeNull();
+      break;
+    case "metadata-hairline-agent":
+      expect(
+        container.querySelector('.msg-metadata[data-meta-category="agent"]'),
+      ).not.toBeNull();
+      break;
+    case "metadata-hairline-prompt":
+      expect(
+        container.querySelector('.msg-metadata[data-meta-category="prompt"]'),
+      ).not.toBeNull();
+      break;
+    case "metadata-hairline-context":
+      expect(
+        container.querySelector('.msg-metadata[data-meta-category="context"]'),
+      ).not.toBeNull();
+      break;
+    case "metadata-echo":
+      expect(
+        container.querySelector('.msg-metadata-echo[data-meta-category="echo"]'),
+      ).not.toBeNull();
       break;
     default: {
       const _exhaustive: never = treatment;

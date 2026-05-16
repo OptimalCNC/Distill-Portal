@@ -265,7 +265,11 @@ test("renders assistant kind with msg-assistant modifier", () => {
   expect(container.querySelector(".msg-user")).toBeNull();
 });
 
-test("renders tool_use with <details><summary>Arguments</summary><pre>{text}</pre></details>", () => {
+test("renders lone tool_use as an orphan lifecycle card (in-flight)", () => {
+  // Phase 7c: a lone `tool_use` with no following `tool_result` is an
+  // orphan lifecycle — the renderHints layer emits `kind: "lifecycle"`
+  // with `pairWithIndex: null` and the visual is `.msg-lifecycle[data-
+  // status="in-flight"]`. Per design.md §3.5 (orphan affordances).
   mockedHookState = {
     state: "success",
     parsed: makeParsed([
@@ -280,16 +284,12 @@ test("renders tool_use with <details><summary>Arguments</summary><pre>{text}</pr
   const { container } = render(
     <TranscriptView row={buildRow()} now={NOW} />,
   );
-  expect(container.querySelector(".msg-tool-use")).not.toBeNull();
-  expect(
-    container.querySelector(".msg-tool-name")?.textContent,
-  ).toBe("Read");
-  expect(
-    container.querySelector(".msg-tool-disclosure summary")?.textContent,
-  ).toBe("Arguments");
-  expect(
-    container.querySelector(".msg-tool-pre")?.textContent,
-  ).toContain('"path": "/foo"');
+  const lifecycle = container.querySelector(".msg-lifecycle");
+  expect(lifecycle).not.toBeNull();
+  expect(lifecycle?.getAttribute("data-status")).toBe("in-flight");
+  // No standalone .msg-tool-use panel (the lifecycle owns the surface).
+  expect(container.querySelector(".msg-tool-use")).toBeNull();
+  expect(container.querySelector(".tool-name")?.textContent).toBe("Read");
 });
 
 test("renders tool_result UNDER 2 KB without expand affordance", () => {
@@ -835,7 +835,10 @@ test("section carries aria-label='Session transcript'", () => {
   expect(section?.getAttribute("aria-label")).toBe("Session transcript");
 });
 
-test("mixed user → assistant → tool_use → tool_result → assistant renders five panels in order", () => {
+test("mixed user → assistant → tool_use → tool_result → assistant collapses pair into one lifecycle (4 panels)", () => {
+  // Phase 7c: adjacent tool_use + tool_result render as a single
+  // `.msg-lifecycle` card; the standalone `.msg-tool-use` and
+  // `.msg-tool-result` panels do NOT both render.
   mockedHookState = {
     state: "success",
     parsed: makeParsed([
@@ -861,22 +864,16 @@ test("mixed user → assistant → tool_use → tool_result → assistant render
     <TranscriptView row={buildRow()} now={NOW} />,
   );
   const stream = container.querySelector(".transcript-stream");
-  expect(stream?.children.length).toBe(5);
-  // Order check.
+  expect(stream?.children.length).toBe(4);
   const kinds = Array.from(stream!.children).map((li) => {
     if (li.querySelector(".msg-user")) return "user";
     if (li.querySelector(".msg-assistant")) return "assistant";
+    if (li.querySelector(".msg-lifecycle")) return "lifecycle";
     if (li.querySelector(".msg-tool-use")) return "tool-use";
     if (li.querySelector(".msg-tool-result")) return "tool-result";
     return "?";
   });
-  expect(kinds).toEqual([
-    "user",
-    "assistant",
-    "tool-use",
-    "tool-result",
-    "assistant",
-  ]);
+  expect(kinds).toEqual(["user", "assistant", "lifecycle", "assistant"]);
 });
 
 test("warnings banner <details> summary is keyboard-focusable", () => {
@@ -1111,4 +1108,1028 @@ test("boundary message uses BoundaryRow shared component (carries 'boundary-row'
   expect(boundary.classList.contains("boundary-row")).toBe(true);
   expect(boundary.classList.contains("msg-boundary")).toBe(true);
   expect(boundary.classList.contains("msg")).toBe(true);
+});
+
+// ==========================================================================
+// Phase 7c / M2 — Lifecycle pairing
+// ==========================================================================
+
+test("adjacent tool_use + tool_result render a single .msg-lifecycle card (paired success)", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      makeMessage({
+        kind: "tool_use",
+        toolName: "Read",
+        text: '{"path":"/foo"}',
+        messageIndex: 0,
+      }),
+      makeMessage({
+        kind: "tool_result",
+        toolName: "toolu_abc",
+        text: "ok",
+        bytes: 2,
+        messageIndex: 1,
+      }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const lifecycle = container.querySelector(".msg-lifecycle");
+  expect(lifecycle).not.toBeNull();
+  expect(lifecycle?.getAttribute("data-status")).toBe("all-success");
+  // No standalone .msg-tool-use or .msg-tool-result panel.
+  expect(container.querySelector(".msg-tool-use")).toBeNull();
+  expect(container.querySelector(".msg-tool-result")).toBeNull();
+  // Only ONE list item in the stream.
+  expect(
+    container.querySelector(".transcript-stream")?.children.length,
+  ).toBe(1);
+  // Lifecycle body contains both Arguments and Result disclosures.
+  const summaries = lifecycle?.querySelectorAll(".lifecycle-body summary");
+  expect(summaries?.length).toBe(2);
+});
+
+test("lifecycle status flips to all-failed when tool_result text matches failure heuristic", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      makeMessage({
+        kind: "tool_use",
+        toolName: "bun",
+        text: '{"cmd":"bun test"}',
+        messageIndex: 0,
+      }),
+      makeMessage({
+        kind: "tool_result",
+        toolName: "exec",
+        text: "exit_code: 1\n3 tests failed",
+        bytes: 30,
+        messageIndex: 1,
+      }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const lifecycle = container.querySelector(".msg-lifecycle");
+  expect(lifecycle?.getAttribute("data-status")).toBe("all-failed");
+});
+
+test("orphan tool_use renders .msg-lifecycle[data-status='in-flight'] with awaiting-result pill", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      makeMessage({
+        kind: "tool_use",
+        toolName: "Bash",
+        text: '{"cmd":"sleep 1"}',
+        messageIndex: 0,
+      }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const lifecycle = container.querySelector(".msg-lifecycle");
+  expect(lifecycle?.getAttribute("data-status")).toBe("in-flight");
+  expect(lifecycle?.querySelector(".lifecycle-pill")?.textContent).toBe(
+    "awaiting result",
+  );
+  expect(lifecycle?.querySelector(".lifecycle-no-result")).not.toBeNull();
+});
+
+test("orphan tool_result renders .msg-tool-result standalone card with a stray-result chip", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      makeMessage({
+        kind: "tool_result",
+        toolName: "(unknown)",
+        text: "loose result",
+        bytes: 12,
+        messageIndex: 0,
+      }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  expect(container.querySelector(".msg-tool-result")).not.toBeNull();
+  // Stray-result inline chip is present.
+  const chipLabel = container.querySelector(".chip .chip-label");
+  expect(chipLabel?.textContent).toContain("stray tool_result");
+});
+
+test("boundary between tool_use and tool_result blocks pairing (orphan + boundary + stray)", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      makeMessage({
+        kind: "tool_use",
+        toolName: "Bash",
+        text: "{}",
+        messageIndex: 0,
+      }),
+      makeMessage({
+        kind: "boundary",
+        boundarySubtype: "session_resumed",
+        text: "",
+        bytes: 0,
+        messageIndex: 1,
+      }),
+      makeMessage({
+        kind: "tool_result",
+        toolName: "toolu_x",
+        text: "leftover",
+        bytes: 8,
+        messageIndex: 2,
+      }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const lifecycle = container.querySelector(".msg-lifecycle");
+  expect(lifecycle?.getAttribute("data-status")).toBe("in-flight");
+  expect(container.querySelector(".msg-boundary")).not.toBeNull();
+  expect(container.querySelector(".msg-tool-result")).not.toBeNull();
+  expect(
+    container.querySelector(".chip .chip-label")?.textContent,
+  ).toContain("stray tool_result");
+});
+
+// ==========================================================================
+// Phase 7c / M2 — Inline warning chip classification (4 buckets)
+// ==========================================================================
+
+test("render-normally bucket renders a visible chip below the message body", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed(
+      [
+        makeMessage({ kind: "user", text: "hello", messageIndex: 0 }),
+      ],
+      {
+        warnings: [
+          {
+            lineOrdinal: 1,
+            severity: "error",
+            category: "payload",
+            reason: "unknown user content item type 'image'",
+            messageIndex: 0,
+          },
+        ],
+      },
+    ),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const chipWrapper = container.querySelector(".msg-user .chip-wrapper");
+  expect(chipWrapper).not.toBeNull();
+  const chip = chipWrapper?.querySelector(".chip");
+  expect(chip).not.toBeNull();
+  expect(chip?.getAttribute("data-classification")).toBe("render-normally");
+  expect(chip?.querySelector(".chip-label")?.textContent).toBe(
+    "unknown user content item type 'image'",
+  );
+});
+
+test("collapse-by-default bucket renders a chip with generic '1 warning' summary", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed(
+      [
+        makeMessage({ kind: "assistant", text: "running", messageIndex: 0 }),
+      ],
+      {
+        warnings: [
+          {
+            lineOrdinal: 1,
+            severity: "warning",
+            category: "timestamp",
+            reason: "timestamp 'x' could not be parsed",
+            messageIndex: 0,
+          },
+        ],
+      },
+    ),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const chip = container.querySelector(".msg-assistant .chip");
+  expect(chip).not.toBeNull();
+  expect(chip?.getAttribute("data-classification")).toBe(
+    "collapse-by-default",
+  );
+  expect(chip?.querySelector(".chip-label")?.textContent).toBe("1 warning");
+});
+
+test("hide-with-inspect bucket nests chip behind a corner Inspect link", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed(
+      [
+        makeMessage({ kind: "assistant", text: "done", messageIndex: 0 }),
+      ],
+      {
+        warnings: [
+          {
+            lineOrdinal: 1,
+            severity: "info",
+            category: "meta",
+            reason: "info-only note",
+            messageIndex: 0,
+          },
+        ],
+      },
+    ),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const affordance = container.querySelector(
+    ".msg-assistant .inspect-affordance",
+  );
+  expect(affordance).not.toBeNull();
+  expect(affordance?.querySelector(".inspect-link")?.textContent).toContain(
+    "Inspect",
+  );
+  const chip = affordance?.querySelector(".chip");
+  expect(chip?.getAttribute("data-classification")).toBe("hide-with-inspect");
+});
+
+test("warning-only bucket renders NO chip and suppresses the message body (banner-only)", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed(
+      [
+        makeMessage({ kind: "assistant", text: "ready", messageIndex: 0 }),
+      ],
+      {
+        warnings: [
+          {
+            lineOrdinal: 1,
+            severity: "warning",
+            category: "meta",
+            reason: "meta annotation",
+            messageIndex: 0,
+          },
+        ],
+      },
+    ),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  // No chip on the message body; the message body itself is
+  // suppressed (warning-only RenderHint renders nothing for the
+  // message). The banner still lists the warning.
+  expect(container.querySelector(".msg-assistant")).toBeNull();
+  expect(container.querySelector(".chip")).toBeNull();
+  expect(
+    container.querySelector(".transcript-banner-warnings"),
+  ).not.toBeNull();
+});
+
+// ==========================================================================
+// Phase 7c / M2 — Task-lifecycle chapter marker
+// ==========================================================================
+
+test("system message text starting with 'task_started · turn ' renders .msg-task-lifecycle", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      makeMessage({
+        kind: "system",
+        text: "task_started · turn abc123",
+        messageIndex: 0,
+      }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const card = container.querySelector(".msg-task-lifecycle");
+  expect(card).not.toBeNull();
+  expect(card?.getAttribute("data-task")).toBe("started");
+  expect(card?.getAttribute("aria-label")).toBe(
+    "Task started for turn abc123",
+  );
+  expect(card?.querySelector(".task-label")?.textContent).toBe(
+    "Task started",
+  );
+  expect(card?.querySelector(".task-turn")?.textContent).toBe("turn abc123");
+  // The generic .msg-system shell is NOT rendered for this row.
+  expect(container.querySelector(".msg-system")).toBeNull();
+});
+
+test("system message text starting with 'task_complete · turn ' renders .msg-task-lifecycle complete", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      makeMessage({
+        kind: "system",
+        text: "task_complete · turn xyz789",
+        messageIndex: 0,
+      }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const card = container.querySelector(".msg-task-lifecycle");
+  expect(card?.getAttribute("data-task")).toBe("complete");
+  expect(card?.querySelector(".task-label")?.textContent).toBe(
+    "Task complete",
+  );
+});
+
+test("task_started system message with attached warning-only warning still renders .msg-task-lifecycle (chapter marker survives)", () => {
+  // Precedence regression guard: a `task_started · turn ...` system
+  // message that also carries a `warning/meta` warning (the bucket
+  // that classifies to `warning-only`) must STILL render the chapter
+  // marker. The warning-only short-circuit in renderHints must yield
+  // to the task-lifecycle stamp.
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed(
+      [
+        makeMessage({
+          kind: "system",
+          text: "task_started · turn abc123",
+          messageIndex: 0,
+        }),
+      ],
+      {
+        warnings: [
+          {
+            lineOrdinal: 5,
+            severity: "warning",
+            category: "meta",
+            reason: "meta annotation",
+            messageIndex: 0,
+          },
+        ],
+      },
+    ),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const card = container.querySelector(".msg-task-lifecycle");
+  expect(card).not.toBeNull();
+  expect(card?.getAttribute("data-task")).toBe("started");
+  // The generic .msg-system shell is NOT rendered — the chapter
+  // marker fully replaces it, even with an attached warning-only
+  // warning.
+  expect(container.querySelector(".msg-system")).toBeNull();
+  // The banner still surfaces the warning (banner stays loud per
+  // Resolved Decision #6).
+  expect(
+    container.querySelector(".transcript-banner-warnings"),
+  ).not.toBeNull();
+});
+
+test("unrelated system message still renders the generic .msg-system shell", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      makeMessage({
+        kind: "system",
+        text: "Session metadata loaded",
+        messageIndex: 0,
+      }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  expect(container.querySelector(".msg-task-lifecycle")).toBeNull();
+  expect(container.querySelector(".msg-system")).not.toBeNull();
+});
+
+// ==========================================================================
+// Phase 7c / M3 — Same-tool grouping
+// ==========================================================================
+
+/** Helper: build a pair of tool_use + tool_result messages at the
+ * given starting index, both naming `tool`. */
+function toolPair(start: number, tool: string, resultText: string = "ok"): Message[] {
+  return [
+    makeMessage({
+      messageIndex: start,
+      kind: "tool_use",
+      toolName: tool,
+      text: "{}",
+    }),
+    makeMessage({
+      messageIndex: start + 1,
+      kind: "tool_result",
+      toolName: tool,
+      text: resultText,
+      bytes: resultText.length,
+    }),
+  ];
+}
+
+test("M3: 3 same-tool lifecycles collapse into one .group-card with count badge + aggregate label", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      ...toolPair(0, "Read"),
+      ...toolPair(2, "Read"),
+      ...toolPair(4, "Read"),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const group = container.querySelector(".group-card");
+  expect(group).not.toBeNull();
+  expect(group?.getAttribute("data-status")).toBe("all-success");
+  expect(group?.querySelector("summary .tool-name")?.textContent).toBe("Read");
+  expect(group?.querySelector(".count-badge")?.textContent).toBe("3 calls");
+  expect(
+    group?.querySelector(".aggregate-label")?.textContent,
+  ).toContain("all succeeded");
+  // The stream contains exactly one top-level <li> — the group head.
+  const stream = container.querySelector(".transcript-stream");
+  expect(stream?.children.length).toBe(1);
+});
+
+test("Polish-r2: 2 same-tool lifecycles now collapse into a single .group-card (threshold lowered to 2)", () => {
+  // Post-polish-r2: threshold = 2, so 2 consecutive lifecycles
+  // collapse into one group. The previous M3 behavior (kept solo
+  // below threshold=3) is replaced.
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      ...toolPair(0, "Read"),
+      ...toolPair(2, "Read"),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const groups = container.querySelectorAll(".group-card");
+  expect(groups.length).toBe(1);
+  const group = groups[0];
+  expect(group.querySelector("summary .tool-name")?.textContent).toBe("Read");
+  expect(group.querySelector(".count-badge")?.textContent).toBe("2 calls");
+  // The 2 members render as group members inside the expanded body.
+  expect(
+    group.querySelectorAll(".group-members .group-member.lifecycle-card")
+      .length,
+  ).toBe(2);
+});
+
+test("M3: expanded group reveals N member lifecycle cards on the raised surface", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      ...toolPair(0, "Read"),
+      ...toolPair(2, "Read"),
+      ...toolPair(4, "Read"),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const group = container.querySelector(".group-card");
+  expect(group).not.toBeNull();
+  // Native <details> is closed by default — but the member cards
+  // are present in the DOM (happy-dom renders them inside the
+  // disclosure regardless of `open`); the visibility is browser-
+  // controlled.
+  const members = group?.querySelectorAll(".group-member.lifecycle-card");
+  expect(members?.length).toBe(3);
+  // Each member is built from the lifecycle recipe: header + body.
+  expect(
+    group?.querySelectorAll(".group-member .lifecycle-head").length,
+  ).toBe(3);
+});
+
+test("M3: aggregate status flips to mixed when one of three fails", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      ...toolPair(0, "Read", "ok"),
+      ...toolPair(2, "Read", "exit_code: 1\nfailed"),
+      ...toolPair(4, "Read", "ok"),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const group = container.querySelector(".group-card");
+  expect(group?.getAttribute("data-status")).toBe("mixed");
+  expect(
+    group?.querySelector(".aggregate-label")?.textContent,
+  ).toContain("2 succeeded · 1 failed");
+});
+
+test("M3: aggregate status in-flight when one of three is orphan", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      ...toolPair(0, "Bash"),
+      ...toolPair(2, "Bash"),
+      // Lone tool_use (no following tool_result) → orphan.
+      makeMessage({
+        messageIndex: 4,
+        kind: "tool_use",
+        toolName: "Bash",
+        text: "{}",
+      }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const group = container.querySelector(".group-card");
+  expect(group?.getAttribute("data-status")).toBe("in-flight");
+  expect(
+    group?.querySelector(".aggregate-label")?.textContent,
+  ).toContain("running 2 of 3");
+});
+
+test("M3: aggregate status all-failed when every lifecycle in the run fails", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      ...toolPair(0, "Read", "exit_code: 1"),
+      ...toolPair(2, "Read", '{"is_error":true}'),
+      ...toolPair(4, "Read", "status: error"),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const group = container.querySelector(".group-card");
+  expect(group?.getAttribute("data-status")).toBe("all-failed");
+  expect(
+    group?.querySelector(".aggregate-label")?.textContent,
+  ).toContain("all failed");
+});
+
+test("M3: group head uses native <details> (no controlled `open` attribute)", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      ...toolPair(0, "Read"),
+      ...toolPair(2, "Read"),
+      ...toolPair(4, "Read"),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const group = container.querySelector(".group-card") as HTMLElement;
+  expect(group?.tagName.toLowerCase()).toBe("details");
+  // No `open` attribute on the rendered DOM — the browser owns the
+  // expand state.
+  expect(group.hasAttribute("open")).toBe(false);
+});
+
+test("M3: boundary between same-tool runs splits into two separate groups", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      ...toolPair(0, "Read"),
+      ...toolPair(2, "Read"),
+      ...toolPair(4, "Read"),
+      makeMessage({
+        messageIndex: 6,
+        kind: "boundary",
+        boundarySubtype: "session_resumed",
+        text: "",
+        bytes: 0,
+      }),
+      ...toolPair(7, "Read"),
+      ...toolPair(9, "Read"),
+      ...toolPair(11, "Read"),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  expect(container.querySelectorAll(".group-card").length).toBe(2);
+});
+
+test("M3: warning on a group member surfaces only inside the expanded group (no collapsed-head chip)", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed(
+      [
+        ...toolPair(0, "Read"),
+        ...toolPair(2, "Read"),
+        ...toolPair(4, "Read"),
+      ],
+      {
+        warnings: [
+          {
+            lineOrdinal: 3,
+            severity: "error",
+            category: "payload",
+            reason: "weird payload on member",
+            messageIndex: 3,
+          },
+        ],
+      },
+    ),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const group = container.querySelector(".group-card") as HTMLElement;
+  // The group head's summary is the only collapsed surface; it
+  // carries NO chip (chips live inside the member cards). The
+  // summary's direct children are tool name / divider / count badge
+  // / aggregate-label, not a chip wrapper.
+  expect(group?.querySelector(":scope > summary .chip")).toBeNull();
+  expect(group?.querySelector(":scope > summary .chip-wrapper")).toBeNull();
+  // The chip IS attached to its member's body (inside the expanded
+  // members container).
+  const memberChip = group?.querySelector(".group-members .chip");
+  expect(memberChip).not.toBeNull();
+  expect(memberChip?.querySelector(".chip-label")?.textContent).toContain(
+    "weird payload on member",
+  );
+});
+
+test("Polish: 3 Read + 1 Bash consecutive → 1 mixed-tool group of 4 with tool-name list 'Read, Bash'", () => {
+  // Post-Phase-7c polish: grouping no longer requires same tool name.
+  // 4 consecutive lifecycles of any mix collapse into one group.
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      ...toolPair(0, "Read"),
+      ...toolPair(2, "Read"),
+      ...toolPair(4, "Read"),
+      ...toolPair(6, "Bash"),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const groups = container.querySelectorAll(".group-card");
+  expect(groups.length).toBe(1);
+  const group = groups[0];
+  // Summary shows comma-joined distinct tool names in first-appearance
+  // order ("Read, Bash") + "4 calls" count badge.
+  expect(group.querySelector("summary .tool-name")?.textContent).toBe(
+    "Read, Bash",
+  );
+  expect(group.querySelector(".count-badge")?.textContent).toBe("4 calls");
+  // All 4 lifecycles are members of the single group.
+  expect(
+    group.querySelectorAll(".group-members .group-member.lifecycle-card")
+      .length,
+  ).toBe(4);
+});
+
+test("Polish: 3 Read + 3 Bash consecutive → 1 mixed-tool group of 6 (codex M3 r2 finding #1 regression — renderTopLevelHints bound check still holds defensively)", () => {
+  // Under mixed-tool grouping, this run collapses into ONE group of
+  // 6. The original M3-round-2 codex finding was about adjacent
+  // SAME-tool groups potentially swallowing each other's members;
+  // under the new policy, two same-tool runs join into a single
+  // group, so the "adjacent groups" scenario doesn't materialize via
+  // the public renderHints output anymore. The renderTopLevelHints
+  // bound check (count cap + canonical head pointer match) stays in
+  // the code as defensive guards against any future hint-emit path
+  // that might re-introduce adjacent groups; the load-bearing
+  // assertion in this test is the new positive behavior.
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      ...toolPair(0, "Read"),
+      ...toolPair(2, "Read"),
+      ...toolPair(4, "Read"),
+      ...toolPair(6, "Bash"),
+      ...toolPair(8, "Bash"),
+      ...toolPair(10, "Bash"),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const groups = container.querySelectorAll(".group-card");
+  expect(groups.length).toBe(1);
+  const group = groups[0];
+  expect(group.querySelector("summary .tool-name")?.textContent).toBe(
+    "Read, Bash",
+  );
+  expect(group.querySelector(".count-badge")?.textContent).toBe("6 calls");
+  expect(
+    group.querySelectorAll(".group-members .group-member.lifecycle-card")
+      .length,
+  ).toBe(6);
+  // Top-level stream has exactly 1 <li> — one group head.
+  expect(
+    container.querySelector(".transcript-stream")?.children.length,
+  ).toBe(1);
+});
+
+test("M3: each group-member <article> carries the group-member class and is inside .group-members (codex M3 r2 finding #2 regression — CSS selector reach)", () => {
+  // Regression guard for the CSS selector mismatch: the
+  // `.group-member` class must be present on the rendered
+  // `<article>`s inside the group's `<div class="group-members">`
+  // container, so the descendant selector
+  // `.group-card .group-members .group-member` reaches them and the
+  // raised-surface backdrop applies. The previous direct-child
+  // selector `.group-card > .group-members > .group-member` is
+  // brittle to any future DOM nesting change; the descendant
+  // combinator + this structural assertion together pin the contract.
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      ...toolPair(0, "Read"),
+      ...toolPair(2, "Read"),
+      ...toolPair(4, "Read"),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const group = container.querySelector(".group-card") as HTMLElement;
+  expect(group).not.toBeNull();
+  const groupMembersDiv = group.querySelector(".group-members") as HTMLElement;
+  expect(groupMembersDiv).not.toBeNull();
+  // Each member <article> carries .group-member AND .lifecycle-card.
+  const articles = group.querySelectorAll(
+    ".group-members article.lifecycle-card",
+  );
+  expect(articles.length).toBe(3);
+  for (const article of Array.from(articles)) {
+    expect(article.classList.contains("group-member")).toBe(true);
+    expect(article.classList.contains("lifecycle-card")).toBe(true);
+    // Each article is reachable from the descendant selector that
+    // owns the raised-surface backdrop override. The structural
+    // proof is: the article matches the selector against the live
+    // DOM via .matches().
+    expect(
+      article.matches(".group-card .group-members .group-member"),
+    ).toBe(true);
+  }
+  // Each <article> sits inside the .group-members container (not a
+  // sibling of it).
+  for (const article of Array.from(articles)) {
+    expect(groupMembersDiv.contains(article)).toBe(true);
+  }
+});
+
+test("Polish-r2: top-level transcript stream collapses tool batch + trailing assistant text into a single group card", () => {
+  // Post-polish-r2: trailing assistant text after a tool batch gets
+  // pulled INTO the group's expanded body via passthrough buffering.
+  // Top-level stream is: user (delimiter) + group-card (containing 3
+  // lifecycles + the trailing "done" assistant text) = 2 <li>s.
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      makeMessage({ kind: "user", text: "u1", messageIndex: 0 }),
+      ...toolPair(1, "Read"),
+      ...toolPair(3, "Read"),
+      ...toolPair(5, "Read"),
+      makeMessage({ kind: "assistant", text: "done", messageIndex: 7 }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const stream = container.querySelector(".transcript-stream");
+  expect(stream?.children.length).toBe(2);
+  // The trailing "done" assistant text appears INSIDE the group's
+  // expanded body, not at the top level.
+  const group = container.querySelector(".group-card");
+  expect(group).not.toBeNull();
+  expect(group?.querySelector(".count-badge")?.textContent).toBe("3 calls");
+  // The "done" assistant standalone is now a text-member inside the
+  // group's expanded body.
+  expect(
+    group?.querySelector(".group-members .msg-assistant"),
+  ).not.toBeNull();
+});
+
+test("Polish-r2: real-session scenario — 2 Edits with assistant text between them collapse into a single group card", () => {
+  // This is the user's reported scenario as it actually manifests
+  // in the parser output. Claude Code emits assistant.content[].text
+  // + tool_use as separate Messages, so a turn with "I'll edit X" +
+  // Edit-1 + "Now edit Y" + Edit-2 produces a stream where assistant
+  // text sits between the tool pairs. Polish-r2 pulls the assistant
+  // commentary INTO the group via passthrough buffering, so the user
+  // sees a single collapsed "2 calls · Edit" card instead of two
+  // separate lifecycle cards.
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      makeMessage({
+        kind: "user",
+        text: "Please make 2 edits",
+        messageIndex: 0,
+      }),
+      makeMessage({
+        kind: "assistant",
+        text: "I'll edit X first.",
+        messageIndex: 1,
+      }),
+      ...toolPair(2, "Edit"),
+      makeMessage({
+        kind: "assistant",
+        text: "Now editing Y.",
+        messageIndex: 4,
+      }),
+      ...toolPair(5, "Edit"),
+      makeMessage({ kind: "assistant", text: "Done.", messageIndex: 7 }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  // Top level: user + group = 2 rows.
+  const stream = container.querySelector(".transcript-stream");
+  expect(stream?.children.length).toBe(2);
+  // Single group card with "2 calls · Edit".
+  const groups = container.querySelectorAll(".group-card");
+  expect(groups.length).toBe(1);
+  const group = groups[0];
+  expect(group.querySelector("summary .tool-name")?.textContent).toBe("Edit");
+  expect(group.querySelector(".count-badge")?.textContent).toBe("2 calls");
+  // The 3 assistant texts are inside the group's expanded body
+  // (leading + middle + trailing); the 2 lifecycle members are also
+  // inside.
+  expect(
+    group.querySelectorAll(".group-members .msg-assistant").length,
+  ).toBe(3);
+  expect(
+    group.querySelectorAll(".group-members .group-member.lifecycle-card")
+      .length,
+  ).toBe(2);
+  // The user message stays at the top level (delimiter, not pulled in).
+  expect(
+    container.querySelector(".transcript-stream > .msg-li > .msg-user"),
+  ).not.toBeNull();
+});
+
+test("Polish: empty-body assistant message renders no .msg-assistant card", () => {
+  // Real-session bug from user report: Codex `agent_message` payload
+  // missing `message` field produced "Assistant · 8d ago" cards with
+  // no body. Post-7c-polish: those rows are suppressed entirely; the
+  // session banner remains the surface for the parser anomaly.
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      makeMessage({ kind: "user", text: "ask", messageIndex: 0 }),
+      makeMessage({ kind: "assistant", text: "", messageIndex: 1 }),
+      makeMessage({ kind: "assistant", text: "", messageIndex: 2 }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  // The user message renders. No assistant cards.
+  expect(container.querySelectorAll(".msg-user").length).toBe(1);
+  expect(container.querySelectorAll(".msg-assistant").length).toBe(0);
+  // Top-level stream has exactly 1 <li> (the user); the two empty
+  // assistants emit no hint at all.
+  expect(
+    container.querySelector(".transcript-stream")?.children.length,
+  ).toBe(1);
+});
+
+test("Polish: non-empty assistant message still renders normally (suppression scope is empty-body only)", () => {
+  mockedHookState = {
+    state: "success",
+    parsed: makeParsed([
+      makeMessage({ kind: "user", text: "ask", messageIndex: 0 }),
+      makeMessage({ kind: "assistant", text: "answer", messageIndex: 1 }),
+    ]),
+  };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  expect(container.querySelectorAll(".msg-assistant").length).toBe(1);
+  expect(container.querySelector(".msg-assistant")?.textContent).toContain(
+    "answer",
+  );
+});
+
+// ==========================================================================
+// Phase 7d — metadata hairline + echo glyph + cluster
+// ==========================================================================
+
+test("Phase 7d: single hairline metadata renders .msg-metadata[data-meta-category=control] with formatted text", () => {
+  const messages: Message[] = [
+    makeMessage({
+      messageIndex: 0,
+      kind: "metadata",
+      metaCategory: "control",
+      text: "permission mode → default",
+    }),
+  ];
+  mockedHookState = { state: "success", parsed: makeParsed(messages) };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const row = container.querySelector(
+    '.msg-metadata[data-meta-category="control"]',
+  );
+  expect(row).not.toBeNull();
+  expect(row?.querySelector(".meta-text")?.textContent).toBe(
+    "permission mode → default",
+  );
+  expect(row?.getAttribute("aria-label")).toBe(
+    "Metadata: permission mode → default",
+  );
+  // Echo class is NOT present on hairline rows.
+  expect(container.querySelector(".msg-metadata-echo")).toBeNull();
+});
+
+test("Phase 7d: echo metadata renders the ↺ glyph and an aria-label that resolves the back-pointer", () => {
+  const messages: Message[] = [
+    makeMessage({
+      messageIndex: 0,
+      kind: "metadata",
+      metaCategory: "echo",
+      text: "",
+      echoOf: { lineOrdinal: 42, canonicalKind: "user" },
+    }),
+  ];
+  mockedHookState = { state: "success", parsed: makeParsed(messages) };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const row = container.querySelector(
+    '.msg-metadata-echo[data-meta-category="echo"]',
+  );
+  expect(row).not.toBeNull();
+  // Glyph span.
+  expect(row?.querySelector(".meta-prefix-echo")?.textContent).toBe("↺");
+  // Aria-label resolves to the canonical line.
+  expect(row?.getAttribute("aria-label")).toBe(
+    "Echo: duplicate of canonical user message at line 42",
+  );
+  // Hover tooltip.
+  expect(row?.getAttribute("title")).toBe(
+    "duplicate of event_msg.user_message at line 42",
+  );
+});
+
+test("Phase 7d: 2+ adjacent metadata Messages collapse into a single <details class='msg-metadata-cluster'>", () => {
+  const messages: Message[] = [
+    makeMessage({
+      messageIndex: 0,
+      kind: "metadata",
+      metaCategory: "control",
+      text: "permission mode → default",
+    }),
+    makeMessage({
+      messageIndex: 1,
+      kind: "metadata",
+      metaCategory: "prompt",
+      text: "last prompt: “do it”",
+    }),
+  ];
+  mockedHookState = { state: "success", parsed: makeParsed(messages) };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  const cluster = container.querySelector(".msg-metadata-cluster");
+  expect(cluster).not.toBeNull();
+  expect(cluster?.querySelector(".meta-cluster-count")?.textContent).toBe(
+    "2 metadata events",
+  );
+  // Summary aria-label exposes the count + interaction cue.
+  expect(cluster?.querySelector("summary")?.getAttribute("aria-label")).toBe(
+    "2 metadata events, click to expand",
+  );
+  // Body re-renders both rows in original order.
+  const rows = cluster?.querySelectorAll(
+    ".meta-cluster-body .msg-metadata",
+  );
+  expect(rows?.length).toBe(2);
+  expect(rows?.[0].getAttribute("data-meta-category")).toBe("control");
+  expect(rows?.[1].getAttribute("data-meta-category")).toBe("prompt");
+});
+
+test("Phase 7d: single metadata below threshold stays as a singleton (no cluster)", () => {
+  const messages: Message[] = [
+    makeMessage({
+      messageIndex: 0,
+      kind: "metadata",
+      metaCategory: "telemetry",
+      text: "tokens: 100↓ 50↑",
+    }),
+  ];
+  mockedHookState = { state: "success", parsed: makeParsed(messages) };
+  const { container } = render(
+    <TranscriptView row={buildRow()} now={NOW} />,
+  );
+  expect(container.querySelector(".msg-metadata-cluster")).toBeNull();
+  expect(
+    container.querySelector('.msg-metadata[data-meta-category="telemetry"]'),
+  ).not.toBeNull();
 });

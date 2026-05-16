@@ -161,7 +161,11 @@
 .transcript-stream > .msg-li:has(.msg-assistant) + .msg-li:has(.msg-assistant),
 .transcript-stream > .msg-li:has(.msg-tool-use) + .msg-li:has(.msg-tool-use),
 .transcript-stream > .msg-li:has(.msg-tool-result) + .msg-li:has(.msg-tool-result),
-.transcript-stream > .msg-li:has(.msg-system) + .msg-li:has(.msg-system) {
+.transcript-stream > .msg-li:has(.msg-system) + .msg-li:has(.msg-system),
+.transcript-stream > .msg-li:has(.msg-lifecycle) + .msg-li:has(.msg-lifecycle),
+.transcript-stream
+  > .msg-li:has(.msg-task-lifecycle)
+  + .msg-li:has(.msg-task-lifecycle) {
   margin-top: var(--space-6);
 }
 
@@ -426,6 +430,612 @@
  * rules above (`.transcript-stream > .msg-boundary*`) still target
  * the legacy class which BoundaryRow keeps for byte-equivalence.
  */
+
+/* ---------- Phase 7c / M2 — Lifecycle card ----------
+ *
+ * Spec ref: working/phase-7c/designs/design.md §3.
+ * Selectors owned: `.lifecycle-card`, `.msg-lifecycle` (load-bearing
+ * Phase-7c class alongside the prototype's `.lifecycle-card`),
+ * `.lifecycle-head`, `.lifecycle-pill`, `.lifecycle-body`,
+ * `.lifecycle-no-result`, `.side-label`, `.label-tool`, `.tool-name`,
+ * `.head-status`.
+ *
+ * Motion budget: no new motion surfaces. The two `<details>`
+ * disclosures inside `.lifecycle-body` inherit the global
+ * `details > *:not(summary)` block-size transition. Status dots,
+ * pills, and the sienna rail are static.
+ */
+
+.lifecycle-card {
+  position: relative;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-6);
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  max-inline-size: var(--measure);
+}
+
+.lifecycle-card::before {
+  /* Sienna inline-start rail — 2 px wide accent stripe. The visual
+   * connector that says "tool_use and tool_result belong together".
+   * Static; no animation. Color variants below for failure /
+   * in-flight states.
+   */
+  content: "";
+  position: absolute;
+  inset-block: var(--space-3);
+  inset-inline-start: var(--space-3);
+  width: 2px;
+  background: var(--color-accent);
+  border-radius: 1px;
+  opacity: 0.55;
+}
+
+.lifecycle-card[data-status="all-failed"]::before {
+  background: var(--color-error);
+  opacity: 0.7;
+}
+
+.lifecycle-card[data-status="in-flight"]::before {
+  background: var(--color-ink-muted);
+  opacity: 0.55;
+}
+
+.lifecycle-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-muted);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-3);
+}
+
+.lifecycle-head .label-tool {
+  color: var(--color-ink-muted);
+}
+
+.lifecycle-head .tool-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-ink);
+}
+
+.lifecycle-head time {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  font-style: normal;
+}
+
+.lifecycle-head .head-status {
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+}
+
+.lifecycle-pill {
+  /* "AWAITING RESULT" / "STRAY RESULT" Fraunces italic small-caps
+   * marginalia. Reused in `.standalone-card` headers for stray
+   * tool_result rows (M3).
+   */
+  font-family: var(--font-display);
+  font-style: italic;
+  font-variant: small-caps;
+  letter-spacing: 0.12em;
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  margin-inline-start: var(--space-2);
+}
+
+.lifecycle-body details + details {
+  margin-top: var(--space-3);
+}
+
+.lifecycle-body summary {
+  cursor: pointer;
+  padding: var(--space-1) 0;
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  list-style: revert;
+}
+
+.lifecycle-body summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.lifecycle-body summary .side-label {
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-muted);
+  margin-inline-end: var(--space-2);
+}
+
+.lifecycle-body pre {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-raised);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  overflow-x: auto;
+  white-space: pre;
+  line-height: 1.4;
+}
+
+.lifecycle-no-result {
+  margin: var(--space-3) 0 0;
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  font-style: italic;
+}
+
+/* ---------- Phase 7c / M3 — Same-tool grouped card ----------
+ *
+ * Spec ref: working/phase-7c/designs/design.md §3 + §4 + §15.2.
+ *
+ * Native `<details>` collapsed/expanded surface. Summary row:
+ * tool-name (mono) + hairline divider + count badge ("N calls"
+ * verbatim) + aggregate-label (status-dot + chrome-text label,
+ * pushed to the trailing edge via `margin-inline-start: auto`).
+ *
+ * Expanded body: each member lifecycle card renders on the raised
+ * surface (`.group-member` modifier on `.lifecycle-card`) so the
+ * nested cards read as "machinery inside the group". 16 px vertical
+ * rhythm between members. Hairline divider separates the summary
+ * from the members.
+ *
+ * Inline warnings on a member are NOT surfaced on the collapsed
+ * head (design.md §15.7). The chip layout inside the expanded
+ * member is identical to a standalone lifecycle's chip wrapper.
+ *
+ * Motion: only the inherited `details > *:not(summary)` block-size
+ * transition (the M2b exemption). No transforms; no transitions on
+ * the summary chrome.
+ */
+
+.group-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  max-inline-size: var(--measure);
+}
+
+.group-card > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  cursor: pointer;
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  list-style: revert;
+}
+
+.group-card > summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.group-card > summary .tool-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+}
+
+.group-card > summary .group-divider {
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  background: var(--color-border);
+  align-self: center;
+}
+
+.group-card > summary .count-badge {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-2);
+  line-height: 1.6;
+}
+
+.group-card > summary .aggregate-label {
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.group-card > .group-members {
+  padding: 0 var(--space-4) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Option A (codex M3 r2 finding #2): use the descendant combinator
+ * so the raised-surface override is reachable even if the rendered
+ * `.group-member` <article> ends up nested deeper than a direct
+ * child of `.group-members`. The 16 px vertical rhythm between
+ * members is already provided by `.group-members`'s `gap` (above);
+ * `margin-top` here would double-space, so it is intentionally
+ * absent. */
+.group-card .group-members .group-member {
+  background: var(--color-surface-raised);
+}
+
+/* ---------- Phase 7c / M2 — Task-lifecycle chapter marker ----------
+ *
+ * Spec ref: design.md §6.5. Load-bearing class `.msg-task-lifecycle`
+ * is matched verbatim by the task-lifecycle event-coverage tests
+ * (TranscriptView.event-coverage.test.tsx assertTreatment line 195).
+ *
+ * Non-interactive: no hover, no focus ring, no `<details>`, no
+ * tabIndex. Reduced-motion is a no-op (no animated property).
+ */
+
+.msg-task-lifecycle {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  border-inline: 0;
+  border-radius: 0;
+  max-inline-size: var(--measure);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+}
+
+.msg-task-lifecycle .task-label {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-variant: small-caps;
+  letter-spacing: 0.12em;
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+}
+
+.msg-task-lifecycle .task-divider {
+  color: var(--color-ink-muted);
+}
+
+.msg-task-lifecycle .task-turn {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+}
+
+/* ---------- Phase 7c / M2 — Status dot ----------
+ *
+ * Spec ref: design.md §6 (status-dot recipe + authoring contract).
+ * 10 px non-interactive disc. ALWAYS accompanied by a visible
+ * chrome-text label per the no-color-alone accessibility constraint.
+ *
+ * Authoring contract: every `.status-dot` carries `data-status`.
+ * Fallback recipe handles a forgotten attribute as an inert
+ * ink-muted disc rather than disappearing.
+ */
+
+.status-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-ink-muted);
+  border: 1px solid var(--color-border-strong);
+  flex-shrink: 0;
+}
+
+.status-dot[data-status="all-success"] {
+  background: var(--color-success);
+  border-color: var(--color-success);
+}
+
+.status-dot[data-status="mixed"] {
+  background: var(--color-warn);
+  border-color: var(--color-warn);
+}
+
+.status-dot[data-status="all-failed"] {
+  background: var(--color-error);
+  border-color: var(--color-error);
+}
+
+.status-dot[data-status="in-flight"] {
+  background: transparent;
+  border-color: var(--color-ink-muted);
+}
+
+/* ---------- Phase 7c / M2 — Inline warning chip ----------
+ *
+ * Spec ref: design.md §9 (chip recipes per bucket). Four placement
+ * variants per the 4-bucket classification:
+ *
+ *   - render-normally     → `.chip-wrapper` below the body.
+ *   - collapse-by-default → same wrapper; generic summary copy.
+ *   - hide-with-inspect   → `.inspect-affordance` corner link.
+ *   - warning-only        → no chip on the message (banner only).
+ *
+ * Chip motion: only the native `<details>` block-size transition
+ * inherited from `global.css`. No transforms, no background-color
+ * transitions, no color transitions.
+ */
+
+.chip-wrapper {
+  margin-top: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.chip {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-ink);
+}
+
+.chip > summary {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-ink);
+  list-style: revert;
+  padding: 0;
+}
+
+.chip > summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.chip .chip-label {
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-ink);
+}
+
+.chip .chip-reason {
+  display: block;
+  margin-top: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chip-tag {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-variant: small-caps;
+  letter-spacing: 0.1em;
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  margin-inline-start: var(--space-2);
+}
+
+.inspect-affordance {
+  margin-top: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.inspect-affordance > details {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.inspect-affordance .inspect-link {
+  cursor: pointer;
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+  list-style: revert;
+  padding: 0;
+}
+
+.inspect-affordance .inspect-link:hover {
+  text-decoration: underline;
+}
+
+.inspect-affordance .inspect-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.inspect-affordance > details[open] .inspect-link {
+  text-decoration: underline;
+}
+
+.inspect-affordance .chip {
+  margin-top: var(--space-2);
+  text-align: start;
+  align-self: stretch;
+}
+
+/* ---------- Phase 7d — Metadata marginalia hairline + echo + cluster ----------
+ *
+ * Spec ref: working/phase-7d/designs/design.md §3.2 + §3.6 + §4.4.
+ *
+ * 7 hairline categories (control / telemetry / title / attachment /
+ * agent / prompt / context) render as a single-line strip with a
+ * decorative middle-dot prefix; the echo category renders as a single
+ * `↺` glyph row with no inline text.
+ *
+ * Two or more adjacent metadata Messages collapse into a
+ * `<details class="msg-metadata-cluster">` disclosure
+ * (METADATA_COLLAPSE_THRESHOLD = 2 in renderHints.ts).
+ *
+ * Zero new tokens introduced. Zero new hex literals. Reduced-motion
+ * handled by the existing global rule (the cluster `<details>` body
+ * inherits the M2b block-size transition).
+ */
+
+.msg-metadata {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  max-inline-size: var(--measure);
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  padding-inline-start: var(--space-6);
+  border: 0;
+  background: transparent;
+  color: var(--color-ink-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+  font-family: var(--font-chrome);
+}
+
+.msg-metadata .meta-prefix {
+  color: var(--color-ink-muted);
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  line-height: 1;
+}
+
+.msg-metadata .meta-text {
+  color: var(--color-ink-muted);
+  font-size: var(--text-xs);
+}
+
+/* Per-category typography overrides — control / telemetry / attachment
+ * / agent / context render the value in mono; title + prompt render
+ * the value in Fraunces italic display. */
+.msg-metadata[data-meta-category="control"] .meta-text,
+.msg-metadata[data-meta-category="telemetry"] .meta-text,
+.msg-metadata[data-meta-category="attachment"] .meta-text,
+.msg-metadata[data-meta-category="agent"] .meta-text,
+.msg-metadata[data-meta-category="context"] .meta-text {
+  font-family: var(--font-mono);
+}
+
+.msg-metadata[data-meta-category="title"] .meta-text,
+.msg-metadata[data-meta-category="prompt"] .meta-text {
+  font-family: var(--font-display);
+  font-style: italic;
+}
+
+/* Echo register — single `↺` glyph row. The body is just the prefix
+ * span, so the row collapses to ~30 px wide. */
+.msg-metadata-echo {
+  gap: 0;
+}
+
+.msg-metadata-echo .meta-prefix-echo {
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  line-height: 1;
+}
+
+/* Cluster disclosure — collapses adjacent runs of N ≥ 2 metadata
+ * hints into a single `<details>`. Summary is rendered in the same
+ * hairline register; the body is a nested `<ol>` of `MetadataRow`s
+ * with a slight extra inset for the parent / child visual nesting. */
+.msg-metadata-cluster {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  max-inline-size: var(--measure);
+}
+
+.msg-metadata-cluster > summary {
+  list-style: revert;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  padding-inline-start: var(--space-6);
+  color: var(--color-ink-muted);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.msg-metadata-cluster > summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.msg-metadata-cluster .meta-cluster-count {
+  color: var(--color-ink-muted);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.meta-cluster-body {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.meta-cluster-body > li {
+  margin: 0;
+}
+
+/* Inside the cluster body, nested rows take an extra inset so the
+ * parent disclosure visually parents them. */
+.meta-cluster-body .msg-metadata {
+  padding-inline-start: calc(var(--space-6) + var(--space-3));
+}
 
 /* ---------- Unknown fallback ---------- */
 

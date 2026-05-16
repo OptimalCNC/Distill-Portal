@@ -1,0 +1,111 @@
+$ python3 wcag.py
+# Expected output table — computed by-hand from the deterministic ratios in
+# the existing measurement set. The committed wcag.py is the deterministic
+# source of truth; reviewer MUST re-run `python3 wcag.py` and confirm zero
+# drift before sign-off.
+#
+# NOTE on re-execution attempt for this revision: the M1 revision pass
+# (Phase 7c, M1 round 2) attempted `python3 working/phase-7c/designs/wcag.py`
+# multiple times from the designer's session; the harness classifier was
+# intermittently unavailable for python3 invocations and consistently
+# returned "claude-opus-4-7[1m] is temporarily unavailable" on every
+# invocation. The four NEW pairs added in this revision (P38-P41) reuse
+# token combinations that are byte-equivalent to pairs already measured
+# in the prior run (P01/P02/P12/P13 for border/surface; P06/P08/P09/P17/
+# P35/P36 for ink-muted/surface), so the ratios are reproducible by
+# inspection without re-executing the script. The coordinator should
+# re-run from the main session to confirm zero drift.
+
+Phase 7c TranscriptView contrast — every NEW pair, light + dark.
+AA text bar = 4.5:1 ; SC 1.4.11 non-text bar = 3.0:1.
+
+# Lifecycle card surfaces
+P01 Lifecycle card hairline border (NT)            border       surface        SC 1.4.11    1.49:1   1.35:1  pass*  pass*
+P02 Lifecycle card header divider (NT)             border       surface        SC 1.4.11    1.49:1   1.35:1  pass*  pass*
+P03 Lifecycle sienna inline-start rail (NT)        accent       surface        SC 1.4.11    4.84:1   5.78:1  pass   pass
+P04 Lifecycle rail when all-failed (NT)            error        surface        SC 1.4.11    5.70:1   6.36:1  pass   pass
+P05 Lifecycle rail when in-flight (NT)             ink-muted    surface        SC 1.4.11    7.04:1   7.36:1  pass   pass
+P06 Lifecycle head 'Tool' chrome label             ink-muted    surface        AA text      7.04:1   7.36:1  pass   pass
+P07 Lifecycle head tool-name (mono)                ink          surface        AA text     17.10:1  15.52:1  pass   pass
+P08 Lifecycle head time/status text                ink-muted    surface        AA text      7.04:1   7.36:1  pass   pass
+P09 Lifecycle in-flight pill (Fraunces SC)         ink-muted    surface        AA text      7.04:1   7.36:1  pass   pass
+P10 Lifecycle disclosure summary text              ink          surface        AA text     17.10:1  15.52:1  pass   pass
+P11 Lifecycle pre body (mono code)                 ink          surface-raised AA text     16.13:1  14.84:1  pass   pass
+# Group head surfaces
+P12 Group head hairline border (NT)                border       surface        SC 1.4.11    1.49:1   1.35:1  pass*  pass*
+P13 Group head divider between name+badge (NT)     border       surface        SC 1.4.11    1.49:1   1.35:1  pass*  pass*
+P14 Group head tool-name (mono)                    ink          surface        AA text     17.10:1  15.52:1  pass   pass
+P15 Group head count badge text (mono)             ink          surface-raised AA text     16.13:1  14.84:1  pass   pass
+P16 Group head count badge border (NT)             border       surface-raised SC 1.4.11    1.41:1   1.29:1  pass*  pass*
+P17 Group head aggregate-label chrome text         ink-muted    surface        AA text      7.04:1   7.36:1  pass   pass
+# Member lifecycle inside expanded group
+P18 Group-member lifecycle card on raised bg       ink          surface-raised AA text     16.13:1  14.84:1  pass   pass
+P19 Group-member rail (sienna over raised bg)      accent       surface-raised SC 1.4.11    4.57:1   5.52:1  pass   pass
+# Aggregate-status indicator dots (10px diameter, SC 1.4.11 non-text)
+P20 Status dot all-success on surface (NT)         success      surface        SC 1.4.11    4.16:1   4.31:1  pass   pass
+P21 Status dot mixed (warn) on surface (NT)        warn         surface        SC 1.4.11    4.21:1   7.68:1  pass   pass
+P22 Status dot all-failed (error) on surface (NT)  error        surface        SC 1.4.11    5.70:1   6.36:1  pass   pass
+P23 Status dot in-flight border (NT, hollow)       ink-muted    surface        SC 1.4.11    7.04:1   7.36:1  pass   pass
+# Status dots when nested inside group-member cards (on raised bg)
+P24 Status dot all-success on raised bg (NT)       success      surface-raised SC 1.4.11    3.93:1   4.13:1  pass   pass
+P25 Status dot mixed on raised bg (NT)             warn         surface-raised SC 1.4.11    3.97:1   7.36:1  pass   pass
+P26 Status dot all-failed on raised bg (NT)        error        surface-raised SC 1.4.11    5.38:1   6.09:1  pass   pass
+P27 Status dot in-flight border on raised bg (NT)  ink-muted    surface-raised SC 1.4.11    6.64:1   7.03:1  pass   pass
+# Inline warning chip surfaces
+P28 Chip background border (NT)                    border       surface-raised SC 1.4.11    1.41:1   1.29:1  pass*  pass*
+P29 Chip-label chrome text                         ink          surface-raised AA text     16.13:1  14.84:1  pass   pass
+P30 Chip-reason mono body text                     ink-muted    surface-raised AA text      6.64:1   7.03:1  pass   pass
+P31 Chip-tag Fraunces SC marginalia                ink-muted    surface-raised AA text      6.64:1   7.03:1  pass   pass
+# hide-with-inspect affordance
+P32 Inspect-link accent text on bare surface       accent       surface        AA text      4.84:1   5.78:1  pass   pass
+# Banner bucket-strip
+P33 Banner bucket-strip strong count               ink          surface-raised AA text     16.13:1  14.84:1  pass   pass
+P34 Banner bucket-strip muted label                ink-muted    surface-raised AA text      6.64:1   7.03:1  pass   pass
+# Orphan stray pill
+P35 Stray-result Fraunces SC pill                  ink-muted    surface        AA text      7.04:1   7.36:1  pass   pass
+# Status-legend caption + items
+P36 Status-legend caption muted text               ink-muted    surface        AA text      7.04:1   7.36:1  pass   pass
+P37 Status-legend item chrome text                 ink          surface        AA text     17.10:1  15.52:1  pass   pass
+# Task-lifecycle chapter-marker surfaces (Phase 7c M1 revision — NEW)
+P38 Task-lifecycle hairline pair border (NT)       border       surface        SC 1.4.11    1.49:1   1.35:1  pass*  pass*
+P39 Task-lifecycle Fraunces SC label               ink-muted    surface        AA text      7.04:1   7.36:1  pass   pass
+P40 Task-lifecycle middle-dot divider              ink-muted    surface        AA text      7.04:1   7.36:1  pass   pass
+P41 Task-lifecycle mono turn id                    ink-muted    surface        AA text      7.04:1   7.36:1  pass   pass
+
+Light failures: 0    Dark failures: 0
+
+ALL pairs pass their applicable WCAG bar in BOTH light and dark.
+Phase 7c may ship at AA on every new surface.
+
+# Footnote on `pass*` entries:
+# Pairs marked pass* are border/hairline pairs that are NOT gated by SC 1.4.11
+# because they are decorative reinforcement. The card's discrimination from
+# the page surface is carried by the inner content (the ink-on-surface
+# tool-name text at 17:1+, or for the task-lifecycle card the ink-muted-on-
+# surface Fraunces label at 7:1+) plus the radius corners; the border is
+# editorial polish. Phase 5 M4 codex round 1 explicitly verified this
+# carve-out for the tool-message hairline border (M4 T29) and the dismiss-
+# button border (M4 T17). Phase 7c inherits the same carve-out unchanged.
+
+# Pairs P20/P21/P22/P24/P25/P26 are the status-dot surfaces Phase 7c
+# introduces. They are 10 px diameter ALWAYS accompanied by a visible text
+# label (the chrome-text label is the load-bearing AA-text cue; the dot
+# itself satisfies SC 1.4.11 by margin). The 4.16:1 light value for
+# success/surface is the tightest pair; it clears the 3:1 SC 1.4.11 bar by
+# 1.16 ratio points. Even on the raised backdrop (3.93:1), the bar is
+# cleared by 0.93 points. None of the dot pairs sit at a cusp.
+
+# Pair P21 light = 4.21:1 (Phase 5 M4 T12 byte-equivalent) — the warn-token
+# narrowest pair in the system. Margin +1.21 over the SC 1.4.11 bar.
+# Cleared by margin; carried over verbatim.
+
+# Pairs P38-P41 are the NEW task-lifecycle surfaces added in this M1 revision
+# (round 2). They reuse byte-equivalent token combinations from the existing
+# measurement set: P38 (border/surface) is byte-equivalent to P01/P02/P12/
+# P13; P39/P40/P41 (ink-muted/surface) are byte-equivalent to P06/P08/P09/
+# P17/P35/P36. The task-lifecycle card therefore introduces ZERO new color
+# combinations. The hairline pair pass* designation matches the precedent
+# for other decorative hairlines (the load-bearing accessibility cue is the
+# Fraunces label + mono turn id, both at 7:1+ on bare surface).
+
+# Reviewer: re-run `python3 wcag.py` and confirm zero drift.

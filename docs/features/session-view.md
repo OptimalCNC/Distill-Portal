@@ -31,6 +31,53 @@ Four tabs ordered: **Transcript**, **Skim**, **Raw**, **Metadata**. The default 
 - Boundary message kind renders the chapter-break treatment via the shared `BoundaryRow` component (byte-equivalent to Skim's boundary block).
 - An optional `messageRange?: { start: number; end: number }` prop scopes rendering to a sub-range with defensive clamping (used by SkimView for `agent_only` and `user_turn`-expanded sub-transcripts).
 
+#### Tool lifecycle + grouping
+
+Phase 7c overlays a render-hint dispatch layer on top of the per-kind shells. The pure function `renderHints(messages, warnings)` in `apps/frontend/src/features/sessions/renderHints.ts` runs once per render and produces a `RenderHint[]` aligned positionally with the message stream. `TranscriptView` switches on `RenderHint.kind` first, then on `Message.kind` for the inner body.
+
+- **Lifecycle pairing.** Adjacent `tool_use` + `tool_result` Messages collapse into a single `.msg-lifecycle` paired card (sienna inline-start rail + header with status dot + chrome-text label + two native `<details>` disclosures for Arguments and Result). Pairing is strict-adjacency: the `tool_result` must be at `messageIndex + 1` of the `tool_use`. Orphan `tool_use` renders the lifecycle card in `data-status="in-flight"` with an "awaiting result" Fraunces small-caps pill; orphan `tool_result` falls back to the standalone `.msg-tool-result` recipe with an inline `stray tool_result` chip.
+- **Tool-batch grouping.** `GROUP_THRESHOLD = 2` consecutive lifecycle hints — **regardless of tool name** — collapse into one `.group-card` (native `<details>`). The buffer is permissive: `assistant` standalone hints between lifecycle pairs are **passthrough** — they don't break the run; they're pulled into the group's expanded body as `group-text-member` entries in original interleaved order. This matches real-session shape: Claude Code emits assistant `content[].text` and `content[].tool_use` as separate Messages, so a turn with 2 Edit calls produces 2 lifecycle hints separated by an assistant-text hint (the parser doesn't merge them). **`system` kind is INTENTIONALLY a delimiter, not passthrough**, because the Phase 7b parser-event matrix maps Codex `event_msg.error`, `event_msg.turn_aborted`, review-mode lifecycle, and collaboration lifecycle events to `kind:"system"` — those rows need top-level visibility (errors must stay loud; hiding them in a collapsed group would suppress important signal). The summary row shows the distinct tool names joined with `, ` in first-appearance order (mono) + a `1px` hairline divider + a count badge ("N calls" — count of LIFECYCLES only, not total members) + an aggregate-status indicator (`status-dot` + chrome-text label). For single-tool runs the joined list is one name; for mixed runs (e.g. Edit then Bash) it lists every distinct tool the run invoked. The four aggregate states are `all-success` / `mixed` (`N succeeded · M failed`) / `in-flight` (`running N of M`) / `all-failed`. Expanding the group reveals each lifecycle as a `.group-member.lifecycle-card` on the raised surface (`--color-surface-raised`) AND each assistant text member as its standard `.msg-assistant` card. Delimiters that reset the run: `user` standalone (new turn), `system` standalone (errors, telemetry, lifecycle — kept top-level for visibility), `boundary` (chapter break), task-lifecycle stamped `system` (`task_started`/`task_complete`), `warning-only`, `unknown`, orphan `tool_result` with stray chip, end-of-stream.
+- **Empty-body suppression.** `user` and `assistant` Messages with empty or whitespace-only text (typically emitted by the Codex parser when `event_msg.user_message`/`agent_message`/`agent_reasoning` payloads are missing their `message`/`text` field) render no card at all. The parser still emits a structured `warning/payload` warning that surfaces through the session banner — the banner stays loud, the transcript stays clean. If a future parser path attaches an inline-routable warning to the same empty row, the renderer emits a `warning-only` hint so the chip surface is absent (no card to attach to) and the banner carries the notice.
+- **Task-lifecycle chapter marker.** Codex `event_msg.task_started` and `event_msg.task_complete` route to `kind: "system"` Messages whose text begins with `task_started · turn ` or `task_complete · turn `. `renderHints.ts` stamps `taskLifecycle: "started" | "complete"` on the `standalone` hint and `TranscriptView` renders a `.msg-task-lifecycle` card — a horizontal hairline pair + Fraunces italic small-caps label ("Task started" / "Task complete") + middle-dot divider + mono turn id. The card is non-interactive: no hover, no focus ring, no `<details>`.
+- **Native `<details>` only.** Every expand/collapse surface (per-lifecycle Arguments and Result, group head, inline warning chip, banner) is a native `<details>` with browser-managed open state. There is no controlled `open` attribute, no `useState`-driven expand, and no `onToggle` handler that mirrors expand state into React.
+
+Cross-reference: `apps/frontend/src/features/sessions/renderHints.ts`, [`working/phase-7c.md`](../../working/phase-7c.md), [`working/phase-7c/designs/`](../../working/phase-7c/designs/).
+
+**E2E coverage note.** The Playwright e2e suite does not exercise the grouped-card surface because the seeded fixture session at `tests/fixtures/claude_code/sample_session.jsonl` has 4 lines and zero `tool_use`/`tool_result` rows — it cannot reach `GROUP_THRESHOLD = 2` consecutive lifecycles without enlarging the fixture. The grouping render path is fully covered by the happy-dom unit tests in `apps/frontend/src/features/sessions/TranscriptView.test.tsx` (the `Phase 7c / M3 — Same-tool grouping` block, including the post-Phase-7c polish-r2 `Polish-r2:` regression tests) PLUS the parser-driven integration test `"integration: real Claude Code turn …"` in `apps/frontend/src/features/sessions/renderHints.test.ts` which round-trips a 6-line JSONL fixture through `dispatchParser` before feeding the result to `renderHints`.
+
+#### Metadata events
+
+Phase 7d closes the 12 previously-silenced parser routes by emitting `kind:"metadata"` Messages that surface in the transcript as marginalia rows. Each metadata Message carries a `metaCategory` (`control` / `telemetry` / `title` / `attachment` / `agent` / `prompt` / `context` / `echo`) which drives the visual recipe. The 8-value enum is documented on `MessageKind` in `apps/frontend/src/features/sessions/parsers/types.ts`.
+
+- **Hairline register** (10 routes: `agent-name`, `ai-title`, `attachment`, `custom-title`, `file-history-snapshot`, `last-prompt`, `permission-mode`, `queue-operation`, `event_msg.token_count`, `turn_context`). A single-line `<p class="msg-metadata" data-meta-category=…>` with a decorative middle-dot prefix and the parser-formatted display text (e.g. `· permission mode → default`). Hairline rows take ~1/3 the vertical footprint of a user / assistant card. Per-category typography: mono for control / telemetry / attachment / agent / context; Fraunces italic for title / prompt.
+- **Echo register** (2 routes: Codex `response_item.message role=user/assistant`). A single `↺` glyph row (`.msg-metadata-echo`) with no inline text. The hover tooltip + aria-label resolve the back-pointer to the canonical `event_msg.{user,agent}_message` line. The two duplicate-anchor rows surface so "no event hidden" holds but the canonical row carries the content.
+- **Cluster collapse.** Two or more consecutive metadata hints collapse into a single `<details class="msg-metadata-cluster">` whose summary reads `N metadata events` (mixed-register clusters use the generic copy; the expanded body renders each row in its native register). Threshold is exported as `METADATA_COLLAPSE_THRESHOLD = 2` from `renderHints.ts`. Below threshold the metadata hint stays at top level as a singleton.
+- **Tool-batch interaction.** Metadata hints are **delimiters** for the Phase 7c tool-batch grouping pass — a `permission-mode` event between two `Edit` calls flushes the lifecycle buffer; the metadata row renders at top level; the trailing calls form a new batch. Same rule as `system` errors (`event_msg.error`).
+
+The cluster summary is a focusable `<summary>` (Tab moves to the disclosure); singleton metadata rows are non-focusable static `<p>`s. Color contrast pair P42 (`--color-ink-muted` on `--color-surface`) clears WCAG AA text at 7.04 : 1 light / 7.36 : 1 dark — re-used from Phase 7c with no new pair introduced. Zero new tokens, zero new hex literals; the recipe lives in `TranscriptView.css` under the "Phase 7d — Metadata marginalia hairline + echo + cluster" header.
+
+Cross-reference: `apps/frontend/src/features/sessions/TranscriptView.tsx` `MetadataRow` + `MetadataCluster`, [`working/phase-7d/designs/design.md`](../../working/phase-7d/designs/design.md) §3 + §4.
+
+#### Inline warnings
+
+Phase 7b extended `ParseWarning` with `severity` + `category` + `messageIndex`. Phase 7c consumes the structured shape to route each warning into one of four buckets:
+
+| Severity   | Category          | Bucket                  | Visual                                              |
+|------------|-------------------|-------------------------|-----------------------------------------------------|
+| `error`    | (any)             | `render-normally`       | Chip below message body; summary is the reason     |
+| `warning`  | `schema` / `payload` | `render-normally`    | Chip below message body; summary is the reason     |
+| `warning`  | `lexer` / `timestamp` | `collapse-by-default` | Chip below message body; summary is `1 warning`   |
+| `warning`  | `meta`            | `warning-only`          | No chip on the message (banner only)               |
+| `info`     | (any)             | `hide-with-inspect`     | Corner Inspect link; chip nested behind it         |
+
+The classifier is the pure function `classifyWarning(warning)` in `renderHints.ts`. Each chip is a native `<details>` carrying the severity dot + chip label + category tag; the expanded body shows the full `warning.reason` in mono. Chip placement is consistent: `render-normally` and `collapse-by-default` chips sit in a `.chip-wrapper` below the message body (`margin-top: var(--space-3)`); the `hide-with-inspect` chip sits inside a corner `.inspect-affordance` (`<details>` whose summary is an accent-colored "Inspect" link); `warning-only` warnings render no chip at all (their message body is suppressed entirely via the `warning-only` RenderHint).
+
+The session-level parse-warnings banner stays loud (Resolved Decision #6): every warning appears there regardless of inline routing. Inline chips are additive — nothing hides absolutely.
+
+**Chip visibility on collapsed group heads.** Inline warnings on a `group-member` lifecycle do NOT surface on the collapsed group head (design.md §15.7). The chip is visible after the user expands the group; the session banner still surfaces the warning at the top of the transcript.
+
+Cross-reference: `apps/frontend/src/features/sessions/renderHints.ts` (`classifyWarning`), [`working/phase-7c/designs/design.md`](../../working/phase-7c/designs/design.md) §9.
+
 ### Skim tab
 
 - Renders `parsed.skim` (a `SkimBlock[]` produced by `buildSkim`).
@@ -69,9 +116,9 @@ Four tabs ordered: **Transcript**, **Skim**, **Raw**, **Metadata**. The default 
 
 Per-tool architecture under `apps/frontend/src/features/sessions/parsers/`:
 
-- `types.ts` — `Message`, `MessageKind`, `SkimBlock`, `BlockKind`, `ParseWarning`, `ParserOutput`, `ParsedSession`, `StreamMeta`.
-- `claude_code.ts` — pure / total / synchronous parser for Claude Code NDJSON.
-- `codex.ts` — pure / total / synchronous parser for Codex NDJSON; implements the anchor principle (`response_item.message` of role user/assistant is silently skipped because `event_msg.user_message` / `agent_message` is the canonical anchor).
+- `types.ts` — `Message`, `MessageKind` (8 variants since Phase 7d's `metadata` addition), `MetaCategory`, `SkimBlock`, `BlockKind`, `ParseWarning`, `ParserOutput`, `ParsedSession`, `StreamMeta`.
+- `claude_code.ts` — pure / total / synchronous parser for Claude Code NDJSON. Session-level chrome (`agent-name`, `ai-title`, `attachment`, `custom-title`, `file-history-snapshot`, `last-prompt`, `permission-mode`, `queue-operation`) routes through `kind:"metadata"` per Phase 7d.
+- `codex.ts` — pure / total / synchronous parser for Codex NDJSON; the anchor principle is preserved (`event_msg.user_message` / `agent_message` is canonical) but the `response_item.message role=user/assistant` duplicate-anchor rows now emit `kind:"metadata"` with `metaCategory:"echo"` (Phase 7d). `event_msg.token_count` → `metaCategory:"telemetry"`; `turn_context` → `metaCategory:"context"`.
 - `buildSkim.ts` — dual-tracker algorithm producing `SkimBlock[]` from `Message[]`. Constants: `USER_MSG_OVERSIZE_THRESHOLD = 65_536` (strict `>`); empty stream emits `[{kind: "agent_only", start: 0, end: -1, meta: {empty: 1}}]`.
 - `index.ts` — `PARSERS: Record<Tool, ParserFn>` registry + `dispatchParser(tool, rawText, streamMeta): ParsedSession`. Two layers of defence against future-Tool drift (static `Record` + runtime exhaustiveness test).
 

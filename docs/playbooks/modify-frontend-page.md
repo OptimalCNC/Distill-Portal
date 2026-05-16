@@ -36,6 +36,22 @@ After changing parser behavior, update both coverage tests:
 
 Before finishing a parser-warning change, run `bun run parser-warning-sweep` from `apps/frontend/`. The sweep walks the local Claude Code and Codex session roots and must exit zero unless a matrix row is explicitly documented as a known limitation.
 
+## Render-hint extension pattern (Phase 7c worked example)
+
+`apps/frontend/src/features/sessions/renderHints.ts` is the render-dispatch layer between parsers and `TranscriptView`. It computes a `RenderHint[]` from `Message[] + ParseWarning[]` once per render. The render switch in `TranscriptView` dispatches on `RenderHint.kind` first and then on the underlying `MessageKind` for the inner content.
+
+When you need a transcript treatment that does NOT map cleanly to an existing per-kind shell (e.g. a "chapter marker" for a specific class of `system` Messages), the default is still: attach the discriminator to a `RenderHint` variant rather than introducing a new `MessageKind`. Resolved Decision #2 ("MessageKind is stable") was amended ONCE — in Phase 7d — to add `kind:"metadata"` for session-level chrome surfacing; the amendment is documented in `apps/frontend/src/features/sessions/parsers/types.ts` JSDoc and `working/phase-7d/designs/design.md` §2.1. The amendment is one-shot: do NOT add further `MessageKind` variants without an explicit user-approved design-loop amendment. The "Option B" precedent below is still the right default for new per-kind treatments:
+
+1. Extend the appropriate `RenderHint` variant with an optional attribute. The variant whose underlying `Message.kind` already covers your case is the right host — for the Codex task-lifecycle markers we extended `standalone` with `taskLifecycle?: "started" | "complete"`.
+2. In `renderHints.ts`, populate the attribute when the parser-emitted Message matches your discriminator. Keep the rule a simple `startsWith` / `===` test — the render-hint layer is the discrimination point, not the parser.
+3. In `TranscriptView.tsx`, branch inside the existing render arm for the host variant. The example: `case "standalone": if (msg.kind === "system" && hint.taskLifecycle) return <TaskLifecycleCard … />`. The dispatched component reads the hint and renders a load-bearing class (`.msg-task-lifecycle` in this case) that the matrix's `assertTreatment` selector matches.
+4. Add the CSS for the new class to `TranscriptView.css`. Reuse existing design tokens — Phase 7c introduced zero new tokens and zero new hex literals.
+5. Update `docs/features/parser-event-support.md`: change the row's Render treatment column to point at the specific class, and add a `Matrix:` JSDoc anchor comment above the new render branch in `TranscriptView.tsx` so a future audit can grep from class → matrix row.
+
+The same shape applies for an aggregating treatment like Phase 7c's same-tool grouping: the M3 grouping pass adds `group-head` / `group-member` variants to the `RenderHint` union and a second linear pass over the M2-emitted hints collapses qualifying runs. The parser stays unchanged; `MessageKind` stays unchanged; only the render layer's hint grammar grows.
+
+Cross-reference: `apps/frontend/src/features/sessions/renderHints.ts`, [`../../working/phase-7c.md`](../../working/phase-7c.md) §Resolved Decision #2.
+
 ## CSS-only truncation with full-text tooltip (Phase 6 worked example)
 
 When a list cell holds a string that may exceed the column's available width, do NOT introduce a JS character-count constant or a separate "display title" field. Two ingredients suffice:

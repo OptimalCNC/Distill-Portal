@@ -3,13 +3,22 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseClaudeCode } from "./claude_code";
 import { parseCodex } from "./codex";
-import type { MessageKind, ParserOutput } from "./types";
+import type { MessageKind, MetaCategory, ParserOutput } from "./types";
 
 type Tool = "claude_code" | "codex";
 
 type Route =
   | { type: "messages"; kinds: MessageKind[]; warnings: "none" | "some" }
-  | { type: "skipped"; warnings: "none" | "some" };
+  | {
+      // Phase 7d — the 12 previously-silenced rows now route through
+      // `kind:"metadata"` with `metaCategory` discriminating the visual
+      // recipe. `kinds` is the per-message kind sequence (always
+      // `["metadata"]` for the 12 rows); `metaCategories` carries the
+      // expected metaCategory per emitted Message.
+      type: "metadata";
+      metaCategories: MetaCategory[];
+      warnings: "none" | "some";
+    };
 
 type ParserMatrixRow = {
   anchor: string;
@@ -26,12 +35,12 @@ const ROWS: ParserMatrixRow[] = [
   {
     anchor: "claude-code-agent-name",
     tool: "claude_code",
-    route: { type: "skipped", warnings: "none" },
+    route: { type: "metadata", metaCategories: ["agent"], warnings: "none" },
   },
   {
     anchor: "claude-code-ai-title",
     tool: "claude_code",
-    route: { type: "skipped", warnings: "none" },
+    route: { type: "metadata", metaCategories: ["title"], warnings: "none" },
   },
   {
     anchor: "claude-code-assistant-content-text",
@@ -51,32 +60,32 @@ const ROWS: ParserMatrixRow[] = [
   {
     anchor: "claude-code-attachment",
     tool: "claude_code",
-    route: { type: "skipped", warnings: "none" },
+    route: { type: "metadata", metaCategories: ["attachment"], warnings: "none" },
   },
   {
     anchor: "claude-code-custom-title",
     tool: "claude_code",
-    route: { type: "skipped", warnings: "none" },
+    route: { type: "metadata", metaCategories: ["title"], warnings: "none" },
   },
   {
     anchor: "claude-code-file-history-snapshot",
     tool: "claude_code",
-    route: { type: "skipped", warnings: "none" },
+    route: { type: "metadata", metaCategories: ["attachment"], warnings: "none" },
   },
   {
     anchor: "claude-code-last-prompt",
     tool: "claude_code",
-    route: { type: "skipped", warnings: "none" },
+    route: { type: "metadata", metaCategories: ["prompt"], warnings: "none" },
   },
   {
     anchor: "claude-code-permission-mode",
     tool: "claude_code",
-    route: { type: "skipped", warnings: "none" },
+    route: { type: "metadata", metaCategories: ["control"], warnings: "none" },
   },
   {
     anchor: "claude-code-queue-operation",
     tool: "claude_code",
-    route: { type: "skipped", warnings: "none" },
+    route: { type: "metadata", metaCategories: ["control"], warnings: "none" },
   },
   {
     anchor: "claude-code-system",
@@ -191,7 +200,7 @@ const ROWS: ParserMatrixRow[] = [
   {
     anchor: "codex-event-msg-token-count",
     tool: "codex",
-    route: { type: "skipped", warnings: "none" },
+    route: { type: "metadata", metaCategories: ["telemetry"], warnings: "none" },
   },
   {
     anchor: "codex-event-msg-turn-aborted",
@@ -231,7 +240,7 @@ const ROWS: ParserMatrixRow[] = [
   {
     anchor: "codex-response-item-message-role-assistant",
     tool: "codex",
-    route: { type: "skipped", warnings: "none" },
+    route: { type: "metadata", metaCategories: ["echo"], warnings: "none" },
   },
   {
     anchor: "codex-response-item-message-role-developer",
@@ -241,7 +250,7 @@ const ROWS: ParserMatrixRow[] = [
   {
     anchor: "codex-response-item-message-role-user",
     tool: "codex",
-    route: { type: "skipped", warnings: "none" },
+    route: { type: "metadata", metaCategories: ["echo"], warnings: "none" },
   },
   {
     anchor: "codex-response-item-reasoning",
@@ -261,7 +270,7 @@ const ROWS: ParserMatrixRow[] = [
   {
     anchor: "codex-turn-context",
     tool: "codex",
-    route: { type: "skipped", warnings: "none" },
+    route: { type: "metadata", metaCategories: ["context"], warnings: "none" },
   },
 ];
 
@@ -302,8 +311,13 @@ function listFixtureAnchors(): string[] {
 }
 
 function assertRoute(output: ParserOutput, route: Route) {
-  if (route.type === "skipped") {
-    expect(output.messages).toEqual([]);
+  if (route.type === "metadata") {
+    expect(output.messages.map((m) => m.kind)).toEqual(
+      route.metaCategories.map(() => "metadata" as MessageKind),
+    );
+    expect(
+      output.messages.map((m) => m.metaCategory ?? "(missing)"),
+    ).toEqual(route.metaCategories);
   } else {
     expect(output.messages.map((message) => message.kind)).toEqual(route.kinds);
   }

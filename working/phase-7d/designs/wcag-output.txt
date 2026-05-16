@@ -1,0 +1,59 @@
+$ python3 wcag.py
+# Expected output table — committed wcag.py is the deterministic source
+# of truth. Reviewer MUST re-run `python3 wcag.py` and confirm zero
+# drift before sign-off.
+#
+# NOTE on re-execution attempt for this revision: the M1 design pass
+# (Phase 7d, M1) and the round-2 revision pass attempted `python3
+# working/phase-7d/designs/wcag.py` from the designer's session; the
+# harness classifier was intermittently unavailable for python3
+# invocations and consistently returned "claude-opus-4-7[1m] is
+# temporarily unavailable" on the retry. The two pairs P42 and
+# P43-R both reuse token combinations already measured in Phase 7c
+# (P42 = ink-muted/surface = Phase 7c P39/P40/P41 = 7.04:1 / 7.36:1;
+# P43-R = border/surface = Phase 7c P01/P02/P12/P13/P38 = 1.49:1 /
+# 1.35:1), so both ratios are reproducible by inspection without
+# re-executing the script. The coordinator SHOULD re-run from the
+# main session to confirm zero drift.
+#
+# Mirrored from Phase 7c's identical harness-unavailable workaround
+# (see working/phase-7c/designs/wcag-output.txt lines 7-17).
+
+Phase 7d marginalia hairlines + echo contrast — every measured pair,
+light + dark. AA text bar = 4.5:1 ; SC 1.4.11 non-text bar = 3.0:1.
+
+# Required pair — the one new surface (zero new pairs vs. Phase 7c)
+P42    .msg-metadata text (ink-muted on bare surface) — hairline + echo + cluster   ink-muted   surface   AA text     7.04:1   7.36:1   pass
+
+# Rejected alternative (round-2 audit trail; documented FAIL is expected)
+P43-R  (REJECTED) echo glyph (border on bare surface) — subdued-ink candidate       border      surface   AA text     1.49:1   1.35:1   reject (documented)
+
+# Notes:
+#   - P42 is byte-equivalent to Phase 7c P06/P08/P09/P17/P35/P36/P39/P40/P41
+#     (each measured the same `ink-muted` foreground on `surface` background).
+#   - Phase 7c's measured ratios for this token pair: 7.04:1 light, 7.36:1 dark.
+#     Phase 7d's tokens.css is byte-identical so the ratio is reproducible
+#     verbatim.
+#   - The cluster summary `.msg-metadata-cluster > summary` uses the SAME
+#     token pair (ink-muted on surface). No second pair needed; the recipe
+#     measurement folds into P42.
+#   - The echo glyph `.meta-prefix-echo` uses the SAME token pair (ink-muted
+#     on surface) at `--text-xs`. No third pair needed; folds into P42.
+#     Quietness comes from glyph size + missing label, NOT from a dimmer ink.
+#   - The decorative middle-dot `.meta-prefix` and the arrow/colon `.meta-sep`
+#     are aria-hidden and use the same ink-muted token. P42 covers them too.
+#   - P43-R records the rejected `border on surface` alternative considered
+#     for the echo glyph during round 2. The measurement is byte-equivalent
+#     to Phase 7c P01/P02/P12/P13/P38 (border/surface for decorative 1 px
+#     borders). Fails AA text (4.5:1) and SC 1.4.11 non-text (3:1) in both
+#     modes. Phase 7c allows this pair ONLY for decorative hairlines under
+#     SC 1.4.11's decorative exemption; the echo glyph carries information
+#     (presence marker for a duplicate-anchor event), so the exemption does
+#     not apply. The FAIL is expected and documented; it does not affect
+#     the overall pass/fail result.
+#
+# Result: PASS — one required pair (P42), AA text bar cleared with +2.54
+# light / +2.86 dark margin. The rejected-alternative pair (P43-R) is
+# recorded for audit; its expected FAIL does NOT count toward overall
+# result. No new color tokens introduced. Token count invariant holds at
+# 83. Hex literal invariant holds at 24.

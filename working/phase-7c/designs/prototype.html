@@ -1,0 +1,1920 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Phase 7c TranscriptView prototype</title>
+<style>
+/* ============================================================================
+ * Phase 7c TranscriptView prototype — static, single-file design reference.
+ *
+ * Aesthetic: Archive-room (warm-paper light / deep-ink dark, sienna accent,
+ * hairline-over-shadow, Fraunces display, system-sans chrome). Locked in
+ * Phase 5 (`working/phase-5.md` + `working/phase-5/designs/m4-transcript/`).
+ *
+ * Token surface: mirrors `apps/frontend/src/styles/tokens.css` verbatim.
+ * Zero new tokens are introduced by this prototype; every var(--...) below
+ * resolves to an existing token in production tokens.css.
+ *
+ * NOTE: the production app applies dark mode via @media (prefers-color-scheme:
+ * dark) overriding the same custom properties on :root. To demonstrate light
+ * AND dark side-by-side in a single static page, this prototype mirrors that
+ * recipe onto a `.theme-light` / `.theme-dark` wrapper. Each wrapper
+ * re-declares every color token at its scoped level — same values, same
+ * cascade, just under a class instead of a media query. The values
+ * themselves are byte-equivalent to tokens.css.
+ * ========================================================================== */
+
+/* ---------------------------------------------------------------------------
+ * SECTION 1 — Token declarations (light root + dark override via
+ * @media prefers-color-scheme: dark) + hex @supports fallback.
+ *
+ * These are the SAME declarations as tokens.css §:root and the dark media
+ * block. They drive the prototype-only `:root` so the page picks up the
+ * user's OS scheme when displayed as a single-column page. The split
+ * light/dark columns below override these on `.theme-light` / `.theme-dark`.
+ * ------------------------------------------------------------------------- */
+
+:root {
+  /* Color — oklch source-of-truth */
+  --color-surface: oklch(98% 0.01 70);
+  --color-surface-raised: oklch(96% 0.01 70);
+  --color-ink: oklch(20% 0.02 70);
+  --color-ink-muted: oklch(45% 0.02 70);
+  --color-border: oklch(85% 0.01 70);
+  --color-border-strong: oklch(65% 0.02 70);
+  --color-accent: oklch(55% 0.15 50);
+  --color-accent-hover: oklch(50% 0.16 50);
+  --color-success: oklch(48% 0.13 155);
+  --color-warn: oklch(58% 0.15 60);
+  --color-error: oklch(52% 0.18 25);
+
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+
+  /* Typography */
+  --font-display: "Fraunces", Charter, "Iowan Old Style", Georgia, serif;
+  --font-chrome: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI",
+    Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", SFMono-Regular,
+    Menlo, Consolas, monospace;
+
+  /* Type scale */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+
+  /* Leading + measure */
+  --leading-comfortable: 1.55;
+  --measure: 70ch;
+
+  /* Motion */
+  --motion-base: 120ms;
+  --motion-disclosure: 200ms;
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-surface: oklch(15% 0.01 70);
+    --color-surface-raised: oklch(18% 0.01 70);
+    --color-ink: oklch(92% 0.01 70);
+    --color-ink-muted: oklch(70% 0.01 70);
+    --color-border: oklch(28% 0.01 70);
+    --color-border-strong: oklch(48% 0.02 70);
+    --color-accent: oklch(65% 0.15 50);
+    --color-accent-hover: oklch(72% 0.13 50);
+    --color-success: oklch(64% 0.13 155);
+    --color-warn: oklch(72% 0.13 60);
+    --color-error: oklch(68% 0.16 25);
+  }
+}
+
+/* @supports hex fallback — byte-equivalent to tokens.css. The 24 hex
+ * literals below are the Phase 4 baseline preserved unchanged. */
+@supports not (color: oklch(0% 0 0)) {
+  :root {
+    --color-surface: #f8f9fb;
+    --color-surface-raised: #ffffff;
+    --color-ink: #14161a;
+    --color-ink-muted: #5a606b;
+    --color-border: #e3e5ea;
+    --color-border-strong: #8a909c;
+    --color-accent: #2864d4;
+    --color-accent-hover: #1d4fa8;
+    --color-success: #1f7a4a;
+    --color-warn: #b86b07;
+    --color-error: #b13838;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-surface: #151821;
+      --color-surface-raised: #1b1f2a;
+      --color-ink: #e8eaef;
+      --color-ink-muted: #9098a6;
+      --color-border: #262b36;
+      --color-border-strong: #5e6571;
+      --color-accent: #6da5ff;
+      --color-accent-hover: #8bbbff;
+      --color-success: #5fb68a;
+      --color-warn: #e0a75a;
+      --color-error: #e57d7d;
+    }
+  }
+}
+
+/* Side-by-side overrides — same values as the @media blocks above. */
+.theme-light {
+  --color-surface: oklch(98% 0.01 70);
+  --color-surface-raised: oklch(96% 0.01 70);
+  --color-ink: oklch(20% 0.02 70);
+  --color-ink-muted: oklch(45% 0.02 70);
+  --color-border: oklch(85% 0.01 70);
+  --color-border-strong: oklch(65% 0.02 70);
+  --color-accent: oklch(55% 0.15 50);
+  --color-accent-hover: oklch(50% 0.16 50);
+  --color-success: oklch(48% 0.13 155);
+  --color-warn: oklch(58% 0.15 60);
+  --color-error: oklch(52% 0.18 25);
+  color: var(--color-ink);
+  background: var(--color-surface);
+}
+.theme-dark {
+  --color-surface: oklch(15% 0.01 70);
+  --color-surface-raised: oklch(18% 0.01 70);
+  --color-ink: oklch(92% 0.01 70);
+  --color-ink-muted: oklch(70% 0.01 70);
+  --color-border: oklch(28% 0.01 70);
+  --color-border-strong: oklch(48% 0.02 70);
+  --color-accent: oklch(65% 0.15 50);
+  --color-accent-hover: oklch(72% 0.13 50);
+  --color-success: oklch(64% 0.13 155);
+  --color-warn: oklch(72% 0.13 60);
+  --color-error: oklch(68% 0.16 25);
+  color: var(--color-ink);
+  background: var(--color-surface);
+}
+@supports not (color: oklch(0% 0 0)) {
+  .theme-light {
+    --color-surface: #f8f9fb;
+    --color-surface-raised: #ffffff;
+    --color-ink: #14161a;
+    --color-ink-muted: #5a606b;
+    --color-border: #e3e5ea;
+    --color-border-strong: #8a909c;
+    --color-accent: #2864d4;
+    --color-accent-hover: #1d4fa8;
+    --color-success: #1f7a4a;
+    --color-warn: #b86b07;
+    --color-error: #b13838;
+  }
+  .theme-dark {
+    --color-surface: #151821;
+    --color-surface-raised: #1b1f2a;
+    --color-ink: #e8eaef;
+    --color-ink-muted: #9098a6;
+    --color-border: #262b36;
+    --color-border-strong: #5e6571;
+    --color-accent: #6da5ff;
+    --color-accent-hover: #8bbbff;
+    --color-success: #5fb68a;
+    --color-warn: #e0a75a;
+    --color-error: #e57d7d;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * SECTION 2 — Prototype chrome (page wrapper, header, theme columns).
+ * This chrome is prototype-only; in production these surfaces are the
+ * SessionView shell. The chrome here is intentionally quiet so the
+ * card variants below carry the visual weight.
+ * ------------------------------------------------------------------------- */
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-chrome);
+  font-size: var(--text-base);
+  line-height: var(--leading-comfortable);
+  color: var(--color-ink);
+  background: var(--color-surface);
+}
+
+.page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6);
+}
+
+.page-head {
+  margin-bottom: var(--space-8);
+  padding-bottom: var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+}
+.page-head h1 {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.75rem;
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-2);
+  color: var(--color-ink);
+}
+.page-head .meta {
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.page-head .lede {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-style: italic;
+  color: var(--color-ink-muted);
+  margin: var(--space-3) 0 0;
+  max-width: 70ch;
+}
+
+/* Theme grid — light on the left, dark on the right. Stacks below 1024px. */
+.theme-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+@media (max-width: 1024px) {
+  .theme-grid { grid-template-columns: 1fr; }
+}
+.theme-column {
+  padding: var(--space-6) var(--space-6) var(--space-8);
+}
+.theme-column + .theme-column {
+  border-inline-start: 1px solid var(--color-border);
+}
+@media (max-width: 1024px) {
+  .theme-column + .theme-column {
+    border-inline-start: 0;
+    border-block-start: 1px solid var(--color-border);
+  }
+}
+.theme-label {
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-ink-muted);
+  margin: 0 0 var(--space-6);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Caption — appears above each variant. Prototype-only annotation. */
+.caption {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-style: italic;
+  color: var(--color-ink-muted);
+  margin: var(--space-8) 0 var(--space-3);
+}
+.caption:first-child { margin-top: 0; }
+.caption .spec {
+  display: block;
+  font-family: var(--font-chrome);
+  font-style: normal;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-muted);
+  margin-top: var(--space-1);
+  opacity: 0.85;
+}
+
+/* ---------------------------------------------------------------------------
+ * SECTION 3 — Session banner row (Phase 5 precedent; new bucket breakdown).
+ * Reuses the existing parse-warnings banner recipe (raised surface,
+ * hairline border, <details>) and adds a 4-bucket count strip.
+ * Spec ref: working/phase-7c.md §Data Model / Warning classification.
+ * ------------------------------------------------------------------------- */
+
+.transcript-banner {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-6);
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+}
+.transcript-banner > summary {
+  cursor: pointer;
+  padding: var(--space-1) 0;
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  list-style: revert;
+}
+.transcript-banner .bucket-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+}
+.transcript-banner .bucket-strip .bucket {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.transcript-banner .bucket-strip .bucket strong {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+.transcript-banner ul {
+  margin: var(--space-2) 0 var(--space-3);
+  padding-inline-start: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+}
+.transcript-banner ul li {
+  padding-block: var(--space-1);
+  word-break: break-all;
+}
+
+/* ---------------------------------------------------------------------------
+ * SECTION 4 — Aggregate-status legend.
+ * Spec ref: §Data Model / GroupStatus.
+ * Four states: all-success, mixed, in-flight, all-failed. Each is a
+ * named dot + a chrome-text label. Color is REINFORCEMENT, never the
+ * sole cue.
+ * ------------------------------------------------------------------------- */
+
+.status-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  padding: var(--space-4) var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  margin: var(--space-6) 0 var(--space-8);
+}
+.status-legend .status-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+}
+.status-legend .status-caption {
+  flex: 1 0 100%;
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-muted);
+  margin-bottom: var(--space-1);
+}
+
+/* The status dot. 10px diameter so it's still readable at small sizes.
+ * Per accessibility constraint: ALWAYS accompanied by a visible text
+ * label; color is reinforcement only.
+ *
+ * Spec ref: §Data Model / GroupStatus + §Accessibility (no color-alone).
+ *
+ * Authoring contract: every `.status-dot` MUST carry a `data-status`
+ * attribute. The base recipe below is the visual fallback ONLY — it
+ * exists so a forgotten attribute renders as the inert "no status"
+ * neutral disc rather than disappearing. A `.status-dot` without
+ * `data-status` is a developer bug; the prototype never emits one. */
+.status-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-ink-muted);
+  border: 1px solid var(--color-border-strong);
+  flex-shrink: 0;
+}
+.status-dot[data-status="all-success"] { background: var(--color-success); border-color: var(--color-success); }
+.status-dot[data-status="mixed"]       { background: var(--color-warn);    border-color: var(--color-warn); }
+.status-dot[data-status="all-failed"]  { background: var(--color-error);   border-color: var(--color-error); }
+.status-dot[data-status="in-flight"]   { background: transparent;          border-color: var(--color-ink-muted); }
+
+/* ---------------------------------------------------------------------------
+ * SECTION 5 — Card vocabulary.
+ *
+ * Three layers of card the prototype renders:
+ *   - .lifecycle-card — the paired tool_use + tool_result.
+ *   - .standalone-card — orphan tool_use or orphan tool_result.
+ *   - .group-card — same-tool grouping (collapsed or expanded).
+ *
+ * All inherit Phase 5's tool-message recipe: var(--color-surface)
+ * background, 1px var(--color-border) hairline, var(--radius-md)
+ * corners, 16/24 spacing inside. Inline-start sienna rail on
+ * lifecycle pairs (visual connector between use and result).
+ * Spec ref: §Pairing rules + Phase 5 design.md §3.3-3.4.
+ * ------------------------------------------------------------------------- */
+
+.transcript-stream {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-inline-size: var(--measure);
+}
+.transcript-stream > * + * { margin-top: var(--space-4); }
+
+/* The lifecycle pair card. Sienna inline-start rail = the visual
+ * connector between use and result; subtle, hairline-over-shadow. */
+.lifecycle-card {
+  position: relative;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-6);
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+}
+.lifecycle-card::before {
+  /* Sienna rail — 2px wide accent stripe at the inline-start edge.
+   * Visual: "these two halves belong to the same call".
+   * Spec ref: §Pairing rules (visual pair via lightweight connector). */
+  content: "";
+  position: absolute;
+  inset-block: var(--space-3);
+  inset-inline-start: var(--space-3);
+  width: 2px;
+  background: var(--color-accent);
+  border-radius: 1px;
+  opacity: 0.55;
+}
+.lifecycle-card[data-status="all-failed"]::before { background: var(--color-error); opacity: 0.7; }
+.lifecycle-card[data-status="in-flight"]::before { background: var(--color-ink-muted); opacity: 0.55; }
+
+.lifecycle-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-muted);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-3);
+}
+.lifecycle-head .label-tool { color: var(--color-ink-muted); }
+.lifecycle-head .tool-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-ink);
+}
+.lifecycle-head .head-status {
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+}
+.lifecycle-head time {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* In-flight & stray pills — Fraunces italic small-caps marginalia.
+ * Spec ref: §Pairing rules / Orphan tool_use ("in-flight"); §Pairing
+ * rules / Orphan tool_result ("stray").
+ * No new tokens: foreground is --color-ink-muted, background is bare.
+ */
+.lifecycle-pill {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-variant: small-caps;
+  letter-spacing: 0.12em;
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  margin-inline-start: var(--space-2);
+}
+
+/* Lifecycle body — disclosure summaries for the use side and the
+ * result side. Reuses Phase 5's tool_use Arguments + tool_result
+ * Expand recipe (chrome summary, mono pre body on --color-surface-raised). */
+.lifecycle-body details + details { margin-top: var(--space-3); }
+.lifecycle-body summary {
+  cursor: pointer;
+  padding: var(--space-1) 0;
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  list-style: revert;
+}
+.lifecycle-body summary .side-label {
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-muted);
+  margin-inline-end: var(--space-2);
+}
+.lifecycle-body pre {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-raised);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  overflow-x: auto;
+  white-space: pre;
+  line-height: 1.4;
+}
+
+/* Standalone card (orphan use/result, or unpaired result with chip).
+ * Same recipe as lifecycle without the sienna rail. */
+.standalone-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+}
+.standalone-card .standalone-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-muted);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-3);
+}
+.standalone-card .standalone-head .tool-name {
+  font-family: var(--font-mono);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-ink);
+}
+.standalone-card details summary {
+  cursor: pointer;
+  padding: var(--space-1) 0;
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  list-style: revert;
+}
+.standalone-card pre {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-raised);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  white-space: pre;
+  overflow-x: auto;
+  line-height: 1.4;
+}
+
+/* ---------------------------------------------------------------------------
+ * SECTION 5b — Task-lifecycle render treatment.
+ *
+ * Spec ref: working/phase-7c.md §Goal & Scope line 28 + §Milestone 3
+ * line 211 (every 🎨 row lands on a specific, not generic, render
+ * treatment). Backed by `docs/features/parser-event-support.md` rows
+ * `codex-event-msg-task-started` (codex.ts:473) and
+ * `codex-event-msg-task-complete` (codex.ts:492).
+ *
+ * What the parser emits: a `Message` with `kind: "system"` and
+ * `text: "task_started · turn {turn}"` or
+ * `text: "task_complete · turn {turn}"` (verbatim from
+ * apps/frontend/src/features/sessions/parsers/codex.ts:482 / :500).
+ *
+ * Why this is NOT a new MessageKind: Resolved Decision #2 freezes
+ * `MessageKind`. The discriminator lives in the RenderHint layer.
+ * Specifically `RenderHint.kind === "standalone"` carries a NEW
+ * optional `taskLifecycle?: "started" | "complete"` attribute. When
+ * present, `TranscriptView` renders this dedicated `.msg-task-lifecycle`
+ * recipe in place of the generic `SystemMessage` switch. The
+ * Message's MessageKind stays `system`; the visual branches by the
+ * RenderHint attribute.
+ *
+ * Visual recipe (Archive-room chapter-break-quiet):
+ *   - Container is a FULL-WIDTH chapter-break-style hairline pair
+ *     (1 px top + 1 px bottom border, no left/right border, no
+ *     corner radius, no background). The horizontal rules are the
+ *     editorial vocabulary; the card is a chapter-section header,
+ *     quieter than `.msg-boundary` (which is a full chapter break)
+ *     and louder than a `.msg-system` note (which is bare chrome
+ *     text).
+ *   - Interior padding: var(--space-3) var(--space-4). Tight
+ *     vertical breathing so the rule pair reads as a unit.
+ *   - Layout: a single inline-flex row, centered. The Fraunces
+ *     italic small-caps label sits at the inline-start; a hairline
+ *     divider sits in the middle; the turn id sits at the inline-end
+ *     in mono text. Both spans use --color-ink-muted so the row
+ *     reads as marginalia in editorial register.
+ *
+ * Copy:
+ *   - data-task="started"  -> label "TASK STARTED"
+ *   - data-task="complete" -> label "TASK COMPLETE"
+ *   The parser-emitted "task_started · turn X" / "task_complete · turn X"
+ *   text is parsed at render time: the keyword (`task_started`/
+ *   `task_complete`) flips to a small-caps label; the trailing
+ *   `· turn {turn}` segment renders verbatim as the mono span. The
+ *   turn id always trails the label.
+ *
+ * Color/typography tokens consumed (zero new tokens):
+ *   - --color-border (hairline pair)
+ *   - --color-ink-muted (label + turn id)
+ *   - --color-surface (background)
+ *   - --font-display (Fraunces italic small-caps for the label)
+ *   - --font-mono (mono turn id)
+ *   - --text-xs (both spans)
+ *
+ * Hover/focus/reduced-motion:
+ *   - This card is NOT interactive. No hover state; no focus ring;
+ *     no `<details>`; no expand/collapse. It is a static editorial
+ *     marker.
+ *   - Reduced-motion: nothing to animate; the recipe is static
+ *     by construction.
+ *
+ * Load-bearing CSS class: `.msg-task-lifecycle` (this matches the
+ * existing `assertTreatment` selector at
+ * apps/frontend/src/features/sessions/TranscriptView.event-coverage.test.tsx:195).
+ * ------------------------------------------------------------------------- */
+
+.msg-task-lifecycle {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-2) 0;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  border-inline: 0;
+  border-radius: 0;
+  max-inline-size: var(--measure);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+}
+.msg-task-lifecycle .task-label {
+  /* Fraunces italic small-caps — matches the .lifecycle-pill marginalia
+   * vocabulary but stands alone as the row's primary content. */
+  font-family: var(--font-display);
+  font-style: italic;
+  font-variant: small-caps;
+  letter-spacing: 0.12em;
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+}
+.msg-task-lifecycle .task-divider {
+  /* Hairline middle-dot mirroring the lifecycle header's "·" rhythm. */
+  color: var(--color-ink-muted);
+}
+.msg-task-lifecycle .task-turn {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * SECTION 6 — Group card (collapsed / expanded).
+ *
+ * Spec ref: §Grouping rules + §Aggregate status.
+ * Native <details> for state preservation (Resolved Decision #9).
+ * Collapsed: tool-name + count badge + aggregate-status label, all on
+ * a single summary row. Expanded: each member as an indented
+ * lifecycle card (16 px vertical rhythm).
+ * ------------------------------------------------------------------------- */
+
+.group-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.group-card > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  cursor: pointer;
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  list-style: revert;
+}
+.group-card > summary .tool-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+}
+.group-card > summary .group-divider {
+  /* Hairline divider between the tool name and the count badge. */
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  background: var(--color-border);
+  align-self: center;
+}
+.group-card > summary .count-badge {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-2);
+  line-height: 1.6;
+}
+.group-card > summary .aggregate-label {
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.group-card > .group-members {
+  padding: 0 var(--space-4) var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+.group-card > .group-members > .group-member {
+  margin-top: var(--space-4);
+}
+.group-card > .group-members > .group-member:first-child {
+  margin-top: var(--space-4);
+}
+.group-card .lifecycle-card {
+  /* Member-of-group lifecycle cards sit on the raised surface so they
+   * read as nested machinery; the outer group hairline does the work
+   * of grouping them visually. */
+  background: var(--color-surface-raised);
+}
+
+/* ---------------------------------------------------------------------------
+ * SECTION 7 — Inline warning chip (4 buckets).
+ *
+ * Spec ref: §4-bucket warning render classification.
+ * Buckets:
+ *   - render-normally: chip visible below the message body, click to
+ *     expand for full reason in mono.
+ *   - collapse-by-default: chip is collapsed <details>, summary shows
+ *     just the severity dot + "1 warning"; expand for full reason.
+ *   - hide-with-inspect: chip is hidden behind a corner Inspect link;
+ *     accent-colored chrome-text affordance.
+ *   - warning-only: no inline chip; surfaced only on the session banner.
+ *
+ * All chips share the same visual recipe: raised-surface background,
+ * hairline border, radius-sm corners, mono body. Severity dot at
+ * inline-start (same recipe as .status-dot).
+ * ------------------------------------------------------------------------- */
+
+.chip-wrapper {
+  margin-top: var(--space-3);
+}
+.chip {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-ink);
+}
+.chip > summary {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-ink);
+  list-style: revert;
+  padding: 0;
+}
+.chip .chip-label {
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-ink);
+}
+.chip .chip-reason {
+  display: block;
+  margin-top: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.chip-tag {
+  /* The category tag (e.g. SCHEMA / LEXER / TIMESTAMP). Fraunces italic
+   * small-caps marginalia, like the in-flight pill but slightly
+   * tighter. */
+  font-family: var(--font-display);
+  font-style: italic;
+  font-variant: small-caps;
+  letter-spacing: 0.1em;
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  margin-inline-start: var(--space-2);
+}
+
+/* hide-with-inspect — corner affordance. Quiet accent text-link. */
+.inspect-affordance {
+  margin-top: var(--space-3);
+  display: flex;
+  justify-content: flex-end;
+}
+.inspect-affordance .inspect-link {
+  cursor: pointer;
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+  list-style: revert;
+  padding: 0;
+}
+.inspect-affordance .inspect-link:hover {
+  text-decoration: underline;
+}
+.inspect-affordance > details[open] .inspect-link {
+  text-decoration: underline;
+}
+.inspect-affordance .chip {
+  margin-top: var(--space-2);
+  text-align: start;
+}
+
+/* ---------------------------------------------------------------------------
+ * SECTION 8 — Plain message cards (user / assistant) used as carriers
+ * for the chip variants. Mirrors Phase 5's .msg-user / .msg-assistant
+ * recipe but with the 5% accent-tint and bare-surface differential.
+ *
+ * Spec ref: Phase 5 design.md §3.1-3.2.
+ * ------------------------------------------------------------------------- */
+
+.msg-panel {
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-6);
+  font-family: var(--font-chrome);
+  font-size: var(--text-base);
+  line-height: var(--leading-comfortable);
+  color: var(--color-ink);
+  max-inline-size: var(--measure);
+}
+.msg-user {
+  background: color-mix(in srgb, var(--color-accent) 5%, var(--color-surface));
+}
+.msg-assistant {
+  background: var(--color-surface);
+}
+.msg-tool-result-standalone {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+.msg-attr {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: var(--space-3);
+}
+.msg-attr time {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.msg-body {
+  white-space: pre-wrap;
+}
+
+/* ---------------------------------------------------------------------------
+ * SECTION 9 — Footer aside (motion + token discipline note).
+ * ------------------------------------------------------------------------- */
+
+.foot-note {
+  margin-top: var(--space-8);
+  padding: var(--space-4) var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+}
+.foot-note h2 {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: var(--text-base);
+  margin: 0 0 var(--space-2);
+  color: var(--color-ink);
+}
+.foot-note p {
+  margin: var(--space-2) 0;
+  color: var(--color-ink-muted);
+}
+.foot-note code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  background: var(--color-surface);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  color: var(--color-ink);
+}
+
+</style>
+</head>
+<body>
+<main class="page">
+
+  <header class="page-head">
+    <p class="meta">Phase 7c — Milestone 1 — UI / UX Design Gate</p>
+    <h1>Phase 7c &middot; Transcript render overhaul &middot; prototype</h1>
+    <p class="lede">
+      Tool lifecycle pairing, same-tool grouping, inline parser-warning chip
+      with 4-bucket classification. Rendered inside Phase 5&rsquo;s
+      Archive-room aesthetic with no new tokens, no new motion, no new hex.
+    </p>
+  </header>
+
+  <!-- ========================================================================
+     Aggregate-status legend.
+     Spec ref: working/phase-7c.md §Data Model / GroupStatus.
+  ========================================================================= -->
+  <p class="caption">
+    Aggregate-status indicators &mdash; legend
+    <span class="spec">Phase 7c &sect;Data Model / GroupStatus &mdash; 4 enumerated states</span>
+  </p>
+  <div class="status-legend">
+    <span class="status-caption">Same recipe, four values. Color is reinforcement, the label carries the meaning.</span>
+    <span class="status-item">
+      <span class="status-dot" data-status="all-success" aria-hidden="true"></span>
+      all succeeded
+    </span>
+    <span class="status-item">
+      <span class="status-dot" data-status="mixed" aria-hidden="true"></span>
+      2 succeeded &middot; 1 failed
+    </span>
+    <span class="status-item">
+      <span class="status-dot" data-status="in-flight" aria-hidden="true"></span>
+      running 2 of 5
+    </span>
+    <span class="status-item">
+      <span class="status-dot" data-status="all-failed" aria-hidden="true"></span>
+      all failed
+    </span>
+  </div>
+
+  <!-- ========================================================================
+     Session banner (4-bucket breakdown).
+     Spec ref: working/phase-7c.md §Data Model / Warning classification.
+  ========================================================================= -->
+  <p class="caption">
+    Session-level parse-warnings banner &mdash; 4-bucket breakdown
+    <span class="spec">Phase 7c &sect;Data Model / Warning classification (banner stays loud)</span>
+  </p>
+  <details class="transcript-banner" open>
+    <summary>5 parse warnings &mdash; click to view.</summary>
+    <ul>
+      <li>line 12 &middot; unknown user content item type 'image'</li>
+      <li>line 47 &middot; timestamp '2026-05-16Tx' could not be parsed</li>
+      <li>line 88 &middot; agent_message missing payload.message</li>
+      <li>line 91 &middot; future event_msg type 'future_event'</li>
+      <li>line 104 &middot; meta-only note (banner-only)</li>
+    </ul>
+    <div class="bucket-strip">
+      <span class="bucket"><strong>2</strong> render-normally</span>
+      <span class="bucket"><strong>1</strong> collapse-by-default</span>
+      <span class="bucket"><strong>1</strong> hide-with-inspect</span>
+      <span class="bucket"><strong>1</strong> warning-only</span>
+    </div>
+  </details>
+
+  <!-- ========================================================================
+     Theme grid — light on the left, dark on the right.
+     The light + dark column markup is byte-identical; the .theme-light /
+     .theme-dark wrapper overrides the color tokens. Every variant
+     appears in BOTH columns.
+  ========================================================================= -->
+  <div class="theme-grid">
+
+    <!-- ====================================================================
+         LIGHT COLUMN — warm-paper.
+    ===================================================================== -->
+    <section class="theme-column theme-light" aria-label="Light theme samples">
+      <p class="theme-label">Light &mdash; warm-paper</p>
+
+      <ol class="transcript-stream">
+
+        <!-- Variant 1a: lifecycle pair, success (Claude Code Read) -->
+        <li>
+          <p class="caption">
+            Lifecycle pair &mdash; success
+            <span class="spec">&sect;Pairing rules (Claude Code: tool_use_id linkage)</span>
+          </p>
+          <article class="lifecycle-card" data-status="all-success">
+            <header class="lifecycle-head">
+              <span class="label-tool">Tool</span>
+              <span aria-hidden="true">&middot;</span>
+              <span class="tool-name">Read</span>
+              <span aria-hidden="true">&middot;</span>
+              <time datetime="2026-05-16T01:02:00Z" title="2026-05-16T01:02:00Z">3 min ago</time>
+              <span class="head-status">
+                <span class="status-dot" data-status="all-success" aria-hidden="true"></span>
+                succeeded
+              </span>
+            </header>
+            <div class="lifecycle-body">
+              <details>
+                <summary><span class="side-label">Arguments</span>{ "file_path": "&hellip;/claude_code.ts" }</summary>
+                <pre>{
+  "file_path": "apps/frontend/src/features/sessions/parsers/claude_code.ts"
+}</pre>
+              </details>
+              <details>
+                <summary><span class="side-label">Result</span>file contents read (1834 bytes)</summary>
+                <pre>// Type definitions for the per-tool message parsers, the dispatcher, and
+// the buildSkim block model. Mirrors `working/phase-5.md` &sect;Data Model in
+// the Browser (lines 233-348) verbatim.
+&hellip;</pre>
+              </details>
+            </div>
+          </article>
+        </li>
+
+        <!-- Variant 1b: lifecycle pair, failure (Codex exec, exit_code: 1) -->
+        <li>
+          <p class="caption">
+            Lifecycle pair &mdash; failure
+            <span class="spec">&sect;Pairing rules + &sect;Failure-detection heuristic (Codex: exit_code &ne; 0)</span>
+          </p>
+          <article class="lifecycle-card" data-status="all-failed">
+            <header class="lifecycle-head">
+              <span class="label-tool">Tool</span>
+              <span aria-hidden="true">&middot;</span>
+              <!-- tool-name is sourced from exec_command.command[0] (codex.ts:514),
+                   e.g. "bun" / "rg" / "cargo" / "git". Never the literal "exec". -->
+              <span class="tool-name">bun</span>
+              <span aria-hidden="true">&middot;</span>
+              <time datetime="2026-05-16T01:04:12Z" title="2026-05-16T01:04:12Z">2 min ago</time>
+              <span class="head-status">
+                <span class="status-dot" data-status="all-failed" aria-hidden="true"></span>
+                failed
+              </span>
+            </header>
+            <div class="lifecycle-body">
+              <details open>
+                <summary><span class="side-label">Arguments</span>bun test src/</summary>
+                <pre>{
+  "command": ["bun", "test", "src/"],
+  "cwd": "apps/frontend"
+}</pre>
+              </details>
+              <details open>
+                <summary><span class="side-label">Result</span>exit_code: 1 &middot; 3 tests failed</summary>
+                <pre>exit_code: 1
+3 fail
+src/features/sessions/TranscriptView.test.tsx
+  &times; renders lifecycle card for paired tool_use + tool_result
+  &times; renders chip when warning.messageIndex matches
+&hellip;</pre>
+              </details>
+            </div>
+          </article>
+        </li>
+
+        <!-- Variant 1c: task-lifecycle pair (task_started + task_complete)
+             Spec ref: docs/features/parser-event-support.md rows
+             codex-event-msg-task-started / codex-event-msg-task-complete.
+             Parser source: codex.ts:473 (task_started) + codex.ts:492 (task_complete).
+             Distill discriminator: RenderHint.taskLifecycle ∈ {"started","complete"}. -->
+        <li>
+          <p class="caption">
+            Task lifecycle pair &mdash; chapter marker for a Codex turn
+            <span class="spec">&sect;Goal &amp; Scope line 28 + &sect;M3 line 211 (specific render for 🎨 rows)</span>
+          </p>
+          <article class="msg-task-lifecycle" data-task="started" aria-label="Task started for turn abc123">
+            <span class="task-label">Task started</span>
+            <span class="task-divider" aria-hidden="true">&middot;</span>
+            <span class="task-turn">turn abc123</span>
+          </article>
+          <article class="msg-task-lifecycle" data-task="complete" aria-label="Task complete for turn abc123">
+            <span class="task-label">Task complete</span>
+            <span class="task-divider" aria-hidden="true">&middot;</span>
+            <span class="task-turn">turn abc123</span>
+          </article>
+        </li>
+
+        <!-- Variant 2: orphan tool_use -->
+        <li>
+          <p class="caption">
+            Orphan tool_use &mdash; awaiting result
+            <span class="spec">&sect;Pairing rules / Orphan tool_use (no matching tool_result)</span>
+          </p>
+          <article class="lifecycle-card" data-status="in-flight">
+            <header class="lifecycle-head">
+              <span class="label-tool">Tool</span>
+              <span aria-hidden="true">&middot;</span>
+              <span class="tool-name">Bash</span>
+              <span class="lifecycle-pill">awaiting result</span>
+              <span aria-hidden="true">&middot;</span>
+              <time datetime="2026-05-16T01:05:30Z" title="2026-05-16T01:05:30Z">just now</time>
+              <span class="head-status">
+                <span class="status-dot" data-status="in-flight" aria-hidden="true"></span>
+                in-flight
+              </span>
+            </header>
+            <div class="lifecycle-body">
+              <details>
+                <summary><span class="side-label">Arguments</span>bun run test:e2e</summary>
+                <pre>{
+  "command": "bun run test:e2e",
+  "cwd": "apps/frontend"
+}</pre>
+              </details>
+              <p style="margin:var(--space-3) 0 0;font-family:var(--font-chrome);font-size:var(--text-xs);color:var(--color-ink-muted);font-style:italic">
+                No tool_result observed before end of stream.
+              </p>
+            </div>
+          </article>
+        </li>
+
+        <!-- Variant 3: orphan tool_result + render-normally chip below -->
+        <li>
+          <p class="caption">
+            Orphan tool_result &mdash; stray, carries inline warning chip
+            <span class="spec">&sect;Pairing rules / Orphan tool_result + &sect;Warning classification (render-normally)</span>
+          </p>
+          <article class="standalone-card msg-tool-result-standalone">
+            <header class="standalone-head">
+              <span>Tool result</span>
+              <span aria-hidden="true">&middot;</span>
+              <span class="tool-name">(unknown)</span>
+              <span class="lifecycle-pill">stray result</span>
+              <span aria-hidden="true">&middot;</span>
+              <time datetime="2026-05-16T01:06:11Z" title="2026-05-16T01:06:11Z">1 min ago</time>
+            </header>
+            <pre>file contents follow&hellip;</pre>
+            <div class="chip-wrapper">
+              <details class="chip" open>
+                <summary>
+                  <span class="status-dot" data-status="mixed" aria-hidden="true"></span>
+                  <span class="chip-label">stray tool_result &mdash; no preceding tool_use</span>
+                  <span class="chip-tag">payload</span>
+                </summary>
+                <span class="chip-reason">tool_result at messageIndex 47 has no matching tool_use_id in the prior stream; rendered as standalone.</span>
+              </details>
+            </div>
+          </article>
+        </li>
+
+        <!-- Variant 4: group collapsed (all-success) -->
+        <li>
+          <p class="caption">
+            Group head &mdash; collapsed, all succeeded
+            <span class="spec">&sect;Grouping rules (&ge; 3 consecutive same-tool lifecycles)</span>
+          </p>
+          <details class="group-card" data-status="all-success">
+            <summary>
+              <span class="tool-name">Read</span>
+              <span class="group-divider" aria-hidden="true"></span>
+              <span class="count-badge">12 calls</span>
+              <span class="aggregate-label">
+                <span class="status-dot" data-status="all-success" aria-hidden="true"></span>
+                all succeeded
+              </span>
+            </summary>
+            <div class="group-members">
+              <article class="group-member lifecycle-card" data-status="all-success">
+                <header class="lifecycle-head">
+                  <span class="label-tool">Tool</span>
+                  <span aria-hidden="true">&middot;</span>
+                  <span class="tool-name">Read</span>
+                  <span aria-hidden="true">&middot;</span>
+                  <time datetime="2026-05-16T01:00:00Z" title="2026-05-16T01:00:00Z">5 min ago</time>
+                  <span class="head-status">
+                    <span class="status-dot" data-status="all-success" aria-hidden="true"></span>
+                    succeeded
+                  </span>
+                </header>
+                <div class="lifecycle-body">
+                  <details><summary><span class="side-label">Arguments</span>tokens.css</summary><pre>{ "file_path": "apps/frontend/src/styles/tokens.css" }</pre></details>
+                  <details><summary><span class="side-label">Result</span>read 4.1 KB</summary><pre>/* Design tokens &hellip; */</pre></details>
+                </div>
+              </article>
+              <p style="margin:var(--space-3) 0;font-family:var(--font-chrome);font-style:italic;font-size:var(--text-xs);color:var(--color-ink-muted)">&hellip; 11 more lifecycle cards inside &hellip;</p>
+            </div>
+          </details>
+        </li>
+
+        <!-- Variant 5: group expanded (all-success) — same data, open by default -->
+        <li>
+          <p class="caption">
+            Group head &mdash; expanded, all succeeded
+            <span class="spec">&sect;Grouping rules / Expanded reveals each member individually</span>
+          </p>
+          <details class="group-card" data-status="all-success" open>
+            <summary>
+              <span class="tool-name">Read</span>
+              <span class="group-divider" aria-hidden="true"></span>
+              <span class="count-badge">3 calls</span>
+              <span class="aggregate-label">
+                <span class="status-dot" data-status="all-success" aria-hidden="true"></span>
+                all succeeded
+              </span>
+            </summary>
+            <div class="group-members">
+              <article class="group-member lifecycle-card" data-status="all-success">
+                <header class="lifecycle-head">
+                  <span class="label-tool">Tool</span>
+                  <span aria-hidden="true">&middot;</span>
+                  <span class="tool-name">Read</span>
+                  <span aria-hidden="true">&middot;</span>
+                  <time datetime="2026-05-16T01:00:00Z" title="2026-05-16T01:00:00Z">5 min ago</time>
+                  <span class="head-status">
+                    <span class="status-dot" data-status="all-success" aria-hidden="true"></span>
+                    succeeded
+                  </span>
+                </header>
+                <div class="lifecycle-body">
+                  <details><summary><span class="side-label">Arguments</span>tokens.css</summary><pre>{ "file_path": "apps/frontend/src/styles/tokens.css" }</pre></details>
+                  <details><summary><span class="side-label">Result</span>read 4.1 KB</summary><pre>/* Design tokens &hellip; */</pre></details>
+                </div>
+              </article>
+              <article class="group-member lifecycle-card" data-status="all-success">
+                <header class="lifecycle-head">
+                  <span class="label-tool">Tool</span>
+                  <span aria-hidden="true">&middot;</span>
+                  <span class="tool-name">Read</span>
+                  <span aria-hidden="true">&middot;</span>
+                  <time datetime="2026-05-16T01:00:10Z" title="2026-05-16T01:00:10Z">5 min ago</time>
+                  <span class="head-status">
+                    <span class="status-dot" data-status="all-success" aria-hidden="true"></span>
+                    succeeded
+                  </span>
+                </header>
+                <div class="lifecycle-body">
+                  <details><summary><span class="side-label">Arguments</span>TranscriptView.tsx</summary><pre>{ "file_path": "apps/frontend/src/features/sessions/TranscriptView.tsx" }</pre></details>
+                  <details><summary><span class="side-label">Result</span>read 21.4 KB</summary><pre>// Transcript tab body &hellip;</pre></details>
+                </div>
+              </article>
+              <article class="group-member lifecycle-card" data-status="all-success">
+                <header class="lifecycle-head">
+                  <span class="label-tool">Tool</span>
+                  <span aria-hidden="true">&middot;</span>
+                  <span class="tool-name">Read</span>
+                  <span aria-hidden="true">&middot;</span>
+                  <time datetime="2026-05-16T01:00:20Z" title="2026-05-16T01:00:20Z">5 min ago</time>
+                  <span class="head-status">
+                    <span class="status-dot" data-status="all-success" aria-hidden="true"></span>
+                    succeeded
+                  </span>
+                </header>
+                <div class="lifecycle-body">
+                  <details><summary><span class="side-label">Arguments</span>types.ts</summary><pre>{ "file_path": "apps/frontend/src/features/sessions/parsers/types.ts" }</pre></details>
+                  <details><summary><span class="side-label">Result</span>read 6.2 KB</summary><pre>// Type definitions &hellip;</pre></details>
+                </div>
+              </article>
+            </div>
+          </details>
+        </li>
+
+        <!-- Variant 6: group mixed -->
+        <li>
+          <p class="caption">
+            Group head &mdash; mixed (2 succeeded, 1 failed)
+            <span class="spec">&sect;Aggregate status / mixed</span>
+          </p>
+          <details class="group-card" data-status="mixed">
+            <summary>
+              <span class="tool-name">rg</span>
+              <span class="group-divider" aria-hidden="true"></span>
+              <span class="count-badge">3 calls</span>
+              <span class="aggregate-label">
+                <span class="status-dot" data-status="mixed" aria-hidden="true"></span>
+                2 succeeded &middot; 1 failed
+              </span>
+            </summary>
+            <div class="group-members">
+              <p style="margin:var(--space-3) 0;font-family:var(--font-chrome);font-style:italic;font-size:var(--text-xs);color:var(--color-ink-muted)">Expand to inspect each call individually.</p>
+            </div>
+          </details>
+        </li>
+
+        <!-- Variant 7: group in-flight -->
+        <li>
+          <p class="caption">
+            Group head &mdash; in-flight
+            <span class="spec">&sect;Aggregate status / in-flight (no spinner; chrome label only)</span>
+          </p>
+          <details class="group-card" data-status="in-flight">
+            <summary>
+              <span class="tool-name">Bash</span>
+              <span class="group-divider" aria-hidden="true"></span>
+              <span class="count-badge">5 calls</span>
+              <span class="aggregate-label">
+                <span class="status-dot" data-status="in-flight" aria-hidden="true"></span>
+                running 2 of 5
+              </span>
+            </summary>
+            <div class="group-members">
+              <p style="margin:var(--space-3) 0;font-family:var(--font-chrome);font-style:italic;font-size:var(--text-xs);color:var(--color-ink-muted)">Two tool_result rows are not yet present in the stream.</p>
+            </div>
+          </details>
+        </li>
+
+        <!-- Variant 8: chip — render-normally (on a user message) -->
+        <li>
+          <p class="caption">
+            Inline warning &mdash; render-normally (chip visible below body)
+            <span class="spec">&sect;Warning classification / render-normally</span>
+          </p>
+          <article class="msg-panel msg-user">
+            <header class="msg-attr">
+              <span>User</span>
+              <span aria-hidden="true">&middot;</span>
+              <time datetime="2026-05-16T01:07:00Z" title="2026-05-16T01:07:00Z">just now</time>
+            </header>
+            <div class="msg-body">Please run the test suite and report results.</div>
+            <div class="chip-wrapper">
+              <details class="chip">
+                <summary>
+                  <span class="status-dot" data-status="all-failed" aria-hidden="true"></span>
+                  <span class="chip-label">Unknown user content item type 'image'</span>
+                  <span class="chip-tag">payload</span>
+                </summary>
+                <span class="chip-reason">user record content[].type === 'image' is not a recognized variant; emitted as 'unknown' placeholder. messageIndex: 12.</span>
+              </details>
+            </div>
+          </article>
+        </li>
+
+        <!-- Variant 9: chip — collapse-by-default (on an assistant message) -->
+        <li>
+          <p class="caption">
+            Inline warning &mdash; collapse-by-default (summary only)
+            <span class="spec">&sect;Warning classification / collapse-by-default</span>
+          </p>
+          <article class="msg-panel msg-assistant">
+            <header class="msg-attr">
+              <span>Assistant</span>
+              <span aria-hidden="true">&middot;</span>
+              <time datetime="2026-05-16T01:07:30Z" title="2026-05-16T01:07:30Z">just now</time>
+            </header>
+            <div class="msg-body">I&rsquo;ll run the suite now and report back.</div>
+            <div class="chip-wrapper">
+              <details class="chip">
+                <summary>
+                  <span class="status-dot" data-status="mixed" aria-hidden="true"></span>
+                  <span class="chip-label">1 warning</span>
+                  <span class="chip-tag">timestamp</span>
+                </summary>
+                <span class="chip-reason">timestamp '2026-05-16Tx' could not be parsed; surfaced from the message body's timestamp field.</span>
+              </details>
+            </div>
+          </article>
+        </li>
+
+        <!-- Variant 10: chip — hide-with-inspect -->
+        <li>
+          <p class="caption">
+            Inline warning &mdash; hide-with-inspect (corner affordance)
+            <span class="spec">&sect;Warning classification / hide-with-inspect (info-severity)</span>
+          </p>
+          <article class="msg-panel msg-assistant">
+            <header class="msg-attr">
+              <span>Assistant</span>
+              <span aria-hidden="true">&middot;</span>
+              <time datetime="2026-05-16T01:08:00Z" title="2026-05-16T01:08:00Z">just now</time>
+            </header>
+            <div class="msg-body">Tests passed; full report attached below.</div>
+            <div class="inspect-affordance">
+              <details>
+                <summary class="inspect-link">1 info &middot; Inspect</summary>
+                <details class="chip" open>
+                  <summary>
+                    <span class="status-dot" data-status="in-flight" aria-hidden="true"></span>
+                    <span class="chip-label">info-only note</span>
+                    <span class="chip-tag">meta</span>
+                  </summary>
+                  <span class="chip-reason">parser routed this record through the default branch; not an anomaly. messageIndex: 91.</span>
+                </details>
+              </details>
+            </div>
+          </article>
+        </li>
+
+        <!-- Variant 11: warning-only — message renders WITHOUT a chip -->
+        <li>
+          <p class="caption">
+            Inline warning &mdash; warning-only (no inline chip; banner only)
+            <span class="spec">&sect;Warning classification / warning-only (banner remains loud)</span>
+          </p>
+          <article class="msg-panel msg-assistant">
+            <header class="msg-attr">
+              <span>Assistant</span>
+              <span aria-hidden="true">&middot;</span>
+              <time datetime="2026-05-16T01:09:00Z" title="2026-05-16T01:09:00Z">just now</time>
+            </header>
+            <div class="msg-body">All looks good &mdash; ready to commit.</div>
+            <!-- No .chip-wrapper here. The associated warning is visible only on the session banner at the top of the page. -->
+          </article>
+        </li>
+
+      </ol>
+    </section>
+
+    <!-- ====================================================================
+         DARK COLUMN — deep-ink.
+         Byte-identical markup to the light column. Wrapper overrides the
+         color tokens, so every var(--...) resolves to the dark palette.
+    ===================================================================== -->
+    <section class="theme-column theme-dark" aria-label="Dark theme samples">
+      <p class="theme-label">Dark &mdash; deep-ink</p>
+
+      <ol class="transcript-stream">
+
+        <li>
+          <p class="caption">
+            Lifecycle pair &mdash; success
+            <span class="spec">&sect;Pairing rules (Claude Code: tool_use_id linkage)</span>
+          </p>
+          <article class="lifecycle-card" data-status="all-success">
+            <header class="lifecycle-head">
+              <span class="label-tool">Tool</span>
+              <span aria-hidden="true">&middot;</span>
+              <span class="tool-name">Read</span>
+              <span aria-hidden="true">&middot;</span>
+              <time datetime="2026-05-16T01:02:00Z" title="2026-05-16T01:02:00Z">3 min ago</time>
+              <span class="head-status">
+                <span class="status-dot" data-status="all-success" aria-hidden="true"></span>
+                succeeded
+              </span>
+            </header>
+            <div class="lifecycle-body">
+              <details>
+                <summary><span class="side-label">Arguments</span>{ "file_path": "&hellip;/claude_code.ts" }</summary>
+                <pre>{
+  "file_path": "apps/frontend/src/features/sessions/parsers/claude_code.ts"
+}</pre>
+              </details>
+              <details>
+                <summary><span class="side-label">Result</span>file contents read (1834 bytes)</summary>
+                <pre>// Type definitions for the per-tool message parsers, the dispatcher, and
+// the buildSkim block model. Mirrors `working/phase-5.md` &sect;Data Model in
+// the Browser (lines 233-348) verbatim.
+&hellip;</pre>
+              </details>
+            </div>
+          </article>
+        </li>
+
+        <li>
+          <p class="caption">
+            Lifecycle pair &mdash; failure
+            <span class="spec">&sect;Pairing rules + &sect;Failure-detection heuristic (Codex: exit_code &ne; 0)</span>
+          </p>
+          <article class="lifecycle-card" data-status="all-failed">
+            <header class="lifecycle-head">
+              <span class="label-tool">Tool</span>
+              <span aria-hidden="true">&middot;</span>
+              <!-- tool-name is sourced from exec_command.command[0] (codex.ts:514). -->
+              <span class="tool-name">bun</span>
+              <span aria-hidden="true">&middot;</span>
+              <time datetime="2026-05-16T01:04:12Z" title="2026-05-16T01:04:12Z">2 min ago</time>
+              <span class="head-status">
+                <span class="status-dot" data-status="all-failed" aria-hidden="true"></span>
+                failed
+              </span>
+            </header>
+            <div class="lifecycle-body">
+              <details open>
+                <summary><span class="side-label">Arguments</span>bun test src/</summary>
+                <pre>{
+  "command": ["bun", "test", "src/"],
+  "cwd": "apps/frontend"
+}</pre>
+              </details>
+              <details open>
+                <summary><span class="side-label">Result</span>exit_code: 1 &middot; 3 tests failed</summary>
+                <pre>exit_code: 1
+3 fail
+src/features/sessions/TranscriptView.test.tsx
+  &times; renders lifecycle card for paired tool_use + tool_result
+  &times; renders chip when warning.messageIndex matches
+&hellip;</pre>
+              </details>
+            </div>
+          </article>
+        </li>
+
+        <!-- Task-lifecycle pair (dark column). -->
+        <li>
+          <p class="caption">
+            Task lifecycle pair &mdash; chapter marker for a Codex turn
+            <span class="spec">&sect;Goal &amp; Scope line 28 + &sect;M3 line 211 (specific render for 🎨 rows)</span>
+          </p>
+          <article class="msg-task-lifecycle" data-task="started" aria-label="Task started for turn abc123">
+            <span class="task-label">Task started</span>
+            <span class="task-divider" aria-hidden="true">&middot;</span>
+            <span class="task-turn">turn abc123</span>
+          </article>
+          <article class="msg-task-lifecycle" data-task="complete" aria-label="Task complete for turn abc123">
+            <span class="task-label">Task complete</span>
+            <span class="task-divider" aria-hidden="true">&middot;</span>
+            <span class="task-turn">turn abc123</span>
+          </article>
+        </li>
+
+        <li>
+          <p class="caption">
+            Orphan tool_use &mdash; awaiting result
+            <span class="spec">&sect;Pairing rules / Orphan tool_use</span>
+          </p>
+          <article class="lifecycle-card" data-status="in-flight">
+            <header class="lifecycle-head">
+              <span class="label-tool">Tool</span>
+              <span aria-hidden="true">&middot;</span>
+              <span class="tool-name">Bash</span>
+              <span class="lifecycle-pill">awaiting result</span>
+              <span aria-hidden="true">&middot;</span>
+              <time datetime="2026-05-16T01:05:30Z" title="2026-05-16T01:05:30Z">just now</time>
+              <span class="head-status">
+                <span class="status-dot" data-status="in-flight" aria-hidden="true"></span>
+                in-flight
+              </span>
+            </header>
+            <div class="lifecycle-body">
+              <details>
+                <summary><span class="side-label">Arguments</span>bun run test:e2e</summary>
+                <pre>{
+  "command": "bun run test:e2e",
+  "cwd": "apps/frontend"
+}</pre>
+              </details>
+              <p style="margin:var(--space-3) 0 0;font-family:var(--font-chrome);font-size:var(--text-xs);color:var(--color-ink-muted);font-style:italic">
+                No tool_result observed before end of stream.
+              </p>
+            </div>
+          </article>
+        </li>
+
+        <li>
+          <p class="caption">
+            Orphan tool_result &mdash; stray, carries inline warning chip
+            <span class="spec">&sect;Pairing rules / Orphan tool_result + &sect;render-normally</span>
+          </p>
+          <article class="standalone-card msg-tool-result-standalone">
+            <header class="standalone-head">
+              <span>Tool result</span>
+              <span aria-hidden="true">&middot;</span>
+              <span class="tool-name">(unknown)</span>
+              <span class="lifecycle-pill">stray result</span>
+              <span aria-hidden="true">&middot;</span>
+              <time datetime="2026-05-16T01:06:11Z" title="2026-05-16T01:06:11Z">1 min ago</time>
+            </header>
+            <pre>file contents follow&hellip;</pre>
+            <div class="chip-wrapper">
+              <details class="chip" open>
+                <summary>
+                  <span class="status-dot" data-status="mixed" aria-hidden="true"></span>
+                  <span class="chip-label">stray tool_result &mdash; no preceding tool_use</span>
+                  <span class="chip-tag">payload</span>
+                </summary>
+                <span class="chip-reason">tool_result at messageIndex 47 has no matching tool_use_id in the prior stream; rendered as standalone.</span>
+              </details>
+            </div>
+          </article>
+        </li>
+
+        <li>
+          <p class="caption">
+            Group head &mdash; collapsed, all succeeded
+            <span class="spec">&sect;Grouping rules (&ge; 3 consecutive same-tool lifecycles)</span>
+          </p>
+          <details class="group-card" data-status="all-success">
+            <summary>
+              <span class="tool-name">Read</span>
+              <span class="group-divider" aria-hidden="true"></span>
+              <span class="count-badge">12 calls</span>
+              <span class="aggregate-label">
+                <span class="status-dot" data-status="all-success" aria-hidden="true"></span>
+                all succeeded
+              </span>
+            </summary>
+            <div class="group-members">
+              <article class="group-member lifecycle-card" data-status="all-success">
+                <header class="lifecycle-head">
+                  <span class="label-tool">Tool</span>
+                  <span aria-hidden="true">&middot;</span>
+                  <span class="tool-name">Read</span>
+                  <span aria-hidden="true">&middot;</span>
+                  <time datetime="2026-05-16T01:00:00Z" title="2026-05-16T01:00:00Z">5 min ago</time>
+                  <span class="head-status">
+                    <span class="status-dot" data-status="all-success" aria-hidden="true"></span>
+                    succeeded
+                  </span>
+                </header>
+                <div class="lifecycle-body">
+                  <details><summary><span class="side-label">Arguments</span>tokens.css</summary><pre>{ "file_path": "apps/frontend/src/styles/tokens.css" }</pre></details>
+                  <details><summary><span class="side-label">Result</span>read 4.1 KB</summary><pre>/* Design tokens &hellip; */</pre></details>
+                </div>
+              </article>
+              <p style="margin:var(--space-3) 0;font-family:var(--font-chrome);font-style:italic;font-size:var(--text-xs);color:var(--color-ink-muted)">&hellip; 11 more lifecycle cards inside &hellip;</p>
+            </div>
+          </details>
+        </li>
+
+        <li>
+          <p class="caption">
+            Group head &mdash; expanded, all succeeded
+            <span class="spec">&sect;Grouping rules / Expanded reveals each member individually</span>
+          </p>
+          <details class="group-card" data-status="all-success" open>
+            <summary>
+              <span class="tool-name">Read</span>
+              <span class="group-divider" aria-hidden="true"></span>
+              <span class="count-badge">3 calls</span>
+              <span class="aggregate-label">
+                <span class="status-dot" data-status="all-success" aria-hidden="true"></span>
+                all succeeded
+              </span>
+            </summary>
+            <div class="group-members">
+              <article class="group-member lifecycle-card" data-status="all-success">
+                <header class="lifecycle-head">
+                  <span class="label-tool">Tool</span>
+                  <span aria-hidden="true">&middot;</span>
+                  <span class="tool-name">Read</span>
+                  <span aria-hidden="true">&middot;</span>
+                  <time datetime="2026-05-16T01:00:00Z" title="2026-05-16T01:00:00Z">5 min ago</time>
+                  <span class="head-status">
+                    <span class="status-dot" data-status="all-success" aria-hidden="true"></span>
+                    succeeded
+                  </span>
+                </header>
+                <div class="lifecycle-body">
+                  <details><summary><span class="side-label">Arguments</span>tokens.css</summary><pre>{ "file_path": "apps/frontend/src/styles/tokens.css" }</pre></details>
+                  <details><summary><span class="side-label">Result</span>read 4.1 KB</summary><pre>/* Design tokens &hellip; */</pre></details>
+                </div>
+              </article>
+              <article class="group-member lifecycle-card" data-status="all-success">
+                <header class="lifecycle-head">
+                  <span class="label-tool">Tool</span>
+                  <span aria-hidden="true">&middot;</span>
+                  <span class="tool-name">Read</span>
+                  <span aria-hidden="true">&middot;</span>
+                  <time datetime="2026-05-16T01:00:10Z" title="2026-05-16T01:00:10Z">5 min ago</time>
+                  <span class="head-status">
+                    <span class="status-dot" data-status="all-success" aria-hidden="true"></span>
+                    succeeded
+                  </span>
+                </header>
+                <div class="lifecycle-body">
+                  <details><summary><span class="side-label">Arguments</span>TranscriptView.tsx</summary><pre>{ "file_path": "apps/frontend/src/features/sessions/TranscriptView.tsx" }</pre></details>
+                  <details><summary><span class="side-label">Result</span>read 21.4 KB</summary><pre>// Transcript tab body &hellip;</pre></details>
+                </div>
+              </article>
+              <article class="group-member lifecycle-card" data-status="all-success">
+                <header class="lifecycle-head">
+                  <span class="label-tool">Tool</span>
+                  <span aria-hidden="true">&middot;</span>
+                  <span class="tool-name">Read</span>
+                  <span aria-hidden="true">&middot;</span>
+                  <time datetime="2026-05-16T01:00:20Z" title="2026-05-16T01:00:20Z">5 min ago</time>
+                  <span class="head-status">
+                    <span class="status-dot" data-status="all-success" aria-hidden="true"></span>
+                    succeeded
+                  </span>
+                </header>
+                <div class="lifecycle-body">
+                  <details><summary><span class="side-label">Arguments</span>types.ts</summary><pre>{ "file_path": "apps/frontend/src/features/sessions/parsers/types.ts" }</pre></details>
+                  <details><summary><span class="side-label">Result</span>read 6.2 KB</summary><pre>// Type definitions &hellip;</pre></details>
+                </div>
+              </article>
+            </div>
+          </details>
+        </li>
+
+        <li>
+          <p class="caption">
+            Group head &mdash; mixed (2 succeeded, 1 failed)
+            <span class="spec">&sect;Aggregate status / mixed</span>
+          </p>
+          <details class="group-card" data-status="mixed">
+            <summary>
+              <span class="tool-name">rg</span>
+              <span class="group-divider" aria-hidden="true"></span>
+              <span class="count-badge">3 calls</span>
+              <span class="aggregate-label">
+                <span class="status-dot" data-status="mixed" aria-hidden="true"></span>
+                2 succeeded &middot; 1 failed
+              </span>
+            </summary>
+            <div class="group-members">
+              <p style="margin:var(--space-3) 0;font-family:var(--font-chrome);font-style:italic;font-size:var(--text-xs);color:var(--color-ink-muted)">Expand to inspect each call individually.</p>
+            </div>
+          </details>
+        </li>
+
+        <li>
+          <p class="caption">
+            Group head &mdash; in-flight
+            <span class="spec">&sect;Aggregate status / in-flight</span>
+          </p>
+          <details class="group-card" data-status="in-flight">
+            <summary>
+              <span class="tool-name">Bash</span>
+              <span class="group-divider" aria-hidden="true"></span>
+              <span class="count-badge">5 calls</span>
+              <span class="aggregate-label">
+                <span class="status-dot" data-status="in-flight" aria-hidden="true"></span>
+                running 2 of 5
+              </span>
+            </summary>
+            <div class="group-members">
+              <p style="margin:var(--space-3) 0;font-family:var(--font-chrome);font-style:italic;font-size:var(--text-xs);color:var(--color-ink-muted)">Two tool_result rows are not yet present in the stream.</p>
+            </div>
+          </details>
+        </li>
+
+        <li>
+          <p class="caption">
+            Inline warning &mdash; render-normally
+            <span class="spec">&sect;Warning classification / render-normally</span>
+          </p>
+          <article class="msg-panel msg-user">
+            <header class="msg-attr">
+              <span>User</span>
+              <span aria-hidden="true">&middot;</span>
+              <time datetime="2026-05-16T01:07:00Z" title="2026-05-16T01:07:00Z">just now</time>
+            </header>
+            <div class="msg-body">Please run the test suite and report results.</div>
+            <div class="chip-wrapper">
+              <details class="chip">
+                <summary>
+                  <span class="status-dot" data-status="all-failed" aria-hidden="true"></span>
+                  <span class="chip-label">Unknown user content item type 'image'</span>
+                  <span class="chip-tag">payload</span>
+                </summary>
+                <span class="chip-reason">user record content[].type === 'image' is not a recognized variant; emitted as 'unknown' placeholder. messageIndex: 12.</span>
+              </details>
+            </div>
+          </article>
+        </li>
+
+        <li>
+          <p class="caption">
+            Inline warning &mdash; collapse-by-default
+            <span class="spec">&sect;Warning classification / collapse-by-default</span>
+          </p>
+          <article class="msg-panel msg-assistant">
+            <header class="msg-attr">
+              <span>Assistant</span>
+              <span aria-hidden="true">&middot;</span>
+              <time datetime="2026-05-16T01:07:30Z" title="2026-05-16T01:07:30Z">just now</time>
+            </header>
+            <div class="msg-body">I&rsquo;ll run the suite now and report back.</div>
+            <div class="chip-wrapper">
+              <details class="chip">
+                <summary>
+                  <span class="status-dot" data-status="mixed" aria-hidden="true"></span>
+                  <span class="chip-label">1 warning</span>
+                  <span class="chip-tag">timestamp</span>
+                </summary>
+                <span class="chip-reason">timestamp '2026-05-16Tx' could not be parsed; surfaced from the message body's timestamp field.</span>
+              </details>
+            </div>
+          </article>
+        </li>
+
+        <li>
+          <p class="caption">
+            Inline warning &mdash; hide-with-inspect
+            <span class="spec">&sect;Warning classification / hide-with-inspect</span>
+          </p>
+          <article class="msg-panel msg-assistant">
+            <header class="msg-attr">
+              <span>Assistant</span>
+              <span aria-hidden="true">&middot;</span>
+              <time datetime="2026-05-16T01:08:00Z" title="2026-05-16T01:08:00Z">just now</time>
+            </header>
+            <div class="msg-body">Tests passed; full report attached below.</div>
+            <div class="inspect-affordance">
+              <details>
+                <summary class="inspect-link">1 info &middot; Inspect</summary>
+                <details class="chip" open>
+                  <summary>
+                    <span class="status-dot" data-status="in-flight" aria-hidden="true"></span>
+                    <span class="chip-label">info-only note</span>
+                    <span class="chip-tag">meta</span>
+                  </summary>
+                  <span class="chip-reason">parser routed this record through the default branch; not an anomaly. messageIndex: 91.</span>
+                </details>
+              </details>
+            </div>
+          </article>
+        </li>
+
+        <li>
+          <p class="caption">
+            Inline warning &mdash; warning-only
+            <span class="spec">&sect;Warning classification / warning-only</span>
+          </p>
+          <article class="msg-panel msg-assistant">
+            <header class="msg-attr">
+              <span>Assistant</span>
+              <span aria-hidden="true">&middot;</span>
+              <time datetime="2026-05-16T01:09:00Z" title="2026-05-16T01:09:00Z">just now</time>
+            </header>
+            <div class="msg-body">All looks good &mdash; ready to commit.</div>
+          </article>
+        </li>
+
+      </ol>
+    </section>
+
+  </div>
+
+  <!-- ========================================================================
+     Footer aside — motion + token discipline note.
+  ========================================================================= -->
+  <aside class="foot-note" aria-label="Motion budget and token discipline">
+    <h2>Motion budget &amp; token discipline</h2>
+    <p>
+      All expand/collapse uses native <code>&lt;details&gt;</code> with the
+      existing <code>--motion-disclosure</code> (200 ms) <code>block-size</code>
+      transition authorized by Phase 5 M2b. The chip-tag pill is a static
+      Fraunces italic small-caps marginalia &mdash; not animated. The sienna
+      inline-start rail on lifecycle cards is static; it does not pulse, slide,
+      or fade.
+    </p>
+    <p>
+      Reduced-motion: every transition listed above zero-outs via the global
+      <code>@media (prefers-reduced-motion: reduce)</code> rule in
+      <code>apps/frontend/src/styles/global.css</code>. The disclosures snap;
+      the visual layout is unchanged.
+    </p>
+    <p>
+      Tokens consumed: surface, surface-raised, ink, ink-muted, border,
+      border-strong, accent, success, warn, error, space-1..space-8,
+      radius-sm, radius-md, font-display, font-chrome, font-mono,
+      text-xs/sm/base, leading-comfortable, measure, motion-disclosure,
+      ease-in-out. Zero new tokens. Zero new hex.
+    </p>
+  </aside>
+
+</main>
+</body>
+</html>

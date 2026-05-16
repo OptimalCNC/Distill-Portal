@@ -36,6 +36,15 @@ import type {
   ParseWarningSeverity,
 } from "./types";
 
+/**
+ * Phase 7d — short-cwd truncation cap for the `turn_context` metadata
+ * display. Long absolute paths fold to head + `…` so the strip stays
+ * readable. Matches `working/phase-7d/designs/design.md` §3.4
+ * truncation rule (78 chars overall, with the cwd component capped to
+ * keep room for `model` / `sandbox` / `approval`).
+ */
+const CWD_MAX_CHARS = 40;
+
 type JsonValue =
   | string
   | number
@@ -195,7 +204,47 @@ export function parseCodex(rawText: string): ParserOutput {
           typeof payload["role"] === "string" ? (payload["role"] as string) : null;
 
         if (payloadType === "message" && (role === "user" || role === "assistant")) {
-          // ANCHOR PRINCIPLE: `event_msg` is canonical. SKIP entirely. No warning.
+          /**
+           * Matrix:
+           * - docs/features/parser-event-support.md#codex-response-item-message-role-user
+           * - docs/features/parser-event-support.md#codex-response-item-message-role-assistant
+           *
+           * Phase 7d: duplicate-anchor row — `event_msg` is canonical, but
+           * the user-product decision in `working/phase-7d/designs/design.md`
+           * §3.6 says "no event hidden", so we surface a `kind:"metadata"`
+           * echo Message rendered as a single `↺` glyph row pointing
+           * back at the canonical `event_msg.{user,agent}_message` line.
+           *
+           * `lineOrdinal` for `echoOf` is initially set to the echo's
+           * OWN line (sentinel; resolved in the post-parse pass below).
+           * Real Codex streams emit the canonical `event_msg.{user,agent}_message`
+           * row on a different line than the `response_item.message`
+           * duplicate, so the deferred resolution finds the nearest
+           * matching canonical Message and points `echoOf.lineOrdinal`
+           * at IT. If no canonical is found (degenerate session), the
+           * back-pointer stays at the duplicate's own line.
+           *
+           * Codex external review (Phase 7d, 2026-05-16) caught the
+           * earlier "always-own-line" behavior as a real bug: the
+           * tooltip "duplicate of event_msg.user_message at line N"
+           * promised a different line than the duplicate's own, but
+           * the implementation always returned the duplicate's line.
+           * The deferred resolution closes this.
+           */
+          messages.push({
+            lineOrdinal,
+            messageIndex: nextMessageIndex++,
+            timestamp,
+            kind: "metadata",
+            metaCategory: "echo",
+            echoOf: {
+              lineOrdinal,
+              canonicalKind: role,
+            },
+            text: "",
+            raw,
+            bytes: byteLength(raw),
+          });
           break;
         }
 
@@ -332,9 +381,25 @@ export function parseCodex(rawText: string): ParserOutput {
       }
 
       case "turn_context": {
-        /** Matrix: docs/features/parser-event-support.md#codex-turn-context */
-        // Adapter metadata (project_path); not part of the message timeline.
-        // Spec line 774. Silent skip — no warning, no message.
+        /**
+         * Matrix: docs/features/parser-event-support.md#codex-turn-context
+         *
+         * Phase 7d: surface as `kind:"metadata"` hairline per
+         * `working/phase-7d/designs/design.md` §3.4. Folds cwd / model
+         * / sandbox / approval into one strip; drops `current_date`
+         * per the design.
+         */
+        const text = formatTurnContext(payload);
+        messages.push({
+          lineOrdinal,
+          messageIndex: nextMessageIndex++,
+          timestamp,
+          kind: "metadata",
+          metaCategory: "context",
+          text,
+          raw,
+          bytes: byteLength(raw),
+        });
         break;
       }
 
@@ -672,9 +737,23 @@ export function parseCodex(rawText: string): ParserOutput {
           }
 
           case "token_count": {
-            /** Matrix: docs/features/parser-event-support.md#codex-event-msg-token-count */
-            // Phase 7b audit: token accounting is expected telemetry, not a
-            // timeline message or parser anomaly.
+            /**
+             * Matrix: docs/features/parser-event-support.md#codex-event-msg-token-count
+             *
+             * Phase 7d: surface as `kind:"metadata"` telemetry hairline
+             * per `working/phase-7d/designs/design.md` §3.4.
+             */
+            const text = formatTokenCount(payload);
+            messages.push({
+              lineOrdinal,
+              messageIndex: nextMessageIndex++,
+              timestamp,
+              kind: "metadata",
+              metaCategory: "telemetry",
+              text,
+              raw,
+              bytes: byteLength(raw),
+            });
             break;
           }
 
@@ -759,7 +838,96 @@ export function parseCodex(rawText: string): ParserOutput {
     }
   }
 
+  // Phase 7d post-parse resolution: echo metadata Messages (the
+  // duplicate-anchor `response_item.message` rows) initially carry
+  // `echoOf.lineOrdinal = duplicate's own line` because the parser
+  // sees one record at a time and can't look ahead. Real Codex
+  // streams emit the canonical `event_msg.{user,agent}_message` row
+  // on a different line. Walk the message stream once and resolve
+  // each echo's `lineOrdinal` to the nearest matching canonical
+  // Message (preferring the immediately-following one — typical
+  // Codex shape — then falling back to the nearest preceding).
+  //
+  // If no canonical is found in the stream (degenerate session with
+  // a duplicate but no canonical emission), the echo's `lineOrdinal`
+  // stays at its own line — the tooltip is then technically
+  // pointing at itself, but the rendered glyph still surfaces the
+  // event, which preserves the "no event hidden" contract.
+  resolveEchoBackPointers(messages);
+
   return { messages, warnings };
+}
+
+/**
+ * Post-parse pass that resolves echo `echoOf.lineOrdinal` to the
+ * canonical `event_msg.{user,agent}_message` row's line number in
+ * the parsed stream.
+ *
+ * Algorithm: for each `kind:"metadata"` `metaCategory:"echo"`
+ * message in `messages`, find the nearest matching canonical
+ * Message (kind matches `echoOf.canonicalKind`) — preferring the
+ * forward direction (Codex's typical stream shape), then falling
+ * back to backward. Mutate `echoOf.lineOrdinal` in place to point
+ * at the canonical's line.
+ *
+ * Linear in `messages.length` for the scan, plus per-echo bounded
+ * lookups. Overall bounded by `O(messages.length × max_window)`
+ * where max_window is the longest gap between a duplicate and its
+ * canonical; in practice the canonical is at index ± 5 within the
+ * stream.
+ */
+function resolveEchoBackPointers(messages: Message[]): void {
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (m.kind !== "metadata") continue;
+    if (m.metaCategory !== "echo") continue;
+    if (!m.echoOf) continue;
+    const target = m.echoOf.canonicalKind;
+    // Forward search first (typical Codex shape: canonical comes
+    // immediately after the duplicate-anchor).
+    let resolvedLine: number | null = null;
+    let stoppedAtEchoBoundary = false;
+    for (let j = i + 1; j < messages.length; j++) {
+      if (messages[j].kind === target) {
+        resolvedLine = messages[j].lineOrdinal;
+        break;
+      }
+      // Stop the forward search at the next echo of the same
+      // canonicalKind — that echo is presumed to be the duplicate of
+      // a different canonical farther along the stream. Anything
+      // BEYOND this boundary is NOT our canonical.
+      if (
+        messages[j].kind === "metadata" &&
+        messages[j].metaCategory === "echo" &&
+        messages[j].echoOf?.canonicalKind === target
+      ) {
+        stoppedAtEchoBoundary = true;
+        break;
+      }
+    }
+    // Codex external review round 2 (Phase 7d, 2026-05-16) caught
+    // that an unconditional backward fallback could mis-associate
+    // when the forward search bailed at an echo boundary: in
+    // `[canonicalA, echo1, echo2, canonicalB]`, echo1 should NOT
+    // back-resolve to canonicalA because echo2 sits between them.
+    // The fix: only backward-search when forward terminated because
+    // it ran off the end of the stream (no echo boundary, no
+    // canonical found). If forward stopped at an echo boundary,
+    // leave echoOf.lineOrdinal at its sentinel (the duplicate's own
+    // line) — pointing at oneself is less misleading than pointing
+    // at the wrong canonical.
+    if (resolvedLine === null && !stoppedAtEchoBoundary) {
+      for (let j = i - 1; j >= 0; j--) {
+        if (messages[j].kind === target) {
+          resolvedLine = messages[j].lineOrdinal;
+          break;
+        }
+      }
+    }
+    if (resolvedLine !== null && resolvedLine !== m.echoOf.lineOrdinal) {
+      m.echoOf.lineOrdinal = resolvedLine;
+    }
+  }
 }
 
 /**
@@ -905,4 +1073,59 @@ function stringifyTruncated(value: unknown): string {
   } catch {
     return "[unserialisable record]";
   }
+}
+
+/**
+ * Phase 7d — format an `event_msg.token_count` payload as a metadata
+ * telemetry line. Per `working/phase-7d/designs/design.md` §3.4:
+ * `tokens: ${input}↓ ${output}↑` (+ ` ${cached}≈` if cached present,
+ * + ` ${reasoning}†` if reasoning present).
+ */
+function formatTokenCount(payload: JsonObject | null): string {
+  if (!payload) return "tokens: (no payload)";
+  const input = numberField(payload, "input_tokens");
+  const output = numberField(payload, "output_tokens");
+  const cached = numberField(payload, "cached_input_tokens");
+  const reasoning = numberField(payload, "reasoning_output_tokens");
+  let text = `tokens: ${input ?? "?"}↓ ${output ?? "?"}↑`;
+  if (cached !== null) text += ` ${cached}≈`;
+  if (reasoning !== null) text += ` ${reasoning}†`;
+  return text;
+}
+
+/**
+ * Phase 7d — format a `turn_context` payload as a metadata context
+ * line. Per `working/phase-7d/designs/design.md` §3.4: starts with
+ * `turn context → cwd ${shortCwd}` and appends ` · model …`,
+ * ` · sandbox …`, ` · approval …` when those fields are present.
+ * `current_date` is dropped per design.
+ */
+function formatTurnContext(payload: JsonObject | null): string {
+  if (!payload) return "turn context → (no payload)";
+  const rawCwd =
+    typeof payload["cwd"] === "string" ? (payload["cwd"] as string) : "?";
+  const cwd =
+    rawCwd.length > CWD_MAX_CHARS
+      ? rawCwd.slice(0, CWD_MAX_CHARS) + "…"
+      : rawCwd;
+  let text = `turn context → cwd ${cwd}`;
+  const model =
+    typeof payload["model"] === "string" ? (payload["model"] as string) : null;
+  if (model !== null) text += ` · model ${model}`;
+  const sandbox =
+    typeof payload["sandbox"] === "string"
+      ? (payload["sandbox"] as string)
+      : null;
+  if (sandbox !== null) text += ` · sandbox ${sandbox}`;
+  const approval =
+    typeof payload["approval"] === "string"
+      ? (payload["approval"] as string)
+      : null;
+  if (approval !== null) text += ` · approval ${approval}`;
+  return text;
+}
+
+function numberField(payload: JsonObject, field: string): number | null {
+  const value = payload[field];
+  return typeof value === "number" ? value : null;
 }

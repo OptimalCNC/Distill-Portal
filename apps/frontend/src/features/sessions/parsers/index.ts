@@ -82,6 +82,7 @@ export type {
   BlockKind,
   Message,
   MessageKind,
+  MetaCategory,
   ParsedSession,
   ParserOutput,
   ParseWarning,

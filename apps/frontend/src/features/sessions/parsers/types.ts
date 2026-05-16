@@ -24,8 +24,20 @@ import type { Tool } from "../../../lib/contracts";
  * - `boundary`: chapter-break marker (Codex second `session_meta` →
  *   `session_resumed`; future `compacted` markers). Carries `boundarySubtype`.
  * - `unknown`: fallthrough for malformed or genuinely unrecognised
- *   top-level / payload shapes. Expected metadata variants are explicit
- *   silent routes instead of warning-producing unknown rows.
+ *   top-level / payload shapes.
+ * - `metadata`: Phase 7d — session-level chrome the parser previously
+ *   silenced (Claude Code `agent-name`, `ai-title`, `attachment`,
+ *   `custom-title`, `file-history-snapshot`, `last-prompt`,
+ *   `permission-mode`, `queue-operation`; Codex `event_msg.token_count`,
+ *   `turn_context`, `response_item.message role=user`,
+ *   `response_item.message role=assistant`). Messages with this kind
+ *   carry `metaCategory` (required) and, when `metaCategory === "echo"`,
+ *   `echoOf` (required). Rendered as the marginalia "hairline" / "echo"
+ *   register in `TranscriptView.tsx`.
+ *
+ * Amends Resolved Decision #2 of Phase 7c ("MessageKind is stable").
+ * User explicitly approved the extension in the Phase 7d design review
+ * round 2 — see `working/phase-7d/designs/design.md` §2.1.
  */
 export type MessageKind =
   | "user"
@@ -34,7 +46,38 @@ export type MessageKind =
   | "tool_result"
   | "system"
   | "unknown"
-  | "boundary";
+  | "boundary"
+  | "metadata";
+
+/**
+ * Phase 7d — sub-category for `kind === "metadata"` messages. Each value
+ * drives ONE visual recipe (label text, separator, value typography) in
+ * the renderHints layer and `TranscriptView.tsx`'s `<MetadataRow>`
+ * component.
+ *
+ * - `control`     — Claude Code `permission-mode`, `queue-operation`.
+ * - `telemetry`   — Codex `event_msg.token_count`.
+ * - `title`       — Claude Code `ai-title`, `custom-title`.
+ * - `attachment`  — Claude Code `attachment`, `file-history-snapshot`.
+ * - `agent`       — Claude Code `agent-name`.
+ * - `prompt`      — Claude Code `last-prompt`.
+ * - `context`     — Codex `turn_context`.
+ * - `echo`        — Codex `response_item.message role=user/assistant`
+ *                   (duplicate-anchor; renders as a single `↺` glyph row
+ *                   pointing at the canonical `event_msg.{user,agent}_message`
+ *                   line via `Message.echoOf`).
+ *
+ * Set on every Message with `kind === "metadata"`; absent on every other kind.
+ */
+export type MetaCategory =
+  | "control"
+  | "telemetry"
+  | "title"
+  | "attachment"
+  | "agent"
+  | "prompt"
+  | "context"
+  | "echo";
 
 /**
  * One typed message in the timeline. Multiple `Message` rows can share a
@@ -62,6 +105,25 @@ export type Message = {
   raw: string;
   /** Approximate UTF-8 byte size for oversize detection in `buildSkim`. */
   bytes: number;
+  /**
+   * Phase 7d — sub-category for `kind === "metadata"` messages. REQUIRED
+   * on every metadata-kind message. ABSENT on every other kind.
+   *
+   * Drives the per-row visual recipe in the renderHints layer and the
+   * `<MetadataRow>` component in `TranscriptView.tsx`.
+   */
+  metaCategory?: MetaCategory;
+  /**
+   * Phase 7d — back-pointer for `metaCategory === "echo"` messages
+   * (Codex `response_item.message role=user/assistant`). Identifies the
+   * canonical `event_msg.{user,agent}_message` line whose content this
+   * echo row duplicates. REQUIRED when `metaCategory === "echo"`;
+   * ABSENT on every other metaCategory.
+   *
+   * `lineOrdinal` is the 0-indexed JSONL line of the canonical row;
+   * `canonicalKind` discriminates the tooltip / aria-label copy.
+   */
+  echoOf?: { lineOrdinal: number; canonicalKind: "user" | "assistant" };
 };
 
 /**

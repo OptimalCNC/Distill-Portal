@@ -24,11 +24,24 @@
 
 import type {
   Message,
+  MetaCategory,
   ParseWarning,
   ParseWarningCategory,
   ParseWarningSeverity,
   ParserOutput,
 } from "./types";
+
+/**
+ * Max characters for inline display of a long string payload before
+ * truncation. The renderHints layer is the canonical site for the
+ * display string, but the parser emits `text` close to the eventual
+ * display so the render layer can use it as-is or refine further.
+ *
+ * Long strings (e.g. `last-prompt`) are truncated to 78 chars +
+ * U+2026 `…` per `working/phase-7d/designs/design.md` §3.4 truncation
+ * rule.
+ */
+const META_TEXT_MAX_CHARS = 78;
 
 type JsonValue =
   | string
@@ -428,9 +441,24 @@ export function parseClaudeCode(rawText: string): ParserOutput {
          * - docs/features/parser-event-support.md#claude-code-last-prompt
          * - docs/features/parser-event-support.md#claude-code-permission-mode
          * - docs/features/parser-event-support.md#claude-code-queue-operation
+         *
+         * Phase 7d: session-level chrome surfaces as `kind:"metadata"`
+         * Messages, rendered as marginalia hairlines per
+         * `working/phase-7d/designs/design.md` §3.2 + §3.4. The previous
+         * Phase 7b silent-skip decision is replaced (protected-path
+         * exception logged in `progress/phase-7d.progress.md`).
          */
-        // Phase 7b audit: session-level metadata/control records are expected
-        // Claude Code stream noise, not timeline messages or anomalies.
+        const { metaCategory, text } = formatClaudeCodeMetadata(topType, record);
+        messages.push({
+          lineOrdinal,
+          messageIndex: nextMessageIndex++,
+          timestamp,
+          kind: "metadata",
+          metaCategory,
+          text,
+          raw,
+          bytes: byteLength(raw),
+        });
         break;
       }
 
@@ -536,5 +564,129 @@ function stringifyTruncated(value: unknown): string {
   } catch {
     // Cyclic / non-serialisable — degrade gracefully.
     return "[unserialisable record]";
+  }
+}
+
+/**
+ * Truncate a string at `META_TEXT_MAX_CHARS` (78) and append U+2026
+ * `…` when the original exceeded the cap. Matches
+ * `working/phase-7d/designs/design.md` §3.4 truncation rule.
+ */
+function truncateMeta(value: string): string {
+  if (value.length <= META_TEXT_MAX_CHARS) return value;
+  return value.slice(0, META_TEXT_MAX_CHARS) + "…";
+}
+
+/**
+ * Phase 7d — compute the `metaCategory` and pre-formatted display
+ * string for one Claude Code metadata record. The renderHints layer
+ * may use this string verbatim, or refine it further (e.g. for the
+ * cluster summary), but the parser owns the data extraction so the
+ * render layer can stay schema-free.
+ *
+ * Per `working/phase-7d/designs/design.md` §3.4.
+ */
+function formatClaudeCodeMetadata(
+  topType: string,
+  record: JsonObject,
+): { metaCategory: MetaCategory; text: string } {
+  switch (topType) {
+    case "agent-name": {
+      const name =
+        typeof record["name"] === "string"
+          ? (record["name"] as string)
+          : "(unknown)";
+      return { metaCategory: "agent", text: `agent → ${name}` };
+    }
+    case "ai-title": {
+      const title =
+        typeof record["title"] === "string"
+          ? (record["title"] as string)
+          : "(empty)";
+      // Curly quotes per design §3.4.
+      return {
+        metaCategory: "title",
+        text: `auto title: “${truncateMeta(title)}”`,
+      };
+    }
+    case "custom-title": {
+      const title =
+        typeof record["customTitle"] === "string"
+          ? (record["customTitle"] as string)
+          : "(empty)";
+      return {
+        metaCategory: "title",
+        text: `custom title: “${truncateMeta(title)}”`,
+      };
+    }
+    case "attachment": {
+      const fileName =
+        typeof record["fileName"] === "string"
+          ? (record["fileName"] as string)
+          : "(unnamed)";
+      const mimeType =
+        typeof record["mimeType"] === "string"
+          ? (record["mimeType"] as string)
+          : "unknown";
+      return {
+        metaCategory: "attachment",
+        text: `attachment → ${fileName} (${mimeType})`,
+      };
+    }
+    case "file-history-snapshot": {
+      const filesArr = Array.isArray(record["files"]) ? record["files"] : [];
+      const paths = filesArr
+        .flatMap((f) => {
+          if (!isObject(f)) return [];
+          const p = f["path"];
+          return typeof p === "string" ? [p] : [];
+        })
+        .slice(0, 2);
+      const total = filesArr.length;
+      const trail = total > paths.length ? ", …" : "";
+      const list = paths.join(", ") + trail;
+      return {
+        metaCategory: "attachment",
+        text: `file snapshot → ${total} files: ${list}`,
+      };
+    }
+    case "last-prompt": {
+      const prompt =
+        typeof record["prompt"] === "string"
+          ? (record["prompt"] as string)
+          : "(empty)";
+      return {
+        metaCategory: "prompt",
+        text: `last prompt: “${truncateMeta(prompt)}”`,
+      };
+    }
+    case "permission-mode": {
+      const mode =
+        typeof record["permissionMode"] === "string"
+          ? (record["permissionMode"] as string)
+          : "(unknown)";
+      return {
+        metaCategory: "control",
+        text: `permission mode → ${mode}`,
+      };
+    }
+    case "queue-operation": {
+      const op =
+        typeof record["operation"] === "string"
+          ? (record["operation"] as string)
+          : "(unknown)";
+      const promptValue = record["prompt"];
+      if (typeof promptValue === "string" && promptValue.length > 0) {
+        return {
+          metaCategory: "control",
+          text: `queue → ${op}: “${truncateMeta(promptValue)}”`,
+        };
+      }
+      return { metaCategory: "control", text: `queue → ${op}` };
+    }
+    default: {
+      // Defensive — every caller site is one of the 8 cases above.
+      return { metaCategory: "control", text: topType };
+    }
   }
 }

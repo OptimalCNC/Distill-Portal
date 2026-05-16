@@ -1,0 +1,1202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Phase 7d — marginalia hairlines prototype</title>
+<style>
+/* ============================================================================
+ * Phase 7d — marginalia hairlines prototype (static, single-file design ref).
+ *
+ * Aesthetic: Archive-room (warm-paper light / deep-ink dark, sienna accent,
+ * hairline-over-shadow, Fraunces display, system-sans chrome). Locked in
+ * Phase 5; extended in Phase 7c. Phase 7d introduces the metadata hairline
+ * register as the quietest visual layer in the TranscriptView vocabulary.
+ *
+ * Token surface: mirrors `apps/frontend/src/styles/tokens.css` verbatim.
+ * Zero new tokens introduced. Every `var(--...)` resolves to an existing
+ * token. The hex `@supports` fallback block below is a strict subset of
+ * the 24-hex production fallback.
+ * ========================================================================== */
+
+/* ---------------------------------------------------------------------------
+ * SECTION 1 — Tokens (root + dark media + hex @supports fallback).
+ * Byte-equivalent to tokens.css + the Phase 7c prototype.
+ * ------------------------------------------------------------------------- */
+
+:root {
+  --color-surface: oklch(98% 0.01 70);
+  --color-surface-raised: oklch(96% 0.01 70);
+  --color-ink: oklch(20% 0.02 70);
+  --color-ink-muted: oklch(45% 0.02 70);
+  --color-border: oklch(85% 0.01 70);
+  --color-border-strong: oklch(65% 0.02 70);
+  --color-accent: oklch(55% 0.15 50);
+  --color-success: oklch(48% 0.13 155);
+  --color-warn: oklch(58% 0.15 60);
+  --color-error: oklch(52% 0.18 25);
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+
+  --font-display: "Fraunces", Charter, "Iowan Old Style", Georgia, serif;
+  --font-chrome: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI",
+    Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", SFMono-Regular,
+    Menlo, Consolas, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+
+  --leading-tight: 1.25;
+  --leading-comfortable: 1.55;
+  --measure: 70ch;
+
+  --motion-disclosure: 200ms;
+  --ease-in-out: cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-surface: oklch(15% 0.01 70);
+    --color-surface-raised: oklch(18% 0.01 70);
+    --color-ink: oklch(92% 0.01 70);
+    --color-ink-muted: oklch(70% 0.01 70);
+    --color-border: oklch(28% 0.01 70);
+    --color-border-strong: oklch(48% 0.02 70);
+    --color-accent: oklch(65% 0.15 50);
+    --color-success: oklch(64% 0.13 155);
+    --color-warn: oklch(72% 0.13 60);
+    --color-error: oklch(68% 0.16 25);
+  }
+}
+
+@supports not (color: oklch(0% 0 0)) {
+  :root {
+    --color-surface: #f8f9fb;
+    --color-surface-raised: #ffffff;
+    --color-ink: #14161a;
+    --color-ink-muted: #5a606b;
+    --color-border: #e3e5ea;
+    --color-border-strong: #8a909c;
+    --color-accent: #2864d4;
+    --color-success: #1f7a4a;
+    --color-warn: #b86b07;
+    --color-error: #b13838;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-surface: #151821;
+      --color-surface-raised: #1b1f2a;
+      --color-ink: #e8eaef;
+      --color-ink-muted: #9098a6;
+      --color-border: #262b36;
+      --color-border-strong: #5e6571;
+      --color-accent: #6da5ff;
+      --color-success: #5fb68a;
+      --color-warn: #e0a75a;
+      --color-error: #e57d7d;
+    }
+  }
+}
+
+.theme-light {
+  --color-surface: oklch(98% 0.01 70);
+  --color-surface-raised: oklch(96% 0.01 70);
+  --color-ink: oklch(20% 0.02 70);
+  --color-ink-muted: oklch(45% 0.02 70);
+  --color-border: oklch(85% 0.01 70);
+  --color-border-strong: oklch(65% 0.02 70);
+  --color-accent: oklch(55% 0.15 50);
+  --color-success: oklch(48% 0.13 155);
+  --color-warn: oklch(58% 0.15 60);
+  --color-error: oklch(52% 0.18 25);
+  color: var(--color-ink);
+  background: var(--color-surface);
+}
+.theme-dark {
+  --color-surface: oklch(15% 0.01 70);
+  --color-surface-raised: oklch(18% 0.01 70);
+  --color-ink: oklch(92% 0.01 70);
+  --color-ink-muted: oklch(70% 0.01 70);
+  --color-border: oklch(28% 0.01 70);
+  --color-border-strong: oklch(48% 0.02 70);
+  --color-accent: oklch(65% 0.15 50);
+  --color-success: oklch(64% 0.13 155);
+  --color-warn: oklch(72% 0.13 60);
+  --color-error: oklch(68% 0.16 25);
+  color: var(--color-ink);
+  background: var(--color-surface);
+}
+
+@supports not (color: oklch(0% 0 0)) {
+  .theme-light {
+    --color-surface: #f8f9fb;
+    --color-surface-raised: #ffffff;
+    --color-ink: #14161a;
+    --color-ink-muted: #5a606b;
+    --color-border: #e3e5ea;
+    --color-border-strong: #8a909c;
+    --color-accent: #2864d4;
+    --color-success: #1f7a4a;
+    --color-warn: #b86b07;
+    --color-error: #b13838;
+  }
+  .theme-dark {
+    --color-surface: #151821;
+    --color-surface-raised: #1b1f2a;
+    --color-ink: #e8eaef;
+    --color-ink-muted: #9098a6;
+    --color-border: #262b36;
+    --color-border-strong: #5e6571;
+    --color-accent: #6da5ff;
+    --color-success: #5fb68a;
+    --color-warn: #e0a75a;
+    --color-error: #e57d7d;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * SECTION 2 — Page chrome
+ * ------------------------------------------------------------------------- */
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-chrome);
+  font-size: var(--text-base);
+  line-height: var(--leading-comfortable);
+  color: var(--color-ink);
+  background: var(--color-surface);
+}
+
+.page {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6);
+}
+
+.page-head {
+  margin-bottom: var(--space-8);
+  padding-bottom: var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  line-height: 1.15;
+  margin: 0 0 var(--space-2);
+  letter-spacing: -0.01em;
+}
+
+.page-sub {
+  font-family: var(--font-chrome);
+  color: var(--color-ink-muted);
+  font-size: var(--text-sm);
+  margin: 0;
+  max-width: 70ch;
+}
+
+.theme-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
+  margin-bottom: var(--space-8);
+}
+
+.theme-col {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-6) var(--space-4);
+  min-height: 100px;
+}
+
+.theme-col-head {
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-ink-muted);
+  margin: 0 0 var(--space-3);
+}
+
+.section-head {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  margin: var(--space-8) 0 var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.section-note {
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+  margin: 0 0 var(--space-4);
+  max-width: 70ch;
+}
+
+/* ---------------------------------------------------------------------------
+ * SECTION 3 — Reference: existing message kinds (just enough to show the
+ * marginalia row sitting BETWEEN real messages for context).
+ * ------------------------------------------------------------------------- */
+
+.transcript {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.transcript > li {
+  margin: 0;
+}
+
+/* Stand-in user / assistant panel — minimal recipe. */
+.msg-panel {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+  line-height: var(--leading-comfortable);
+  color: var(--color-ink);
+}
+
+.msg-attribution {
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-ink-muted);
+  margin: 0 0 var(--space-2);
+}
+
+/* Stand-in lifecycle card — minimal recipe to show context. */
+.lifecycle-card {
+  position: relative;
+  margin: 0;
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.lifecycle-card::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 4px;
+  inset-block: var(--space-3);
+  inline-size: 2px;
+  background: var(--color-accent);
+  opacity: 0.55;
+  border-radius: 1px;
+}
+.lifecycle-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-ink-muted);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-2);
+}
+.lifecycle-head .tool-name {
+  font-family: var(--font-mono);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-ink);
+}
+.lifecycle-head .head-status {
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.status-dot {
+  display: inline-block;
+  inline-size: 10px;
+  block-size: 10px;
+  border-radius: 50%;
+  background: var(--color-ink-muted);
+}
+.status-dot[data-status="all-success"] { background: var(--color-success); }
+.status-dot[data-status="all-failed"]  { background: var(--color-error); }
+.status-dot[data-status="in-flight"]   {
+  background: transparent;
+  border: 1px solid var(--color-ink-muted);
+}
+.lifecycle-body {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink);
+}
+.lifecycle-body > div + div {
+  margin-top: var(--space-1);
+}
+.side-label {
+  font-family: var(--font-chrome);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  margin-inline-end: var(--space-2);
+}
+
+/* ---------------------------------------------------------------------------
+ * SECTION 4 — THE NEW SURFACE: .msg-metadata + .msg-metadata-cluster
+ * ------------------------------------------------------------------------- */
+
+.msg-metadata {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  max-inline-size: var(--measure);
+
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  padding-inline-start: var(--space-6);
+  border: 0;
+  background: transparent;
+
+  color: var(--color-ink-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-tight);
+}
+
+.meta-prefix {
+  color: var(--color-ink-muted);
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  line-height: 1;
+}
+
+.meta-label {
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+.meta-sep {
+  color: var(--color-ink-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.meta-value {
+  color: var(--color-ink-muted);
+  font-size: var(--text-xs);
+}
+
+/* Per-category value typography. */
+.msg-metadata[data-category="telemetry"] .meta-value,
+.msg-metadata[data-category="control"] .meta-value,
+.msg-metadata[data-category="context"] .meta-value,
+.msg-metadata[data-category="attachment"] .meta-value,
+.msg-metadata[data-category="agent"] .meta-value {
+  font-family: var(--font-mono);
+}
+.msg-metadata[data-category="title"] .meta-value,
+.msg-metadata[data-category="prompt"] .meta-value {
+  font-family: var(--font-display);
+  font-style: italic;
+}
+
+/* Optional inline italic suffix for queue-operation prompts. */
+.meta-value-suffix {
+  font-family: var(--font-display);
+  font-style: italic;
+  color: var(--color-ink-muted);
+  margin-inline-start: var(--space-1);
+}
+
+/* Echo variant — duplicate-anchor rows. Single glyph, no label, no value.
+ * Quieter than the hairline; reads as a presence marker. Tooltip resolves
+ * the back-pointer to the canonical event_msg row. */
+.msg-metadata-echo {
+  /* Same outer footprint as a hairline. Reuses .msg-metadata indent and
+   * ink color. The body is a single glyph, so the row collapses to ~30 px
+   * wide; the rest of the column stays empty. */
+  gap: 0;
+}
+
+.meta-prefix-echo {
+  font-family: var(--font-chrome);     /* Looks lighter than display. */
+  font-size: var(--text-xs);           /* Half the size of the hairline middle-dot. */
+  color: var(--color-ink-muted);
+  /* No additional opacity / weight overrides — same token as hairlines.
+   * The quietness comes from glyph size + missing label, not from a
+   * dimmer ink. WCAG measurement uses the same ink-muted/surface pair. */
+}
+
+/* --- Cluster disclosure --- */
+.msg-metadata-cluster {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.msg-metadata-cluster > summary {
+  list-style: revert;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  padding-inline-start: var(--space-6);
+  color: var(--color-ink-muted);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.msg-metadata-cluster > summary:focus-visible {
+  outline-offset: 2px;
+}
+
+.meta-cluster-count {
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+  color: var(--color-ink-muted);
+}
+
+.meta-cluster-body {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.meta-cluster-body > li { margin: 0; }
+.meta-cluster-body .msg-metadata {
+  padding-inline-start: calc(var(--space-6) + var(--space-3));
+}
+
+/* Global disclosure motion (Phase 5 inherited). */
+@supports (interpolate-size: allow-keywords) {
+  :root { interpolate-size: allow-keywords; }
+}
+details > *:not(summary) {
+  transition: block-size var(--motion-disclosure) var(--ease-in-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * SECTION 5 — Variant grid helper
+ * ------------------------------------------------------------------------- */
+
+.variant-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+.variant-callout {
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-ink-muted);
+  padding-block-end: var(--space-1);
+}
+
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="page-head">
+    <h1 class="page-title">Phase 7d — marginalia hairlines (round 2)</h1>
+    <p class="page-sub">
+      All 12 currently-silenced parser events surface. Ten render as
+      quiet single-line strips in the marginalia <em>hairline</em>
+      register: indented ink-muted text with a Fraunces middle-dot
+      prefix. Two duplicate-anchor Codex variants render in the even
+      quieter <em>echo</em> register: a single <code>&#x21BA;</code>
+      glyph with a tooltip back-pointer to the canonical row.
+      Adjacent runs of 2+ collapse into a native
+      <code>&lt;details&gt;</code> disclosure. Side-by-side light +
+      dark; every <code>var(--…)</code> resolves to an existing token.
+    </p>
+  </header>
+
+  <!-- ====================================================================
+       SECTION A — Per-category single-row variants
+       ==================================================================== -->
+  <h2 class="section-head">A. Per-category single-row variants</h2>
+  <p class="section-note">
+    All 12 surfacing variants — 10 hairline categories (control, telemetry,
+    title, attachment, agent, prompt, context) + 2 echo rows
+    (duplicate-anchor <code>response_item.message</code> Codex variants).
+    Two columns: light + dark. Echo rows sit at the bottom; their tooltip
+    resolves the back-pointer to the canonical <code>event_msg</code> row.
+  </p>
+
+  <div class="theme-pair">
+
+    <!-- Light column -->
+    <div class="theme-col theme-light">
+      <p class="theme-col-head">Light · warm-paper</p>
+      <ol class="transcript">
+        <!-- A.1 control · permission-mode -->
+        <li>
+          <p class="msg-metadata" data-category="control"
+             title='{"type":"permission-mode","permissionMode":"default"}'
+             aria-label="Metadata: permission mode set to default">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">permission mode</span>
+            <span class="meta-sep" aria-hidden="true">→</span>
+            <span class="meta-value">default</span>
+          </p>
+        </li>
+        <!-- A.2 control · queue-operation (with prompt) -->
+        <li>
+          <p class="msg-metadata" data-category="control"
+             title='{"type":"queue-operation","operation":"enqueue","prompt":"Review the matrix."}'
+             aria-label="Metadata: queue enqueue with prompt 'Review the matrix.'">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">queue</span>
+            <span class="meta-sep" aria-hidden="true">→</span>
+            <span class="meta-value">enqueue</span>
+            <span class="meta-value-suffix">: &ldquo;Review the matrix.&rdquo;</span>
+          </p>
+        </li>
+        <!-- A.3 telemetry · token_count -->
+        <li>
+          <p class="msg-metadata" data-category="telemetry"
+             title='{"type":"event_msg","payload":{"type":"token_count","input_tokens":127,"output_tokens":245}}'
+             aria-label="Metadata: 127 input tokens, 245 output tokens">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">tokens</span>
+            <span class="meta-sep" aria-hidden="true">:</span>
+            <span class="meta-value">127&#x2193; 245&#x2191;</span>
+          </p>
+        </li>
+        <!-- A.4 telemetry · token_count w/ cached -->
+        <li>
+          <p class="msg-metadata" data-category="telemetry"
+             title='{"type":"event_msg","payload":{"type":"token_count","input_tokens":127,"output_tokens":245,"cached_input_tokens":88}}'
+             aria-label="Metadata: 127 input tokens, 245 output tokens, 88 cached">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">tokens</span>
+            <span class="meta-sep" aria-hidden="true">:</span>
+            <span class="meta-value">127&#x2193; 245&#x2191; 88&#x2248;</span>
+          </p>
+        </li>
+        <!-- A.5 title · ai-title -->
+        <li>
+          <p class="msg-metadata" data-category="title"
+             title='{"type":"ai-title","title":"Investigate parser matrix"}'
+             aria-label="Metadata: auto title — Investigate parser matrix">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">auto title</span>
+            <span class="meta-sep" aria-hidden="true">:</span>
+            <span class="meta-value">&ldquo;Investigate parser matrix&rdquo;</span>
+          </p>
+        </li>
+        <!-- A.6 title · custom-title -->
+        <li>
+          <p class="msg-metadata" data-category="title"
+             title='{"type":"custom-title","customTitle":"phase-7a-event-support"}'
+             aria-label="Metadata: custom title — phase-7a-event-support">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">custom title</span>
+            <span class="meta-sep" aria-hidden="true">:</span>
+            <span class="meta-value">&ldquo;phase-7a-event-support&rdquo;</span>
+          </p>
+        </li>
+        <!-- A.7 attachment -->
+        <li>
+          <p class="msg-metadata" data-category="attachment"
+             title='{"type":"attachment","fileName":"notes.txt","mimeType":"text/plain"}'
+             aria-label="Metadata: attachment notes.txt, mime type text/plain">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">attachment</span>
+            <span class="meta-sep" aria-hidden="true">→</span>
+            <span class="meta-value">notes.txt (text/plain)</span>
+          </p>
+        </li>
+        <!-- A.8 file-history-snapshot -->
+        <li>
+          <p class="msg-metadata" data-category="attachment"
+             title='{"type":"file-history-snapshot","files":[{"path":"README.md","status":"modified"},{"path":"docs/dev-commands.md","status":"modified"},{"path":"src/api.ts","status":"deleted"}]}'
+             aria-label="Metadata: file snapshot of 3 files, including README.md and docs/dev-commands.md">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">file snapshot</span>
+            <span class="meta-sep" aria-hidden="true">→</span>
+            <span class="meta-value">3 files: README.md, docs/dev-commands.md, &hellip;</span>
+          </p>
+        </li>
+        <!-- A.9 agent · agent-name -->
+        <li>
+          <p class="msg-metadata" data-category="agent"
+             title='{"type":"agent-name","name":"phase-agent"}'
+             aria-label="Metadata: agent name phase-agent">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">agent</span>
+            <span class="meta-sep" aria-hidden="true">→</span>
+            <span class="meta-value">phase-agent</span>
+          </p>
+        </li>
+        <!-- A.10 prompt · last-prompt -->
+        <li>
+          <p class="msg-metadata" data-category="prompt"
+             title='{"type":"last-prompt","prompt":"Deliver phase 7a."}'
+             aria-label="Metadata: last prompt — Deliver phase 7a.">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">last prompt</span>
+            <span class="meta-sep" aria-hidden="true">:</span>
+            <span class="meta-value">&ldquo;Deliver phase 7a.&rdquo;</span>
+          </p>
+        </li>
+        <!-- A.11 context · turn_context -->
+        <li>
+          <p class="msg-metadata" data-category="context"
+             title='{"type":"turn_context","payload":{"cwd":"/workspace/distill-portal","current_date":"2026-05-16"}}'
+             aria-label="Metadata: turn context, cwd /workspace/distill-portal">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">turn context</span>
+            <span class="meta-sep" aria-hidden="true">→</span>
+            <span class="meta-value">cwd /workspace/distill-portal</span>
+          </p>
+        </li>
+        <!-- A.12 context · turn_context (rich, with approval) -->
+        <li>
+          <p class="msg-metadata" data-category="context"
+             title='{"type":"turn_context","payload":{"cwd":"/workspace/distill-portal","model":"gpt-5","sandbox":"read-only","approval":"on-request"}}'
+             aria-label="Metadata: turn context, cwd /workspace/distill-portal, model gpt-5, sandbox read-only, approval on-request">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">turn context</span>
+            <span class="meta-sep" aria-hidden="true">→</span>
+            <span class="meta-value">cwd /workspace/distill-portal &middot; model gpt-5 &middot; sandbox read-only &middot; approval on-request</span>
+          </p>
+        </li>
+        <!-- A.13 echo · response_item.message role="user" -->
+        <li>
+          <p class="msg-metadata msg-metadata-echo" data-category="echo"
+             title="duplicate of event_msg.user_message at line 42"
+             aria-label="Echo: duplicate of canonical user message at line 42">
+            <span class="meta-prefix meta-prefix-echo" aria-hidden="true">&#x21BA;</span>
+          </p>
+        </li>
+        <!-- A.14 echo · response_item.message role="assistant" -->
+        <li>
+          <p class="msg-metadata msg-metadata-echo" data-category="echo"
+             title="duplicate of event_msg.agent_message at line 87"
+             aria-label="Echo: duplicate of canonical assistant message at line 87">
+            <span class="meta-prefix meta-prefix-echo" aria-hidden="true">&#x21BA;</span>
+          </p>
+        </li>
+      </ol>
+    </div>
+
+    <!-- Dark column (same DOM as light) -->
+    <div class="theme-col theme-dark">
+      <p class="theme-col-head">Dark · deep-ink</p>
+      <ol class="transcript">
+        <li>
+          <p class="msg-metadata" data-category="control">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">permission mode</span>
+            <span class="meta-sep" aria-hidden="true">→</span>
+            <span class="meta-value">default</span>
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata" data-category="control">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">queue</span>
+            <span class="meta-sep" aria-hidden="true">→</span>
+            <span class="meta-value">enqueue</span>
+            <span class="meta-value-suffix">: &ldquo;Review the matrix.&rdquo;</span>
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata" data-category="telemetry">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">tokens</span>
+            <span class="meta-sep" aria-hidden="true">:</span>
+            <span class="meta-value">127&#x2193; 245&#x2191;</span>
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata" data-category="telemetry">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">tokens</span>
+            <span class="meta-sep" aria-hidden="true">:</span>
+            <span class="meta-value">127&#x2193; 245&#x2191; 88&#x2248;</span>
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata" data-category="title">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">auto title</span>
+            <span class="meta-sep" aria-hidden="true">:</span>
+            <span class="meta-value">&ldquo;Investigate parser matrix&rdquo;</span>
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata" data-category="title">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">custom title</span>
+            <span class="meta-sep" aria-hidden="true">:</span>
+            <span class="meta-value">&ldquo;phase-7a-event-support&rdquo;</span>
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata" data-category="attachment">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">attachment</span>
+            <span class="meta-sep" aria-hidden="true">→</span>
+            <span class="meta-value">notes.txt (text/plain)</span>
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata" data-category="attachment">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">file snapshot</span>
+            <span class="meta-sep" aria-hidden="true">→</span>
+            <span class="meta-value">3 files: README.md, docs/dev-commands.md, &hellip;</span>
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata" data-category="agent">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">agent</span>
+            <span class="meta-sep" aria-hidden="true">→</span>
+            <span class="meta-value">phase-agent</span>
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata" data-category="prompt">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">last prompt</span>
+            <span class="meta-sep" aria-hidden="true">:</span>
+            <span class="meta-value">&ldquo;Deliver phase 7a.&rdquo;</span>
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata" data-category="context">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">turn context</span>
+            <span class="meta-sep" aria-hidden="true">→</span>
+            <span class="meta-value">cwd /workspace/distill-portal</span>
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata" data-category="context">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">turn context</span>
+            <span class="meta-sep" aria-hidden="true">→</span>
+            <span class="meta-value">cwd /workspace/distill-portal &middot; model gpt-5 &middot; sandbox read-only &middot; approval on-request</span>
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata msg-metadata-echo" data-category="echo"
+             title="duplicate of event_msg.user_message at line 42"
+             aria-label="Echo: duplicate of canonical user message at line 42">
+            <span class="meta-prefix meta-prefix-echo" aria-hidden="true">&#x21BA;</span>
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata msg-metadata-echo" data-category="echo"
+             title="duplicate of event_msg.agent_message at line 87"
+             aria-label="Echo: duplicate of canonical assistant message at line 87">
+            <span class="meta-prefix meta-prefix-echo" aria-hidden="true">&#x21BA;</span>
+          </p>
+        </li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       SECTION B — Cluster: collapsed + expanded
+       ==================================================================== -->
+  <h2 class="section-head">B. Adjacent-collapse — cluster disclosure (N &ge; 2)</h2>
+  <p class="section-note">
+    Adjacent runs of <strong>2 or more</strong> metadata rows collapse
+    into a single <code>&lt;details&gt;</code> labelled "N metadata events".
+    Threshold matches Phase 7c polish-r2's lowered <code>GROUP_THRESHOLD</code>.
+    The collapsed state below shows the typical
+    turn-boundary case (<code>permission-mode</code> +
+    <code>last-prompt</code>, N=2). The expanded variant shows the same
+    disclosure open. A mixed-register cluster (hairline + echo) follows
+    underneath to demonstrate that echoes participate in clustering on
+    the same threshold.
+  </p>
+
+  <div class="theme-pair">
+    <div class="theme-col theme-light">
+      <p class="theme-col-head">Light · cluster collapsed (N=2, hairline-only)</p>
+      <ol class="transcript">
+        <li>
+          <details class="msg-metadata-cluster">
+            <summary aria-label="2 metadata events, click to expand">
+              <span class="meta-prefix" aria-hidden="true">·</span>
+              <span class="meta-cluster-count">2 metadata events</span>
+            </summary>
+            <ol class="meta-cluster-body" role="list">
+              <li>
+                <p class="msg-metadata" data-category="control">
+                  <span class="meta-prefix" aria-hidden="true">·</span>
+                  <span class="meta-label">permission mode</span>
+                  <span class="meta-sep" aria-hidden="true">→</span>
+                  <span class="meta-value">default</span>
+                </p>
+              </li>
+              <li>
+                <p class="msg-metadata" data-category="prompt">
+                  <span class="meta-prefix" aria-hidden="true">·</span>
+                  <span class="meta-label">last prompt</span>
+                  <span class="meta-sep" aria-hidden="true">:</span>
+                  <span class="meta-value">&ldquo;Deliver phase 7a.&rdquo;</span>
+                </p>
+              </li>
+            </ol>
+          </details>
+        </li>
+      </ol>
+    </div>
+
+    <div class="theme-col theme-dark">
+      <p class="theme-col-head">Dark · cluster expanded (N=2, hairline-only)</p>
+      <ol class="transcript">
+        <li>
+          <details class="msg-metadata-cluster" open>
+            <summary aria-label="2 metadata events, click to expand">
+              <span class="meta-prefix" aria-hidden="true">·</span>
+              <span class="meta-cluster-count">2 metadata events</span>
+            </summary>
+            <ol class="meta-cluster-body" role="list">
+              <li>
+                <p class="msg-metadata" data-category="control">
+                  <span class="meta-prefix" aria-hidden="true">·</span>
+                  <span class="meta-label">permission mode</span>
+                  <span class="meta-sep" aria-hidden="true">→</span>
+                  <span class="meta-value">default</span>
+                </p>
+              </li>
+              <li>
+                <p class="msg-metadata" data-category="prompt">
+                  <span class="meta-prefix" aria-hidden="true">·</span>
+                  <span class="meta-label">last prompt</span>
+                  <span class="meta-sep" aria-hidden="true">:</span>
+                  <span class="meta-value">&ldquo;Deliver phase 7a.&rdquo;</span>
+                </p>
+              </li>
+            </ol>
+          </details>
+        </li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="theme-pair">
+    <div class="theme-col theme-light">
+      <p class="theme-col-head">Light · mixed cluster (hairline + echo, N=2, expanded)</p>
+      <ol class="transcript">
+        <li>
+          <details class="msg-metadata-cluster" open>
+            <summary aria-label="2 metadata events, click to expand">
+              <span class="meta-prefix" aria-hidden="true">·</span>
+              <span class="meta-cluster-count">2 metadata events</span>
+            </summary>
+            <ol class="meta-cluster-body" role="list">
+              <li>
+                <p class="msg-metadata" data-category="telemetry">
+                  <span class="meta-prefix" aria-hidden="true">·</span>
+                  <span class="meta-label">tokens</span>
+                  <span class="meta-sep" aria-hidden="true">:</span>
+                  <span class="meta-value">127&#x2193; 245&#x2191;</span>
+                </p>
+              </li>
+              <li>
+                <p class="msg-metadata msg-metadata-echo" data-category="echo"
+                   title="duplicate of event_msg.agent_message at line 87">
+                  <span class="meta-prefix meta-prefix-echo" aria-hidden="true">&#x21BA;</span>
+                </p>
+              </li>
+            </ol>
+          </details>
+        </li>
+      </ol>
+    </div>
+
+    <div class="theme-col theme-dark">
+      <p class="theme-col-head">Dark · echo-only cluster (N=2, expanded)</p>
+      <ol class="transcript">
+        <li>
+          <details class="msg-metadata-cluster" open>
+            <summary aria-label="2 metadata events, click to expand">
+              <span class="meta-prefix" aria-hidden="true">·</span>
+              <span class="meta-cluster-count">2 metadata events</span>
+            </summary>
+            <ol class="meta-cluster-body" role="list">
+              <li>
+                <p class="msg-metadata msg-metadata-echo" data-category="echo"
+                   title="duplicate of event_msg.user_message at line 42">
+                  <span class="meta-prefix meta-prefix-echo" aria-hidden="true">&#x21BA;</span>
+                </p>
+              </li>
+              <li>
+                <p class="msg-metadata msg-metadata-echo" data-category="echo"
+                   title="duplicate of event_msg.agent_message at line 87">
+                  <span class="meta-prefix meta-prefix-echo" aria-hidden="true">&#x21BA;</span>
+                </p>
+              </li>
+            </ol>
+          </details>
+        </li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       SECTION C — In-context: marginalia sitting between real messages
+       ==================================================================== -->
+  <h2 class="section-head">C. In-context — marginalia between real messages</h2>
+  <p class="section-note">
+    The point of the marginalia register: a metadata row sits in the
+    temporal flow without competing with body content. Below: a user
+    message, a permission-mode metadata row, a tool lifecycle card, two
+    telemetry rows below it, and a follow-up assistant message.
+  </p>
+
+  <div class="theme-pair">
+
+    <div class="theme-col theme-light">
+      <p class="theme-col-head">Light · in-context</p>
+      <ol class="transcript">
+        <li>
+          <p class="msg-panel">
+            <span class="msg-attribution">User &middot; 5 min ago</span>
+            Refactor the dark-mode block and rerun the WCAG suite.
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata" data-category="control">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">permission mode</span>
+            <span class="meta-sep" aria-hidden="true">→</span>
+            <span class="meta-value">default</span>
+          </p>
+        </li>
+        <li>
+          <article class="lifecycle-card">
+            <header class="lifecycle-head">
+              <span>Tool</span>
+              <span aria-hidden="true">&middot;</span>
+              <span class="tool-name">Read</span>
+              <span aria-hidden="true">&middot;</span>
+              <span>3 min ago</span>
+              <span class="head-status">
+                <span class="status-dot" data-status="all-success" aria-hidden="true"></span>
+                succeeded
+              </span>
+            </header>
+            <div class="lifecycle-body">
+              <div><span class="side-label">Arguments</span>{ "file_path": "&hellip;/tokens.css" }</div>
+              <div><span class="side-label">Result</span>read 4.1 KB</div>
+            </div>
+          </article>
+        </li>
+        <li>
+          <p class="msg-metadata" data-category="telemetry">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">tokens</span>
+            <span class="meta-sep" aria-hidden="true">:</span>
+            <span class="meta-value">127&#x2193; 245&#x2191;</span>
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata" data-category="context">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">turn context</span>
+            <span class="meta-sep" aria-hidden="true">→</span>
+            <span class="meta-value">cwd /workspace/distill-portal &middot; model gpt-5</span>
+          </p>
+        </li>
+        <li>
+          <p class="msg-panel">
+            <span class="msg-attribution">Assistant &middot; 2 min ago</span>
+            Done. Dark block re-derived and the WCAG run reports zero drift.
+          </p>
+        </li>
+      </ol>
+    </div>
+
+    <div class="theme-col theme-dark">
+      <p class="theme-col-head">Dark · in-context</p>
+      <ol class="transcript">
+        <li>
+          <p class="msg-panel">
+            <span class="msg-attribution">User &middot; 5 min ago</span>
+            Refactor the dark-mode block and rerun the WCAG suite.
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata" data-category="control">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">permission mode</span>
+            <span class="meta-sep" aria-hidden="true">→</span>
+            <span class="meta-value">default</span>
+          </p>
+        </li>
+        <li>
+          <article class="lifecycle-card">
+            <header class="lifecycle-head">
+              <span>Tool</span>
+              <span aria-hidden="true">&middot;</span>
+              <span class="tool-name">Read</span>
+              <span aria-hidden="true">&middot;</span>
+              <span>3 min ago</span>
+              <span class="head-status">
+                <span class="status-dot" data-status="all-success" aria-hidden="true"></span>
+                succeeded
+              </span>
+            </header>
+            <div class="lifecycle-body">
+              <div><span class="side-label">Arguments</span>{ "file_path": "&hellip;/tokens.css" }</div>
+              <div><span class="side-label">Result</span>read 4.1 KB</div>
+            </div>
+          </article>
+        </li>
+        <li>
+          <p class="msg-metadata" data-category="telemetry">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">tokens</span>
+            <span class="meta-sep" aria-hidden="true">:</span>
+            <span class="meta-value">127&#x2193; 245&#x2191;</span>
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata" data-category="context">
+            <span class="meta-prefix" aria-hidden="true">·</span>
+            <span class="meta-label">turn context</span>
+            <span class="meta-sep" aria-hidden="true">→</span>
+            <span class="meta-value">cwd /workspace/distill-portal &middot; model gpt-5</span>
+          </p>
+        </li>
+        <li>
+          <p class="msg-panel">
+            <span class="msg-attribution">Assistant &middot; 2 min ago</span>
+            Done. Dark block re-derived and the WCAG run reports zero drift.
+          </p>
+        </li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       SECTION D — Echo register policy
+       ==================================================================== -->
+  <h2 class="section-head">D. Echo register &mdash; duplicate-anchor treatment</h2>
+  <p class="section-note">
+    Round 2 update: all 12 silenced events surface. The 2 Codex
+    <code>response_item.message</code> variants render in the <em>echo</em>
+    register &mdash; a single <code>&#x21BA;</code> glyph in the marginalia
+    gutter, no label, no value. The hover tooltip resolves the back-pointer
+    to the canonical <code>event_msg</code> row. This honors the "no event
+    hidden" rule without duplicating body content.
+  </p>
+
+  <div class="theme-pair">
+    <div class="theme-col theme-light">
+      <p class="theme-col-head">Light · in-context (user message + echo + assistant message + echo)</p>
+      <ol class="transcript">
+        <li>
+          <p class="msg-panel">
+            <span class="msg-attribution">User &middot; 5 min ago</span>
+            Refactor the dark-mode block and rerun the WCAG suite.
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata msg-metadata-echo" data-category="echo"
+             title="duplicate of event_msg.user_message at line 42"
+             aria-label="Echo: duplicate of canonical user message at line 42">
+            <span class="meta-prefix meta-prefix-echo" aria-hidden="true">&#x21BA;</span>
+          </p>
+        </li>
+        <li>
+          <p class="msg-panel">
+            <span class="msg-attribution">Assistant &middot; 2 min ago</span>
+            Done. Dark block re-derived and the WCAG run reports zero drift.
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata msg-metadata-echo" data-category="echo"
+             title="duplicate of event_msg.agent_message at line 87"
+             aria-label="Echo: duplicate of canonical assistant message at line 87">
+            <span class="meta-prefix meta-prefix-echo" aria-hidden="true">&#x21BA;</span>
+          </p>
+        </li>
+      </ol>
+      <p style="font-family: var(--font-chrome); font-size: var(--text-xs); color: var(--color-ink-muted); margin-top: var(--space-4);">
+        Each echo row sits one indent in from the column edge, taking ~16 px
+        vertical and ~30 px horizontal &mdash; roughly half the footprint of
+        a hairline and 1/10 the horizontal footprint. Hover any glyph to see
+        the canonical line number.
+      </p>
+    </div>
+    <div class="theme-col theme-dark">
+      <p class="theme-col-head">Dark · in-context (same composition)</p>
+      <ol class="transcript">
+        <li>
+          <p class="msg-panel">
+            <span class="msg-attribution">User &middot; 5 min ago</span>
+            Refactor the dark-mode block and rerun the WCAG suite.
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata msg-metadata-echo" data-category="echo"
+             title="duplicate of event_msg.user_message at line 42">
+            <span class="meta-prefix meta-prefix-echo" aria-hidden="true">&#x21BA;</span>
+          </p>
+        </li>
+        <li>
+          <p class="msg-panel">
+            <span class="msg-attribution">Assistant &middot; 2 min ago</span>
+            Done. Dark block re-derived and the WCAG run reports zero drift.
+          </p>
+        </li>
+        <li>
+          <p class="msg-metadata msg-metadata-echo" data-category="echo"
+             title="duplicate of event_msg.agent_message at line 87">
+            <span class="meta-prefix meta-prefix-echo" aria-hidden="true">&#x21BA;</span>
+          </p>
+        </li>
+      </ol>
+      <p style="font-family: var(--font-chrome); font-size: var(--text-xs); color: var(--color-ink-muted); margin-top: var(--space-4);">
+        Same recipe in dark mode. <code>--color-ink-muted</code> swaps to
+        the dark-mode token (7.36:1 contrast on dark surface). No new
+        token introduced; WCAG pair P42 covers both.
+      </p>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
