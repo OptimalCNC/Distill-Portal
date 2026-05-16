@@ -72,29 +72,32 @@ Order: `7a → 7b → 7c → 9a → 9b → 8`. Phase 7 split into 7a (event supp
 - **UI/UX design gate**: yes — design loop produces `working/phase-7c/designs/` artifacts (design.md / prototype.html / wireframes / WCAG) before implementation.
 - **Bans**: Skim changes, parser rewrites for new tools, transcript-AST churn, search-within-transcript, inline diffing, message pinning, virtualisation (escape-hatch dep already reserved in Phase 5 but only fires per its documented Chromium reproducer).
 
-## Upcoming (spec not yet drafted)
-
-### 🗓 Phase 9a — Async Operations Ledger
+### 📐 Phase 9a — Async Operations Ledger
 - **Goal**: Replace synchronous Import / Rescan endpoints with persisted async operations. Eliminates the "frozen button" UX without committing to a generalized jobs queue.
-- **Architecture** (from codex review):
-  - Keep dedicated `POST /import` + `POST /rescan`; both return `202 Accepted` + operation id.
-  - New `operations` table with DB-enforced uniqueness via `(kind, canonical_params, input_version)`.
-  - One SSE channel for operation updates + polling fallback via `GET /operations/:id`.
-  - Cooperative cancellation with checkpoints between units; `cancel_requested` status.
-  - Persist across restarts; on boot, transition any `running` op to `interrupted` via heartbeat/lease.
-  - Status taxonomy: `queued / running / succeeded / failed / cancel_requested / cancelled / interrupted`.
+- **Architecture** (locked 2026-05-16):
+  - Hard cutover: `POST /import` + `POST /rescan` return `202 Accepted` + operation_id; old synchronous handlers removed.
+  - New `components/operations/` Rust crate. SQLite `operations` table with DB-enforced uniqueness via `(kind, canonical_params_hash, input_version)`.
+  - Polling-only in 9a (`GET /operations/:id` + `GET /operations`); SSE lands in 9b.
+  - Cooperative cancellation substrate in 9a: `DELETE /operations/:id` + `cancel_requested` status + worker checkpoints. Cancel UI is 9b.
+  - Persist across restarts; one-shot crash reconciliation transitions `running` → `interrupted` on boot.
+  - Status taxonomy: `queued / running / cancel_requested / succeeded / failed / cancelled / interrupted`.
+  - Idempotent re-submit: `succeeded` rows return existing id; `failed` / `cancelled` / `interrupted` rows allow re-submit.
 - **Treat import and rescan differently**: rescan is a workspace-singleton; import is a user-triggered batch.
-- **Bans**: DAGs, priorities, retries-as-feature, worker pools, pause/resume, distributed execution, tenancy, global event buses, standalone Jobs route.
+- **Minimal UX surface**: action-bar badge + last-completed pill backed by polling. Full Job Center is 9b.
+- **Bans**: SSE, Job Center UI, DAGs, priorities, retries-as-feature, worker pools, pause/resume, distributed execution, tenancy, global event buses, standalone Jobs route, heartbeats / leases.
 
-### 🗓 Phase 9b — Job Center UX + Generalization
+### 📐 Phase 9b — Job Center UX + Generalization
 - **Trigger**: lands right after 9a (per user decision 2026-05-15), not deferred to Phase 10.
 - **Goal**: Surface the operations ledger to users; generalize the substrate so future kinds (e.g. summarization in Phase 10+) plug in cleanly.
 - **Scope**:
-  - Right-anchored lightweight panel: top-right badge + slide-out tray showing active + recent operations.
-  - SSE-driven live progress + state transitions.
-  - Generalize the `operations` ledger into a typed dispatcher accepting arbitrary kinds.
-  - Shared substrate for idempotency + dedupe key handling.
-- **Defer beyond 9b**: full-history Operations route, advanced filters, batch cancel.
+  - Right-anchored slide-out tray with Active + Recent sections; per-op cards with cancel button + expand-to-inspect-result.
+  - SSE channel `GET /operations/events` with `Last-Event-ID` reconnect + polling fallback (via existing `GET /operations`).
+  - Trait-based dispatcher: `OperationHandler` trait; existing kinds (`import_sessions`, `rescan_sources`) refactor onto it; on-disk schema unchanged.
+  - ActionBar 9a-badge becomes the Job Center trigger button; 9a last-completed pill removed (info lives in tray's Recent section).
+- **UI/UX design gate**: yes — design loop produces `working/phase-9b/designs/` artifacts.
+- **Defer beyond 9b**: full-history Operations route, advanced filters, batch cancel, auto-retry, per-unit progress, persisted tray open-state.
+
+## Upcoming (spec not yet drafted)
 
 ### 🗓 Phase 8 — Raw View Polish
 - **Goal**: Make the Raw tab render JSONL nicely (currently plain text per line).
