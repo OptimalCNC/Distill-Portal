@@ -92,3 +92,7 @@
 ## 2026-05-18 [9b] heartbeat — still waiting (round 7)
 
 - Same state. ~3h30m since M1 Closed. No new `[9a]` entries. Classifier outage persists.
+
+## 2026-05-18 [9b] heartbeat — still waiting (round 8)
+
+- Same state. ~4h since M1 Closed. No new `[9a]` entries. Classifier outage persists.
