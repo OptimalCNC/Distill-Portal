@@ -31,3 +31,18 @@
 - Verification now passing: `cargo test -p distill-portal-backend --test http_api` (11), `cargo test -p distill-portal-e2e --test inspection_surface` (1), `cargo check --workspace`, `cargo test --workspace`, frontend `bunx tsc --noEmit`, `bun run test` (776), `bun run build`, `bun run test:e2e` (2), frontend hex count 24 and token count 83.
 - Browser e2e note: sandboxed local port binding failed for Vite; escalated `bun run test:e2e` was required. A stale backend on port 4000 was stopped before the successful rerun.
 - Pending before 9a declares M3 landed for 9b M2: reviewer closeout and commit of the HTTP/e2e test cutover.
+
+## 2026-05-18 Phase 9b M1 Designer Round Complete
+
+- M1 UI/UX designer subagent dispatched and returned. Artifacts committed at `0cd3975`: `working/phase-9b/designs/m1-job-center/{design.md, prototype.html, wcag.py, wireframes/*.txt}`. design.md is 38 KB and carries a 54-item implementation acceptance checklist; prototype.html is a self-contained live demo of every state + theme toggle.
+- Headline design choices (all within Phase 5 / 9a aesthetic; zero new tokens; 24-hex / 83-token invariant preserved):
+  - Tray: native `<dialog>` opened via `showModal()` (focus trap + Escape + top-layer free), right-anchored, 360 px wide, 200 ms slide-in on `--motion-disclosure`.
+  - Trigger button: replaces 9a's `.action-bar-operation-badge`; label "Job Center" with inline mono count chip (renders "9+" when count > 9; `aria-label` carries exact integer). 9a's `.action-bar-operation-pill` is REMOVED; info migrates to the Recent section.
+  - Per-op card: native `<details>` (Phase 5 M5/M6 precedent); monogram kind icon ("I"/"R", monospaced, no emoji); 7 status pills disambiguated by border style + dot shape so the design is colorblind-safe; expanded panel shows pretty-JSON `<pre>` with a documented Phase 8 upgrade slot.
+  - Cancel: one-click (cancel is recoverable per 9a's idempotency rule); pill flips to `cancel_requested` (warn fill + dashed border + "Cancelling…" caption) for immediate feedback; 409 from `DELETE` gracefully removes the button.
+  - All 7 Open Considerations from spec §"Open Considerations" resolved in design.md §7 with explicit rationale.
+- Open caveats forwarded to UI/UX reviewer:
+  - The `frontend-design:frontend-design` skill was unavailable during designer dispatch (classifier outage); designer wrote prototype.html directly against existing precedent. Skill output is NOT load-bearing in the artifact — every value traces back to `apps/frontend/src/styles/tokens.css` and `apps/frontend/src/components/ActionBar.css`.
+  - `python3 wcag.py` could not be executed during the designer dispatch (same classifier outage on Bash). `wireframes/wcag-output.txt` is a stub explaining expected output. The coordinator will retry once classifier is restored; the UI/UX reviewer is asked to call this out if classifier remains down at review time.
+- **Currently doing (9b):** dispatching UI/UX reviewer Claude subagent on the artifact. Iterate per coordinator-prompt.md until reviewer returns `approved` or `approved with nits`. Then M1 closes; M2 still blocked on 9a M3 landing on `main`.
+- **Awaiting from 9a (still):** same M2 unblock list. 9a's "implementation complete" + pending-test-cutover commit is the trigger.
