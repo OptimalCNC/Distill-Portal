@@ -31,9 +31,10 @@ use std::{
 };
 
 use distill_portal_ui_api_contracts::{
-    ImportReport, ImportSourceSessionsRequest, PersistedScanError, RescanReport,
-    SessionSyncStatus, SourceSessionView, StoredSessionRecord, StoredSessionView, TitleSource,
-    Tool,
+    ImportReport, ImportSourceSessionsRequest, Operation, OperationKind, OperationStatus,
+    OperationsListQuery, OperationsListResponse, PersistedScanError, RescanReport,
+    SessionSyncStatus, SourceSessionView, StoredSessionRecord, StoredSessionView,
+    SubmitOperationResponse, TitleSource, Tool,
 };
 use ts_rs::{Config, TS};
 
@@ -43,12 +44,18 @@ use ts_rs::{Config, TS};
 const EXPECTED_BINDING_FILES: &[&str] = &[
     "ImportReport.ts",
     "ImportSourceSessionsRequest.ts",
+    "Operation.ts",
+    "OperationKind.ts",
+    "OperationStatus.ts",
+    "OperationsListQuery.ts",
+    "OperationsListResponse.ts",
     "PersistedScanError.ts",
     "RescanReport.ts",
     "SessionSyncStatus.ts",
     "SourceSessionView.ts",
     "StoredSessionRecord.ts",
     "StoredSessionView.ts",
+    "SubmitOperationResponse.ts",
     "TitleSource.ts",
     "Tool.ts",
 ];
@@ -94,6 +101,12 @@ fn export_all_contracts(out_dir: &Path) {
     RescanReport::export_all(&config).expect("export RescanReport");
     ImportReport::export_all(&config).expect("export ImportReport");
     ImportSourceSessionsRequest::export_all(&config).expect("export ImportSourceSessionsRequest");
+    OperationKind::export_all(&config).expect("export OperationKind");
+    OperationStatus::export_all(&config).expect("export OperationStatus");
+    Operation::export_all(&config).expect("export Operation");
+    SubmitOperationResponse::export_all(&config).expect("export SubmitOperationResponse");
+    OperationsListResponse::export_all(&config).expect("export OperationsListResponse");
+    OperationsListQuery::export_all(&config).expect("export OperationsListQuery");
 }
 
 fn read_dir_file_names_sorted(dir: &Path) -> Vec<String> {
@@ -141,7 +154,8 @@ fn ts_bindings_match_checked_in_files() {
     // 2. The checked-in directory must contain exactly the same filenames.
     let checked_in_names = read_dir_file_names_sorted(&checked_in);
     assert_eq!(
-        checked_in_names, expected,
+        checked_in_names,
+        expected,
         "checked-in bindings directory {} is missing or has extra files; run \
          `cargo test -p distill-portal-ui-api-contracts --features ts-bindings \
          -- --ignored regenerate_ts_bindings` to refresh",
@@ -158,8 +172,7 @@ fn ts_bindings_match_checked_in_files() {
         let fresh_norm = fresh.replace("\r\n", "\n");
         let stored_norm = stored.replace("\r\n", "\n");
         assert_eq!(
-            stored_norm,
-            fresh_norm,
+            stored_norm, fresh_norm,
             "checked-in TS binding `{name}` is stale. Regenerate with \
              `cargo test -p distill-portal-ui-api-contracts --features \
              ts-bindings -- --ignored regenerate_ts_bindings`."

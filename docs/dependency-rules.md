@@ -7,6 +7,7 @@
   - `components/configuration`
   - `components/ingest-service`
   - `components/observability`
+  - `components/operations`
   - `components/raw-session-store`
   - `components/ui-api-contracts`
 - `apps/frontend` (Bun + Vite + React + TypeScript) may depend on:
@@ -17,6 +18,8 @@
   - `components/collector-runtime`
   - `components/raw-session-store`
 - `components/raw-session-store` may depend on:
+  - `components/ui-api-contracts`
+- `components/operations` may depend on:
   - `components/ui-api-contracts`
 - `components/collector-runtime` may depend on:
   - `components/ui-api-contracts`

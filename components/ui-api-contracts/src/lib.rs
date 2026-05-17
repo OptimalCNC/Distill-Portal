@@ -51,10 +51,7 @@ impl FromStr for Tool {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(
-    feature = "ts-bindings",
-    ts(export_to = "SessionSyncStatus.ts")
-)]
+#[cfg_attr(feature = "ts-bindings", ts(export_to = "SessionSyncStatus.ts"))]
 #[serde(rename_all = "snake_case")]
 pub enum SessionSyncStatus {
     NotStored,
@@ -151,10 +148,7 @@ impl SessionSyncStatus {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(
-    feature = "ts-bindings",
-    ts(export_to = "SourceSessionView.ts")
-)]
+#[cfg_attr(feature = "ts-bindings", ts(export_to = "SourceSessionView.ts"))]
 pub struct SourceSessionView {
     pub session_key: String,
     pub tool: Tool,
@@ -174,10 +168,7 @@ pub struct SourceSessionView {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(
-    feature = "ts-bindings",
-    ts(export_to = "StoredSessionRecord.ts")
-)]
+#[cfg_attr(feature = "ts-bindings", ts(export_to = "StoredSessionRecord.ts"))]
 pub struct StoredSessionRecord {
     pub session_uid: String,
     pub tool: Tool,
@@ -196,10 +187,7 @@ pub struct StoredSessionRecord {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(
-    feature = "ts-bindings",
-    ts(export_to = "StoredSessionView.ts")
-)]
+#[cfg_attr(feature = "ts-bindings", ts(export_to = "StoredSessionView.ts"))]
 pub struct StoredSessionView {
     #[serde(flatten)]
     #[cfg_attr(feature = "ts-bindings", ts(flatten))]
@@ -209,10 +197,7 @@ pub struct StoredSessionView {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
-#[cfg_attr(
-    feature = "ts-bindings",
-    ts(export_to = "PersistedScanError.ts")
-)]
+#[cfg_attr(feature = "ts-bindings", ts(export_to = "PersistedScanError.ts"))]
 pub struct PersistedScanError {
     pub error_id: String,
     pub tool: Tool,
@@ -254,6 +239,187 @@ pub struct ImportReport {
 )]
 pub struct ImportSourceSessionsRequest {
     pub session_keys: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export_to = "OperationKind.ts"))]
+#[serde(rename_all = "snake_case")]
+pub enum OperationKind {
+    ImportSessions,
+    RescanSources,
+}
+
+impl OperationKind {
+    pub const ALL: [Self; 2] = [Self::ImportSessions, Self::RescanSources];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ImportSessions => "import_sessions",
+            Self::RescanSources => "rescan_sources",
+        }
+    }
+}
+
+impl fmt::Display for OperationKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ParseOperationKindError;
+
+impl fmt::Display for ParseOperationKindError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("unknown operation kind")
+    }
+}
+
+impl std::error::Error for ParseOperationKindError {}
+
+impl FromStr for OperationKind {
+    type Err = ParseOperationKindError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "import_sessions" => Ok(Self::ImportSessions),
+            "rescan_sources" => Ok(Self::RescanSources),
+            _ => Err(ParseOperationKindError),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export_to = "OperationStatus.ts"))]
+#[serde(rename_all = "snake_case")]
+pub enum OperationStatus {
+    Queued,
+    Running,
+    CancelRequested,
+    Succeeded,
+    Failed,
+    Cancelled,
+    Interrupted,
+}
+
+impl OperationStatus {
+    pub const ALL: [Self; 7] = [
+        Self::Queued,
+        Self::Running,
+        Self::CancelRequested,
+        Self::Succeeded,
+        Self::Failed,
+        Self::Cancelled,
+        Self::Interrupted,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Queued => "queued",
+            Self::Running => "running",
+            Self::CancelRequested => "cancel_requested",
+            Self::Succeeded => "succeeded",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+            Self::Interrupted => "interrupted",
+        }
+    }
+
+    pub fn is_terminal(self) -> bool {
+        matches!(
+            self,
+            Self::Succeeded | Self::Failed | Self::Cancelled | Self::Interrupted
+        )
+    }
+
+    pub fn blocks_idempotency(self) -> bool {
+        matches!(
+            self,
+            Self::Queued | Self::Running | Self::CancelRequested | Self::Succeeded
+        )
+    }
+}
+
+impl fmt::Display for OperationStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ParseOperationStatusError;
+
+impl fmt::Display for ParseOperationStatusError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("unknown operation status")
+    }
+}
+
+impl std::error::Error for ParseOperationStatusError {}
+
+impl FromStr for OperationStatus {
+    type Err = ParseOperationStatusError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "queued" => Ok(Self::Queued),
+            "running" => Ok(Self::Running),
+            "cancel_requested" => Ok(Self::CancelRequested),
+            "succeeded" => Ok(Self::Succeeded),
+            "failed" => Ok(Self::Failed),
+            "cancelled" => Ok(Self::Cancelled),
+            "interrupted" => Ok(Self::Interrupted),
+            _ => Err(ParseOperationStatusError),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export_to = "Operation.ts"))]
+pub struct Operation {
+    pub id: String,
+    pub kind: OperationKind,
+    pub status: OperationStatus,
+    pub canonical_params_hash: String,
+    pub input_version: String,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "unknown"))]
+    pub params_json: serde_json::Value,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "unknown | null"))]
+    pub result_json: Option<serde_json::Value>,
+    #[cfg_attr(feature = "ts-bindings", ts(type = "unknown | null"))]
+    pub error_json: Option<serde_json::Value>,
+    pub submitted_at: String,
+    pub started_at: Option<String>,
+    pub finished_at: Option<String>,
+    pub cancel_requested_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export_to = "SubmitOperationResponse.ts"))]
+pub struct SubmitOperationResponse {
+    pub operation_id: String,
+    pub status: OperationStatus,
+    pub kind: OperationKind,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export_to = "OperationsListResponse.ts"))]
+pub struct OperationsListResponse {
+    pub operations: Vec<Operation>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export_to = "OperationsListQuery.ts"))]
+pub struct OperationsListQuery {
+    pub status: Option<Vec<OperationStatus>>,
+    pub kind: Option<Vec<OperationKind>>,
+    pub limit: Option<usize>,
 }
 
 pub fn source_key(tool: Tool, source_session_id: &str) -> String {

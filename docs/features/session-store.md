@@ -65,7 +65,9 @@ Current versions:
 - `GET /api/v1/sessions`
 - `GET /api/v1/sessions/{session_uid}`
 - `GET /api/v1/sessions/{session_uid}/raw`
-- `POST /api/v1/source-sessions/import`
+- `POST /api/v1/import` (submits an `import_sessions` operation)
+- `GET /api/v1/operations/{operation_id}`
+- `GET /api/v1/operations`
 
 ## Tests
 

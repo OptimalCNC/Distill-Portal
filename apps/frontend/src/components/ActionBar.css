@@ -41,8 +41,14 @@
 .action-bar-buttons {
   display: flex;
   flex-direction: row;
+  flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
+  min-width: 0;
+}
+
+.action-bar-buttons > * {
+  min-width: 0;
 }
 
 .action-bar button {
@@ -103,4 +109,51 @@
 
 .action-bar-clear:hover {
   color: var(--color-accent-hover);
+}
+
+.action-bar-operation-badge,
+.action-bar-operation-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.75rem;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.action-bar-operation-badge {
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-accent) 75%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-surface));
+}
+
+.action-bar-operation-pill {
+  max-width: min(28rem, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.action-bar-operation-pill.success {
+  background: color-mix(in srgb, var(--color-success) 12%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-success) 75%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-success) 35%, var(--color-surface));
+}
+
+.action-bar-operation-pill.error {
+  background: color-mix(in srgb, var(--color-error) 12%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-error) 75%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-error) 35%, var(--color-surface));
+}
+
+.action-bar-operation-pill.neutral {
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+}
+
+.action-bar-refresh {
+  white-space: nowrap;
 }

@@ -100,10 +100,16 @@ The harness binds the backend to `127.0.0.1:4000` because
 tests run serially (`workers: 1`) so the port is never double-bound.
 See `playwright.config.ts` for the full configuration.
 
+Long-running import/rescan requests now flow through the operations ledger.
+For backend debugging, inspect `GET /api/v1/operations?limit=50` and then
+`GET /api/v1/operations/{operation_id}` for terminal `result_json` or
+`error_json`.
+
 ## Targeted Tests
 
 ```bash
-cargo test -p distill-portal-collector-runtime --test parsers
+cargo test -p distill-portal-collector-runtime
+cargo test -p distill-portal-operations
 cargo test -p distill-portal-backend --test http_api
 cargo test -p distill-portal-e2e --test inspection_surface
 ```

@@ -55,6 +55,7 @@ import {
 import type { SessionRow } from "./features/sessions/types";
 import {
   IMPORT_PATH,
+  OPERATIONS_PATH,
   RESCAN_PATH,
   SCAN_ERRORS_PATH,
   SOURCE_SESSIONS_PATH,
@@ -62,6 +63,8 @@ import {
 } from "./lib/api";
 import type {
   ImportReport,
+  Operation,
+  OperationKind,
   PersistedScanError,
   RescanReport,
   SourceSessionView,
@@ -223,6 +226,59 @@ function jsonResponse(payload: unknown): Response {
   });
 }
 
+function operationJsonResponse(
+  url: string,
+  method = "GET",
+): Response | null {
+  if (method !== "GET") return null;
+  if (url === `${OPERATIONS_PATH}?limit=50`) {
+    return jsonResponse({ operations: [] });
+  }
+  if (url === `${OPERATIONS_PATH}/op-rescan`) {
+    return jsonResponse(
+      operationFixture("op-rescan", "rescan_sources", RESCAN_FIXTURE),
+    );
+  }
+  if (url === `${OPERATIONS_PATH}/op-import`) {
+    return jsonResponse(
+      operationFixture("op-import", "import_sessions", IMPORT_FIXTURE),
+    );
+  }
+  return null;
+}
+
+function submitOperationResponse(
+  operationId: string,
+  kind: OperationKind,
+) {
+  return {
+    operation_id: operationId,
+    status: "queued",
+    kind,
+  };
+}
+
+function operationFixture(
+  id: string,
+  kind: OperationKind,
+  result: unknown,
+): Operation {
+  return {
+    id,
+    kind,
+    status: "succeeded",
+    canonical_params_hash: "hash",
+    input_version: "input",
+    params_json: {},
+    result_json: result,
+    error_json: null,
+    submitted_at: "2026-04-22T00:00:00Z",
+    started_at: "2026-04-22T00:00:00Z",
+    finished_at: "2026-04-22T00:00:01Z",
+    cancel_requested_at: null,
+  };
+}
+
 test("mounted App fetches all three panels and renders the unified table", async () => {
   const fetchMock = mock(
     async (input: Request | string | URL): Promise<Response> => {
@@ -236,6 +292,8 @@ test("mounted App fetches all three panels and renders the unified table", async
               ? SCAN_ERRORS_FIXTURE
               : null;
       if (payload === null) {
+        const operationResponse = operationJsonResponse(url);
+        if (operationResponse !== null) return operationResponse;
         return new Response(`unexpected url ${url}`, { status: 404 });
       }
       return jsonResponse(payload);
@@ -249,13 +307,18 @@ test("mounted App fetches all three panels and renders the unified table", async
   await screen.findByText("claude_code:fixture-abc");
   await screen.findByText("Malformed NDJSON on line 3");
 
-  // (1) Three initial GETs to the three known paths.
-  expect(fetchMock).toHaveBeenCalledTimes(3);
+  // (1) Three panel GETs plus the M3 operation-summary GET.
+  expect(fetchMock).toHaveBeenCalledTimes(4);
   const requestedUrls = fetchMock.mock.calls
     .map((args) => urlOf(args[0] as Request | string | URL))
     .sort();
   expect(requestedUrls).toEqual(
-    [SOURCE_SESSIONS_PATH, STORED_SESSIONS_PATH, SCAN_ERRORS_PATH].sort(),
+    [
+      SOURCE_SESSIONS_PATH,
+      STORED_SESSIONS_PATH,
+      SCAN_ERRORS_PATH,
+      `${OPERATIONS_PATH}?limit=50`,
+    ].sort(),
   );
 
   // (2) Source-fixture session_key appears once (in the merged table —
@@ -310,7 +373,7 @@ test("clicking Rescan posts to the backend and refetches the three panels", asyn
       const url = urlOf(input);
       const method = init?.method ?? "GET";
       if (method === "POST" && url === RESCAN_PATH) {
-        return jsonResponse(RESCAN_FIXTURE);
+        return jsonResponse(submitOperationResponse("op-rescan", "rescan_sources"));
       }
       if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
         return jsonResponse(SOURCE_FIXTURE);
@@ -321,6 +384,8 @@ test("clicking Rescan posts to the backend and refetches the three panels", asyn
       if (method === "GET" && url === SCAN_ERRORS_PATH) {
         return jsonResponse(SCAN_ERRORS_FIXTURE);
       }
+      const operationResponse = operationJsonResponse(url, method);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected ${method} ${url}`, { status: 404 });
     },
   );
@@ -330,7 +395,7 @@ test("clicking Rescan posts to the backend and refetches the three panels", asyn
 
   // Wait for the three initial GETs to settle.
   await screen.findByText("claude_code:fixture-abc");
-  expect(fetchMock).toHaveBeenCalledTimes(3);
+  expect(fetchMock).toHaveBeenCalledTimes(4);
 
   // Locate the Rescan button; it should be enabled (no mutation pending).
   const rescanButton = container.querySelector<HTMLButtonElement>(
@@ -345,9 +410,11 @@ test("clicking Rescan posts to the backend and refetches the three panels", asyn
     rescanButton?.click();
   });
 
-  // Wait until total fetch count reaches 7 (3 initial + 1 POST + 3 refetch).
+  // Wait until total fetch count reaches 11 (4 initial + 1 POST +
+  // 1 summary refresh + 1 operation poll + 1 terminal summary refresh
+  // + 3 refetch).
   await waitFor(() => {
-    expect(fetchMock).toHaveBeenCalledTimes(7);
+    expect(fetchMock).toHaveBeenCalledTimes(11);
   });
 
   // Verify exactly one POST to the rescan endpoint.
@@ -392,7 +459,7 @@ test("selecting a source session and clicking Import posts the typed request", a
       const url = urlOf(input);
       const method = init?.method ?? "GET";
       if (method === "POST" && url === IMPORT_PATH) {
-        return jsonResponse(IMPORT_FIXTURE);
+        return jsonResponse(submitOperationResponse("op-import", "import_sessions"));
       }
       if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
         return jsonResponse(IMPORT_SOURCE_FIXTURE);
@@ -403,6 +470,8 @@ test("selecting a source session and clicking Import posts the typed request", a
       if (method === "GET" && url === SCAN_ERRORS_PATH) {
         return jsonResponse(SCAN_ERRORS_FIXTURE);
       }
+      const operationResponse = operationJsonResponse(url, method);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected ${method} ${url}`, { status: 404 });
     },
   );
@@ -412,7 +481,7 @@ test("selecting a source session and clicking Import posts the typed request", a
 
   // Wait for initial panels to settle.
   await screen.findByText("claude_code:selected-key-1");
-  expect(fetchMock).toHaveBeenCalledTimes(3);
+  expect(fetchMock).toHaveBeenCalledTimes(4);
 
   // Find the per-row checkbox for the first source session and click it.
   const rowCheckbox = container.querySelector<HTMLInputElement>(
@@ -436,9 +505,9 @@ test("selecting a source session and clicking Import posts the typed request", a
     importButton?.click();
   });
 
-  // Wait for the POST + refetch cycle to complete (3 initial + 1 POST + 3 refetch).
+  // Wait for the POST + refetch cycle to complete (4 initial + 1 POST + 1 summary refresh + 1 operation poll + 1 terminal summary refresh + 3 refetch).
   await waitFor(() => {
-    expect(fetchMock).toHaveBeenCalledTimes(7);
+    expect(fetchMock).toHaveBeenCalledTimes(11);
   });
 
   // Capture the POST call; the body must match exactly the typed request.
@@ -535,10 +604,10 @@ test("rescan prunes stale selection so the import POST matches the visible rows"
       const method = init?.method ?? "GET";
       if (method === "POST" && url === RESCAN_PATH) {
         rescanned = true;
-        return jsonResponse(RESCAN_FIXTURE);
+        return jsonResponse(submitOperationResponse("op-rescan", "rescan_sources"));
       }
       if (method === "POST" && url === IMPORT_PATH) {
-        return jsonResponse(IMPORT_FIXTURE);
+        return jsonResponse(submitOperationResponse("op-import", "import_sessions"));
       }
       if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
         return jsonResponse(rescanned ? AFTER_RESCAN_SOURCE : INITIAL_SOURCE);
@@ -549,6 +618,8 @@ test("rescan prunes stale selection so the import POST matches the visible rows"
       if (method === "GET" && url === SCAN_ERRORS_PATH) {
         return jsonResponse(SCAN_ERRORS_FIXTURE);
       }
+      const operationResponse = operationJsonResponse(url, method);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected ${method} ${url}`, { status: 404 });
     },
   );
@@ -559,7 +630,7 @@ test("rescan prunes stale selection so the import POST matches the visible rows"
   // Wait for initial panels to settle; both rows rendered.
   await screen.findByText("claude_code:key-A");
   await screen.findByText("claude_code:key-B");
-  expect(fetchMock).toHaveBeenCalledTimes(3);
+  expect(fetchMock).toHaveBeenCalledTimes(4);
 
   // Select both rows via per-row checkboxes.
   const checkboxA = container.querySelector<HTMLInputElement>(
@@ -667,10 +738,10 @@ test("rescan prunes stale selection so the import POST matches the visible rows"
     container.textContent?.includes("claude_code:key-B"),
   ).toBe(false);
 
-  // Wait for the import POST + its refetch to land. Total so far: 7 from
-  // the rescan cycle + 1 import POST + 3 refetch GETs = 11.
+  // Wait for the import POST + operation poll + refetch to land. Total
+  // so far: 11 from the rescan cycle + 7 from the import cycle = 18.
   await waitFor(() => {
-    expect(fetchMock).toHaveBeenCalledTimes(11);
+    expect(fetchMock).toHaveBeenCalledTimes(18);
   });
 
   // Exactly one import POST fired; its body MUST contain only the still-
@@ -715,6 +786,8 @@ test("per-panel error isolation: source 500 leaves stored rows rendered in the u
       if (url === SCAN_ERRORS_PATH) {
         return jsonResponse(SCAN_ERRORS_FIXTURE);
       }
+      const operationResponse = operationJsonResponse(url);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected url ${url}`, { status: 404 });
     },
   );
@@ -781,6 +854,8 @@ test("per-panel error isolation: stored 500 leaves source rows rendered in the u
       if (url === SCAN_ERRORS_PATH) {
         return jsonResponse(SCAN_ERRORS_FIXTURE);
       }
+      const operationResponse = operationJsonResponse(url);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected url ${url}`, { status: 404 });
     },
   );
@@ -836,6 +911,8 @@ test("per-panel error isolation: scan-errors 500 leaves the unified table render
           headers: { "Content-Type": "text/plain" },
         });
       }
+      const operationResponse = operationJsonResponse(url);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected url ${url}`, { status: 404 });
     },
   );
@@ -895,6 +972,8 @@ test("scan-errors error path: Retry button refetches all three panels", async ()
         }
         return jsonResponse(SCAN_ERRORS_FIXTURE);
       }
+      const operationResponse = operationJsonResponse(url);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected url ${url}`, { status: 404 });
     },
   );
@@ -914,9 +993,9 @@ test("scan-errors error path: Retry button refetches all three panels", async ()
     );
     expect(scanAlert).not.toBeUndefined();
   });
-  // Three initial GETs (source + stored + scan-errors).
+  // Three initial panel GETs plus the M3 operation-summary GET.
   const initialCallCount = fetchMock.mock.calls.length;
-  expect(initialCallCount).toBe(3);
+  expect(initialCallCount).toBe(4);
 
   // The Retry button lives inside the scan-errors alert (NOT inside
   // SessionsView's per-section banners, which fire only when source
@@ -1055,7 +1134,7 @@ test("importability rule at POST: rogue keys in selection do not leak into the i
       const url = urlOf(input);
       const method = init?.method ?? "GET";
       if (method === "POST" && url === IMPORT_PATH) {
-        return jsonResponse(IMPORT_FIXTURE);
+        return jsonResponse(submitOperationResponse("op-import", "import_sessions"));
       }
       if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
         return jsonResponse(MIXED_FIXTURE);
@@ -1066,6 +1145,8 @@ test("importability rule at POST: rogue keys in selection do not leak into the i
       if (method === "GET" && url === SCAN_ERRORS_PATH) {
         return jsonResponse([]);
       }
+      const operationResponse = operationJsonResponse(url, method);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected ${method} ${url}`, { status: 404 });
     },
   );
@@ -1108,7 +1189,7 @@ test("importability rule at POST: rogue keys in selection do not leak into the i
     importButton?.click();
   });
   await waitFor(() => {
-    expect(fetchMock).toHaveBeenCalledTimes(7);
+    expect(fetchMock).toHaveBeenCalledTimes(11);
   });
 
   // The POST body MUST contain exactly the one importable key —
@@ -1172,6 +1253,8 @@ test("statusConflict: a both-row with disagreeing source/stored statuses renders
       if (url === SOURCE_SESSIONS_PATH) return jsonResponse(CONFLICT_SOURCE);
       if (url === STORED_SESSIONS_PATH) return jsonResponse(CONFLICT_STORED);
       if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      const operationResponse = operationJsonResponse(url);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected url ${url}`, { status: 404 });
     },
   );
@@ -1224,6 +1307,8 @@ test("stored_only + source_missing: M1b dropped the Source Path column — the r
       if (url === SOURCE_SESSIONS_PATH) return jsonResponse([]);
       if (url === STORED_SESSIONS_PATH) return jsonResponse(STORED_ONLY);
       if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      const operationResponse = operationJsonResponse(url);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected url ${url}`, { status: 404 });
     },
   );
@@ -1315,7 +1400,7 @@ test("M3: filter mutation + click-time intersection — POST contains only the v
       const url = urlOf(input);
       const method = init?.method ?? "GET";
       if (method === "POST" && url === IMPORT_PATH) {
-        return jsonResponse(IMPORT_FIXTURE);
+        return jsonResponse(submitOperationResponse("op-import", "import_sessions"));
       }
       if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
         return jsonResponse(SOURCE);
@@ -1326,6 +1411,8 @@ test("M3: filter mutation + click-time intersection — POST contains only the v
       if (method === "GET" && url === SCAN_ERRORS_PATH) {
         return jsonResponse([]);
       }
+      const operationResponse = operationJsonResponse(url, method);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected ${method} ${url}`, { status: 404 });
     },
   );
@@ -1384,7 +1471,7 @@ test("M3: filter mutation + click-time intersection — POST contains only the v
     importButton?.click();
   });
   await waitFor(() => {
-    expect(fetchMock).toHaveBeenCalledTimes(7); // 3 initial + 1 POST + 3 refetch
+    expect(fetchMock).toHaveBeenCalledTimes(11); // 4 initial + 1 POST + 1 summary refresh + 1 operation poll + 1 terminal summary refresh + 3 refetch
   });
 
   // The POST body MUST contain ONLY the codex key — the click-time
@@ -1481,6 +1568,8 @@ test("M3: multi-filter combination renders only the matching subset", async () =
       if (url === SOURCE_SESSIONS_PATH) return jsonResponse(SOURCE);
       if (url === STORED_SESSIONS_PATH) return jsonResponse([]);
       if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      const operationResponse = operationJsonResponse(url);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected url ${url}`, { status: 404 });
     },
   );
@@ -1535,6 +1624,8 @@ test("M3 empty state — No sessions at all (both fetches resolve empty)", async
       if (url === SOURCE_SESSIONS_PATH) return jsonResponse([]);
       if (url === STORED_SESSIONS_PATH) return jsonResponse([]);
       if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      const operationResponse = operationJsonResponse(url);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected url ${url}`, { status: 404 });
     },
   );
@@ -1582,6 +1673,8 @@ test("M3 empty state — No matches after filter/search (Clear filters resets)",
       if (url === SOURCE_SESSIONS_PATH) return jsonResponse(SOURCE);
       if (url === STORED_SESSIONS_PATH) return jsonResponse([]);
       if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      const operationResponse = operationJsonResponse(url);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected url ${url}`, { status: 404 });
     },
   );
@@ -1672,6 +1765,8 @@ test("M3 empty state — Nothing to import in current filter (Show importable on
       if (url === SOURCE_SESSIONS_PATH) return jsonResponse(SOURCE);
       if (url === STORED_SESSIONS_PATH) return jsonResponse(STORED);
       if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      const operationResponse = operationJsonResponse(url);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected url ${url}`, { status: 404 });
     },
   );
@@ -1762,6 +1857,8 @@ test("M3 empty state — Partial fetch failure (source 500) preserves stored row
       }
       if (url === STORED_SESSIONS_PATH) return jsonResponse(STORED);
       if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      const operationResponse = operationJsonResponse(url);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected url ${url}`, { status: 404 });
     },
   );
@@ -1790,6 +1887,8 @@ test("M3: SessionFilters control bar is rendered above the table", async () => {
       if (url === SOURCE_SESSIONS_PATH) return jsonResponse(SOURCE_FIXTURE);
       if (url === STORED_SESSIONS_PATH) return jsonResponse(STORED_FIXTURE);
       if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      const operationResponse = operationJsonResponse(url);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected url ${url}`, { status: 404 });
     },
   );
@@ -1871,6 +1970,8 @@ test("M5: 500-row layout renders 50 rows on page 1 with 'Page 1 of 10' caption",
       if (url === SOURCE_SESSIONS_PATH) return jsonResponse(SOURCE);
       if (url === STORED_SESSIONS_PATH) return jsonResponse([]);
       if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      const operationResponse = operationJsonResponse(url);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected url ${url}`, { status: 404 });
     },
   );
@@ -1931,10 +2032,10 @@ test("M5: pagination-cross-page click-time intersection — pruned page-1 key dr
       const method = init?.method ?? "GET";
       if (method === "POST" && url === RESCAN_PATH) {
         rescanned = true;
-        return jsonResponse(RESCAN_FIXTURE);
+        return jsonResponse(submitOperationResponse("op-rescan", "rescan_sources"));
       }
       if (method === "POST" && url === IMPORT_PATH) {
-        return jsonResponse(IMPORT_FIXTURE);
+        return jsonResponse(submitOperationResponse("op-import", "import_sessions"));
       }
       if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
         return jsonResponse(rescanned ? AFTER_RESCAN : INITIAL);
@@ -1945,6 +2046,8 @@ test("M5: pagination-cross-page click-time intersection — pruned page-1 key dr
       if (method === "GET" && url === SCAN_ERRORS_PATH) {
         return jsonResponse([]);
       }
+      const operationResponse = operationJsonResponse(url, method);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected ${method} ${url}`, { status: 404 });
     },
   );
@@ -2067,10 +2170,10 @@ test("M5: pagination-cross-page click-time intersection — pruned page-1 key dr
   }).IS_REACT_ACT_ENVIRONMENT = originalActEnv;
 
   // Wait for the import POST + its refetch cycle.
-  // 3 initial GETs + 1 rescan POST + 3 refetch GETs + 1 import POST
-  // + 3 post-import refetch GETs = 11.
+  // 4 initial GETs + 7 rescan-cycle requests + 7 import-cycle
+  // requests = 18.
   await waitFor(() => {
-    expect(fetchMock).toHaveBeenCalledTimes(11);
+    expect(fetchMock).toHaveBeenCalledTimes(18);
   });
 
   // Exactly one Import POST. Body MUST include row-0000 (still in the
@@ -2099,7 +2202,7 @@ test("M5: cross-page bulk-select — header checkbox selects ALL importable rows
       const url = urlOf(input);
       const method = init?.method ?? "GET";
       if (method === "POST" && url === IMPORT_PATH) {
-        return jsonResponse(IMPORT_FIXTURE);
+        return jsonResponse(submitOperationResponse("op-import", "import_sessions"));
       }
       if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
         return jsonResponse(SOURCE);
@@ -2110,6 +2213,8 @@ test("M5: cross-page bulk-select — header checkbox selects ALL importable rows
       if (method === "GET" && url === SCAN_ERRORS_PATH) {
         return jsonResponse([]);
       }
+      const operationResponse = operationJsonResponse(url, method);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected ${method} ${url}`, { status: 404 });
     },
   );
@@ -2138,7 +2243,7 @@ test("M5: cross-page bulk-select — header checkbox selects ALL importable rows
     importButton?.click();
   });
   await waitFor(() => {
-    expect(fetchMock).toHaveBeenCalledTimes(7);
+    expect(fetchMock).toHaveBeenCalledTimes(11);
   });
 
   // POST body must contain all 150 keys.
@@ -2167,6 +2272,8 @@ test("M5: page-reset on filter change — paging to page 3 then changing a filte
       if (url === SOURCE_SESSIONS_PATH) return jsonResponse(SOURCE);
       if (url === STORED_SESSIONS_PATH) return jsonResponse([]);
       if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      const operationResponse = operationJsonResponse(url);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected url ${url}`, { status: 404 });
     },
   );
@@ -2221,6 +2328,8 @@ test("M5: page-reset RECOMPUTE on pageSize change — keeps the first visible ro
       if (url === SOURCE_SESSIONS_PATH) return jsonResponse(SOURCE);
       if (url === STORED_SESSIONS_PATH) return jsonResponse([]);
       if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      const operationResponse = operationJsonResponse(url);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected url ${url}`, { status: 404 });
     },
   );
@@ -2280,7 +2389,7 @@ test("M5: rescan success pushes a 'Rescan complete' toast + plain-language summa
       const url = urlOf(input);
       const method = init?.method ?? "GET";
       if (method === "POST" && url === RESCAN_PATH) {
-        return jsonResponse(RESCAN_FIXTURE);
+        return jsonResponse(submitOperationResponse("op-rescan", "rescan_sources"));
       }
       if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
         return jsonResponse(SOURCE_FIXTURE);
@@ -2291,6 +2400,8 @@ test("M5: rescan success pushes a 'Rescan complete' toast + plain-language summa
       if (method === "GET" && url === SCAN_ERRORS_PATH) {
         return jsonResponse([]);
       }
+      const operationResponse = operationJsonResponse(url, method);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected ${method} ${url}`, { status: 404 });
     },
   );
@@ -2333,7 +2444,7 @@ test("M5: import success pushes an 'Import complete' toast + plain-language summ
       const url = urlOf(input);
       const method = init?.method ?? "GET";
       if (method === "POST" && url === IMPORT_PATH) {
-        return jsonResponse(IMPORT_FIXTURE);
+        return jsonResponse(submitOperationResponse("op-import", "import_sessions"));
       }
       if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
         return jsonResponse(IMPORT_SOURCE_FIXTURE);
@@ -2344,6 +2455,8 @@ test("M5: import success pushes an 'Import complete' toast + plain-language summ
       if (method === "GET" && url === SCAN_ERRORS_PATH) {
         return jsonResponse([]);
       }
+      const operationResponse = operationJsonResponse(url, method);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected ${method} ${url}`, { status: 404 });
     },
   );
@@ -2392,7 +2505,7 @@ test("M5: rescan ERROR pushes an error toast with Retry; clicking Retry succeeds
             headers: { "Content-Type": "text/plain" },
           });
         }
-        return jsonResponse(RESCAN_FIXTURE);
+        return jsonResponse(submitOperationResponse("op-rescan", "rescan_sources"));
       }
       if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
         return jsonResponse(SOURCE_FIXTURE);
@@ -2403,6 +2516,8 @@ test("M5: rescan ERROR pushes an error toast with Retry; clicking Retry succeeds
       if (method === "GET" && url === SCAN_ERRORS_PATH) {
         return jsonResponse([]);
       }
+      const operationResponse = operationJsonResponse(url, method);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected ${method} ${url}`, { status: 404 });
     },
   );
@@ -2456,7 +2571,7 @@ test("M5: last-rescan caption is em-dash on first render, then renders relative-
       const url = urlOf(input);
       const method = init?.method ?? "GET";
       if (method === "POST" && url === RESCAN_PATH) {
-        return jsonResponse(RESCAN_FIXTURE);
+        return jsonResponse(submitOperationResponse("op-rescan", "rescan_sources"));
       }
       if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
         return jsonResponse(SOURCE_FIXTURE);
@@ -2467,6 +2582,8 @@ test("M5: last-rescan caption is em-dash on first render, then renders relative-
       if (method === "GET" && url === SCAN_ERRORS_PATH) {
         return jsonResponse([]);
       }
+      const operationResponse = operationJsonResponse(url, method);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected ${method} ${url}`, { status: 404 });
     },
   );
@@ -2538,6 +2655,8 @@ test("M5: last-rescan caption does NOT update on rescan ERROR", async () => {
       if (method === "GET" && url === SCAN_ERRORS_PATH) {
         return jsonResponse([]);
       }
+      const operationResponse = operationJsonResponse(url, method);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected ${method} ${url}`, { status: 404 });
     },
   );
@@ -2675,11 +2794,11 @@ test("M5: import-error Retry uses the LATEST handleImport (rescan-between-attemp
             headers: { "Content-Type": "text/plain" },
           });
         }
-        return jsonResponse(IMPORT_FIXTURE);
+        return jsonResponse(submitOperationResponse("op-import", "import_sessions"));
       }
       if (method === "POST" && url === RESCAN_PATH) {
         rescanned = true;
-        return jsonResponse(RESCAN_FIXTURE);
+        return jsonResponse(submitOperationResponse("op-rescan", "rescan_sources"));
       }
       if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
         return jsonResponse(rescanned ? ONE_ROW : TWO_ROWS);
@@ -2690,6 +2809,8 @@ test("M5: import-error Retry uses the LATEST handleImport (rescan-between-attemp
       if (method === "GET" && url === SCAN_ERRORS_PATH) {
         return jsonResponse([]);
       }
+      const operationResponse = operationJsonResponse(url, method);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected ${method} ${url}`, { status: 404 });
     },
   );
@@ -2746,11 +2867,11 @@ test("M5: import-error Retry uses the LATEST handleImport (rescan-between-attemp
   await act(async () => {
     rescanButton?.click();
   });
-  // Wait for the rescan POST (1) + refetch (3) cycle to land. Total
-  // calls so far: 3 initial GETs + 1 import POST (failed) + 1 rescan
-  // POST + 3 refetch GETs = 8.
+  // Wait for the rescan POST + operation poll + refetch cycle to land.
+  // Total calls so far: 4 initial GETs + 1 failed import POST +
+  // 7 rescan-cycle requests = 12.
   await waitFor(() => {
-    expect(fetchMock).toHaveBeenCalledTimes(8);
+    expect(fetchMock).toHaveBeenCalledTimes(12);
   });
   // Confirm the rescan landed: the pruned row is gone from the DOM
   // and the action-bar count is 1.
@@ -2877,6 +2998,8 @@ function makeM1aFetchMock() {
         return jsonResponse(M1A_SOURCE_FIXTURE);
       if (url === STORED_SESSIONS_PATH) return jsonResponse([]);
       if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      const operationResponse = operationJsonResponse(url);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected url ${url}`, { status: 404 });
     },
   );
@@ -3519,7 +3642,7 @@ test("M3b: Rescan SUCCESS path bumps cache epoch (cached parsed payload is inval
         return makeRawSessionResponse();
       }
       if (method === "POST" && url === RESCAN_PATH) {
-        return jsonResponse(RESCAN_FIXTURE);
+        return jsonResponse(submitOperationResponse("op-rescan", "rescan_sources"));
       }
       if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
         return jsonResponse(SOURCE_FIXTURE);
@@ -3530,6 +3653,8 @@ test("M3b: Rescan SUCCESS path bumps cache epoch (cached parsed payload is inval
       if (method === "GET" && url === SCAN_ERRORS_PATH) {
         return jsonResponse(SCAN_ERRORS_FIXTURE);
       }
+      const operationResponse = operationJsonResponse(url, method);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected ${method} ${url}`, { status: 404 });
     },
   );
@@ -3596,6 +3721,8 @@ test("M3b: Rescan ERROR path does NOT bump cache epoch (cache survives)", async 
       if (method === "GET" && url === SCAN_ERRORS_PATH) {
         return jsonResponse(SCAN_ERRORS_FIXTURE);
       }
+      const operationResponse = operationJsonResponse(url, method);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected ${method} ${url}`, { status: 404 });
     },
   );
@@ -3638,7 +3765,7 @@ test("M3b: Import SUCCESS path bumps cache epoch (cached parsed payload is inval
         return makeRawSessionResponse();
       }
       if (method === "POST" && url === IMPORT_PATH) {
-        return jsonResponse(IMPORT_FIXTURE);
+        return jsonResponse(submitOperationResponse("op-import", "import_sessions"));
       }
       if (method === "GET" && url === SOURCE_SESSIONS_PATH) {
         return jsonResponse(IMPORT_SOURCE_FIXTURE);
@@ -3649,6 +3776,8 @@ test("M3b: Import SUCCESS path bumps cache epoch (cached parsed payload is inval
       if (method === "GET" && url === SCAN_ERRORS_PATH) {
         return jsonResponse(SCAN_ERRORS_FIXTURE);
       }
+      const operationResponse = operationJsonResponse(url, method);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected ${method} ${url}`, { status: 404 });
     },
   );
@@ -3710,6 +3839,8 @@ test("M3b: Import ERROR path does NOT bump cache epoch (cache survives)", async 
       if (method === "GET" && url === SCAN_ERRORS_PATH) {
         return jsonResponse(SCAN_ERRORS_FIXTURE);
       }
+      const operationResponse = operationJsonResponse(url, method);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected ${method} ${url}`, { status: 404 });
     },
   );
@@ -3756,6 +3887,8 @@ test("M1a: session_not_found state renders only AFTER all three GETs settle", as
       if (url === SOURCE_SESSIONS_PATH) return jsonResponse([]);
       if (url === STORED_SESSIONS_PATH) return jsonResponse([]);
       if (url === SCAN_ERRORS_PATH) return jsonResponse([]);
+      const operationResponse = operationJsonResponse(url);
+      if (operationResponse !== null) return operationResponse;
       return new Response(`unexpected url ${url}`, { status: 404 });
     },
   ) as unknown as typeof globalThis.fetch;

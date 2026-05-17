@@ -21,6 +21,12 @@ Owns the shared payload shapes and enums used at the frontend/backend HTTP bound
 - `ImportSourceSessionsRequest`
 - `ImportReport`
 - `RescanReport`
+- `Operation`
+- `OperationKind`
+- `OperationStatus`
+- `SubmitOperationResponse`
+- `OperationsListResponse`
+- `OperationsListQuery`
 
 ## Important Internal Files
 
@@ -70,12 +76,18 @@ components/ui-api-contracts/
 ├── bindings/                  # generated TypeScript (checked in)
 │   ├── ImportReport.ts
 │   ├── ImportSourceSessionsRequest.ts
+│   ├── Operation.ts
+│   ├── OperationKind.ts
+│   ├── OperationStatus.ts
+│   ├── OperationsListQuery.ts
+│   ├── OperationsListResponse.ts
 │   ├── PersistedScanError.ts
 │   ├── RescanReport.ts
 │   ├── SessionSyncStatus.ts
 │   ├── SourceSessionView.ts
 │   ├── StoredSessionRecord.ts
 │   ├── StoredSessionView.ts
+│   ├── SubmitOperationResponse.ts
 │   └── Tool.ts
 └── tests/ts_bindings.rs       # regenerator + staleness check
 ```

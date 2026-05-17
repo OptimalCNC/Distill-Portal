@@ -8,8 +8,8 @@
 //   (1) disabled-state truth table for the Rescan / Import buttons as a
 //       function of `pending` and `selectedCount`;
 //   (2) Import label carries the live `selectedCount` in the idle case
-//       and the "Importing N..." form while a mutation is in flight;
-//   (3) Rescan label flips to "Rescanning..." while a rescan is pending;
+//       and the "Starting..." form while submit is in flight;
+//   (3) Rescan label flips to "Starting..." while submit is pending;
 //   (4) clicking an enabled Rescan button invokes `onRescan` exactly once
 //       (one handler-dispatch sanity assertion);
 //   (5) M3 hidden-by-filter caption + clear affordances;
@@ -93,7 +93,7 @@ test("ActionBar pending=rescan disables both buttons and flips Rescan label", ()
   const { rescan, import: importBtn } = buttons(container);
   expect(rescan.disabled).toBe(true);
   expect(importBtn.disabled).toBe(true);
-  expect(rescan.textContent).toBe("Rescanning...");
+  expect(rescan.textContent).toBe("Starting...");
 });
 
 test("ActionBar pending=import disables both buttons and flips Import label", () => {
@@ -108,7 +108,7 @@ test("ActionBar pending=import disables both buttons and flips Import label", ()
   const { rescan, import: importBtn } = buttons(container);
   expect(rescan.disabled).toBe(true);
   expect(importBtn.disabled).toBe(true);
-  expect(importBtn.textContent).toBe("Importing 2...");
+  expect(importBtn.textContent).toBe("Starting...");
 });
 
 test("ActionBar dispatches onRescan exactly once when Rescan is clicked", () => {
@@ -212,6 +212,49 @@ test("ActionBar: zero selection AND zero hidden -> no Clear affordances", () => 
   expect(
     container.querySelectorAll(".action-bar-clear").length,
   ).toBe(0);
+});
+
+test("ActionBar M3: running operation badge renders as a polite status", () => {
+  const { container } = render(
+    <ActionBar
+      selectedCount={0}
+      pending={null}
+      onRescan={() => {}}
+      onImport={() => {}}
+      runningOperationCount={2}
+    />,
+  );
+  const badge = container.querySelector(".action-bar-operation-badge");
+  expect(badge).not.toBeNull();
+  expect(badge!.textContent).toBe("2 running");
+  expect(badge!.getAttribute("role")).toBe("status");
+  expect(badge!.getAttribute("aria-live")).toBe("polite");
+});
+
+test("ActionBar M3: last operation pill and idle refresh affordance render", () => {
+  const onRefreshOperations = mock(() => {});
+  const { container } = render(
+    <ActionBar
+      selectedCount={0}
+      pending={null}
+      onRescan={() => {}}
+      onImport={() => {}}
+      lastOperationSummary={{
+        text: "Last: Import complete · 3 sessions",
+        tone: "success",
+      }}
+      onRefreshOperations={onRefreshOperations}
+    />,
+  );
+  const pill = container.querySelector(".action-bar-operation-pill.success");
+  expect(pill).not.toBeNull();
+  expect(pill!.textContent).toBe("Last: Import complete · 3 sessions");
+  const refresh = Array.from(
+    container.querySelectorAll<HTMLButtonElement>(".action-bar-refresh"),
+  )[0];
+  expect(refresh).not.toBeUndefined();
+  refresh!.click();
+  expect(onRefreshOperations).toHaveBeenCalledTimes(1);
 });
 
 test("ActionBar (M5): root carries the .sticky modifier so CSS position:sticky engages", () => {

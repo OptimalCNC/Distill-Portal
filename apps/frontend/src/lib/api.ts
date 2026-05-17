@@ -6,19 +6,23 @@
 // handwritten response types are not allowed.
 import { API_BASE } from "./config";
 import type {
-  ImportReport,
   ImportSourceSessionsRequest,
+  Operation,
+  OperationsListQuery,
+  OperationsListResponse,
   PersistedScanError,
-  RescanReport,
   SourceSessionView,
   StoredSessionView,
+  SubmitOperationResponse,
 } from "./contracts";
 
 export const SOURCE_SESSIONS_PATH = "/api/v1/source-sessions";
 export const STORED_SESSIONS_PATH = "/api/v1/sessions";
 export const SCAN_ERRORS_PATH = "/api/v1/admin/scan-errors";
-export const RESCAN_PATH = "/api/v1/admin/rescan";
-export const IMPORT_PATH = "/api/v1/source-sessions/import";
+export const RESCAN_PATH = "/api/v1/rescan";
+export const IMPORT_PATH = "/api/v1/import";
+export const OPERATIONS_PATH = "/api/v1/operations";
+export type OperationsListRequest = Partial<OperationsListQuery>;
 /**
  * Path constructor for the streaming raw NDJSON endpoint.
  *
@@ -85,30 +89,56 @@ export async function listScanErrors(
 }
 
 /**
- * POST /api/v1/admin/rescan -> RescanReport.
+ * POST /api/v1/rescan -> SubmitOperationResponse.
  *
- * Triggers a source rescan on the backend and returns the typed report.
- * The backend handler takes no body; we send `Content-Type: application/json`
- * with an empty `{}` body so the request is unambiguous across proxies.
- * Same error model as the GETs.
+ * Enqueues a source rescan operation on the backend. The terminal report is
+ * read later from `GET /api/v1/operations/:id`.
  */
-export async function triggerRescan(): Promise<RescanReport> {
-  return postJson<RescanReport>(RESCAN_PATH, {});
+export async function triggerRescan(
+  signal?: AbortSignal,
+): Promise<SubmitOperationResponse> {
+  return postJson<SubmitOperationResponse>(RESCAN_PATH, {}, signal);
 }
 
 /**
- * POST /api/v1/source-sessions/import -> ImportReport.
+ * POST /api/v1/import -> SubmitOperationResponse.
  *
  * Requests backend import of the provided source session keys.
  * Body conforms to `ImportSourceSessionsRequest` (`{ session_keys: [...] }`).
  * Backend requires the `session_keys` field to be present (no serde default),
- * so an empty list is permitted but the field must be supplied.
+ * so an empty list is permitted but the field must be supplied. The terminal
+ * import report is read later from `GET /api/v1/operations/:id`.
  */
 export async function importSourceSessions(
   sessionKeys: string[],
-): Promise<ImportReport> {
+  signal?: AbortSignal,
+): Promise<SubmitOperationResponse> {
   const payload: ImportSourceSessionsRequest = { session_keys: sessionKeys };
-  return postJson<ImportReport>(IMPORT_PATH, payload);
+  return postJson<SubmitOperationResponse>(IMPORT_PATH, payload, signal);
+}
+
+export async function getOperation(
+  operationId: string,
+  signal?: AbortSignal,
+): Promise<Operation> {
+  return getJson<Operation>(operationPath(operationId), signal);
+}
+
+export async function listOperations(
+  query: OperationsListRequest = {},
+  signal?: AbortSignal,
+): Promise<OperationsListResponse> {
+  return getJson<OperationsListResponse>(
+    `${OPERATIONS_PATH}${operationsQuery(query)}`,
+    signal,
+  );
+}
+
+export async function cancelOperation(
+  operationId: string,
+  signal?: AbortSignal,
+): Promise<Operation> {
+  return deleteJson<Operation>(operationPath(operationId), signal);
 }
 
 /**
@@ -158,7 +188,11 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await response.json()) as T;
 }
 
-async function postJson<T>(path: string, body: unknown): Promise<T> {
+async function postJson<T>(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: {
@@ -166,12 +200,48 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
+    signal,
   });
   if (!response.ok) {
     const text = await safeReadText(response);
     throw new ApiError(response.status, text);
   }
   return (await response.json()) as T;
+}
+
+async function deleteJson<T>(
+  path: string,
+  signal?: AbortSignal,
+): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+    signal,
+  });
+  if (!response.ok) {
+    const text = await safeReadText(response);
+    throw new ApiError(response.status, text);
+  }
+  return (await response.json()) as T;
+}
+
+function operationPath(operationId: string): string {
+  return `${OPERATIONS_PATH}/${encodeURIComponent(operationId)}`;
+}
+
+function operationsQuery(query: OperationsListRequest): string {
+  const params = new URLSearchParams();
+  if (query.status !== null && query.status !== undefined && query.status.length > 0) {
+    params.set("status", query.status.join(","));
+  }
+  if (query.kind !== null && query.kind !== undefined && query.kind.length > 0) {
+    params.set("kind", query.kind.join(","));
+  }
+  if (query.limit !== null && query.limit !== undefined) {
+    params.set("limit", String(query.limit));
+  }
+  const value = params.toString();
+  return value.length > 0 ? `?${value}` : "";
 }
 
 async function safeReadText(response: Response): Promise<string> {

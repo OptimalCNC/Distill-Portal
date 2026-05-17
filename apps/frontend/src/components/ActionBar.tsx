@@ -39,6 +39,12 @@
 import { relativeTimeFrom } from "../features/sessions/relativeTime";
 import "./ActionBar.css";
 
+export type LastOperationSummary = {
+  text: string;
+  tone: "success" | "error" | "neutral";
+  title?: string;
+};
+
 type ActionBarProps = {
   selectedCount: number;
   /** Per spec §Action Bar and Mutation UX: when the user's raw
@@ -64,6 +70,10 @@ type ActionBarProps = {
    *  Shared with the table so the two relative-time fields agree on
    *  the same instant. */
   now?: string;
+  runningOperationCount?: number;
+  lastOperationSummary?: LastOperationSummary | null;
+  operationSummaryRefreshing?: boolean;
+  onRefreshOperations?: () => void;
 };
 
 export function ActionBar({
@@ -76,11 +86,17 @@ export function ActionBar({
   onClearSelection,
   lastRescanAt = null,
   now,
+  runningOperationCount = 0,
+  lastOperationSummary = null,
+  operationSummaryRefreshing = false,
+  onRefreshOperations,
 }: ActionBarProps) {
   const rescanDisabled = pending !== null;
   const importDisabled = pending !== null || selectedCount === 0;
   const showClearAffordances =
     selectedCount > 0 || hiddenByFilterCount > 0;
+  const showManualRefresh =
+    runningOperationCount === 0 && onRefreshOperations !== undefined;
   // The caption renders relative to `now` (refreshed on each
   // refetch). When `lastRescanAt` is null (first session, or a user
   // who has never clicked Rescan) we render an em-dash so the layout
@@ -97,7 +113,7 @@ export function ActionBar({
           onClick={onRescan}
           disabled={rescanDisabled}
         >
-          {pending === "rescan" ? "Rescanning..." : "Rescan"}
+          {pending === "rescan" ? "Starting..." : "Rescan"}
         </button>
         <span className="muted action-bar-last-rescan" title={lastRescanAt ?? undefined}>
           last rescan from this browser {lastRescanCaption}
@@ -108,7 +124,7 @@ export function ActionBar({
           disabled={importDisabled}
         >
           {pending === "import"
-            ? `Importing ${selectedCount}...`
+            ? "Starting..."
             : `Import selected (${selectedCount})`}
         </button>
         {hiddenByFilterCount > 0 ? (
@@ -132,6 +148,36 @@ export function ActionBar({
             onClick={onClearSelection}
           >
             Clear selection
+          </button>
+        ) : null}
+        {runningOperationCount > 0 ? (
+          <span
+            className="action-bar-operation-badge"
+            role="status"
+            aria-live="polite"
+          >
+            {runningOperationCount}{" "}
+            {runningOperationCount === 1 ? "running" : "running"}
+          </span>
+        ) : null}
+        {lastOperationSummary !== null ? (
+          <span
+            className={`action-bar-operation-pill ${lastOperationSummary.tone}`}
+            role="status"
+            aria-live="polite"
+            title={lastOperationSummary.title ?? lastOperationSummary.text}
+          >
+            {lastOperationSummary.text}
+          </span>
+        ) : null}
+        {showManualRefresh ? (
+          <button
+            type="button"
+            className="action-bar-clear action-bar-refresh"
+            onClick={onRefreshOperations}
+            disabled={operationSummaryRefreshing}
+          >
+            {operationSummaryRefreshing ? "Refreshing..." : "Refresh status"}
           </button>
         ) : null}
       </div>

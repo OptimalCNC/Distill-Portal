@@ -73,12 +73,22 @@ The Phase 4 drawer (`Drawer.tsx` + `SessionDetail.tsx` + sibling CSS / tests) wa
 ## API Endpoints Involved
 
 - `GET /api/v1/source-sessions`
-- `POST /api/v1/source-sessions/import`
+- `POST /api/v1/import`
 - `GET /api/v1/sessions`
 - `GET /api/v1/sessions/{session_uid}`
 - `GET /api/v1/sessions/{session_uid}/raw`
-- `POST /api/v1/admin/rescan`
+- `POST /api/v1/rescan`
+- `GET /api/v1/operations/{operation_id}`
+- `GET /api/v1/operations`
+- `DELETE /api/v1/operations/{operation_id}`
 - `GET /api/v1/admin/scan-errors`
+
+Import and rescan are asynchronous. The POST response is `202 Accepted`
+with an operation id; the frontend polls `GET /api/v1/operations/{id}` until
+the row reaches a terminal status, then reads `result_json` for the existing
+toast detail. The sticky `<ActionBar>` stays the only status surface: it shows
+a compact running-count badge, a last-completed pill, and an idle manual
+operation refresh button.
 
 ## Tests
 

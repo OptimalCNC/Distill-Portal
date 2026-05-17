@@ -17,6 +17,14 @@ Owns source discovery, safe JSONL reads, and tool-specific session parsing for C
 - `ClaudeCodeAdapter`
 - `CodexAdapter`
 - `safe_read_jsonl_bytes`
+- `SCANNER_CONFIG_VERSION`
+
+## Scanner Config Version
+
+`SCANNER_CONFIG_VERSION` is part of Phase 9a operation idempotency for
+`rescan_sources`. Bump it whenever scanner discovery, fingerprinting, or parse
+eligibility changes enough that a new rescan should not deduplicate against an
+operation created by the prior behavior.
 
 ## Important Internal Files
 

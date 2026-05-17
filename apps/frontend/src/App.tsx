@@ -46,6 +46,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   importSourceSessions,
+  listOperations,
   listScanErrors,
   listSourceSessions,
   listStoredSessions,
@@ -53,11 +54,14 @@ import {
 } from "./lib/api";
 import type {
   ImportReport,
+  Operation,
+  OperationKind,
   PersistedScanError,
   RescanReport,
   SourceSessionView,
   StoredSessionView,
 } from "./lib/contracts";
+import type { LastOperationSummary } from "./components/ActionBar";
 import { ScanErrorsCallout } from "./components/ScanErrorsCallout";
 import { Toast } from "./components/Toast";
 import {
@@ -77,6 +81,10 @@ import { useToastQueue } from "./features/sessions/useToastQueue";
 import { readLastRescan, writeLastRescan } from "./features/sessions/lastRescan";
 import { useSelectedSession } from "./features/sessions/useSelectedSession";
 import { SessionView } from "./features/sessions/SessionView";
+import {
+  isOperationTerminal,
+  useOperationPoll,
+} from "./features/sessions/useOperationPoll";
 /**
  * M3b: `bumpCacheEpoch` clears the per-session parser cache + aborts
  * in-flight fetches whenever a Rescan or Import succeeds. Spec line
@@ -87,6 +95,11 @@ import { SessionView } from "./features/sessions/SessionView";
  * in `finally`, never on error path.
  */
 import { bumpCacheEpoch } from "./features/sessions/useParsedSession";
+
+type OperationSummarySnapshot = {
+  runningCount: number;
+  lastTerminal: Operation | null;
+};
 
 export function App() {
   const [sourceState, setSourceState] = useState<PanelState<SourceSessionView[]>>(
@@ -196,6 +209,14 @@ export function App() {
   // each refetch" — using state means refresh-on-refetch automatically
   // triggers a re-render of both consumers.
   const [now, setNow] = useState<string>(() => new Date().toISOString());
+  const { pollOperation } = useOperationPoll();
+  const [operationSummary, setOperationSummary] =
+    useState<OperationSummarySnapshot>({
+      runningCount: 0,
+      lastTerminal: null,
+    });
+  const [operationSummaryRefreshing, setOperationSummaryRefreshing] =
+    useState(false);
 
   // Filter / sort / search state (persisted to localStorage).
   const { filters, setFilter, resetAll, setImportableOnly } =
@@ -244,6 +265,46 @@ export function App() {
       activeControllerRef.current = null;
     };
   }, [refetchAll]);
+
+  const refreshOperationsSummary = useCallback(
+    async (options: { notifyOnError?: boolean } = {}) => {
+      setOperationSummaryRefreshing(true);
+      try {
+        const response = await listOperations({ limit: 50 });
+        setOperationSummary(summarizeOperations(response.operations));
+      } catch (error) {
+        if (isAbortError(error)) return;
+        if (options.notifyOnError === true) {
+          pushToast({
+            kind: "error",
+            title: "Operation status failed",
+            message: messageFor(error),
+          });
+        }
+      } finally {
+        setOperationSummaryRefreshing(false);
+      }
+    },
+    [pushToast],
+  );
+
+  const handleRefreshOperations = useCallback(() => {
+    void refreshOperationsSummary({ notifyOnError: true });
+  }, [refreshOperationsSummary]);
+
+  useEffect(() => {
+    void refreshOperationsSummary();
+  }, [refreshOperationsSummary]);
+
+  useEffect(() => {
+    if (operationSummary.runningCount === 0) return;
+    const intervalId = window.setInterval(() => {
+      void refreshOperationsSummary();
+    }, 5_000);
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [operationSummary.runningCount, refreshOperationsSummary]);
 
   // Reconcile `selected` against the current set of visible source sessions
   // whenever a refetch lands. If a previously-selected row disappeared from
@@ -455,9 +516,46 @@ export function App() {
   const handleImportRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   const handleRescan = useCallback(async () => {
+    let submittedOperationId = "";
     setPending("rescan");
     try {
-      const report: RescanReport = await triggerRescan();
+      const response = await triggerRescan();
+      submittedOperationId = response.operation_id;
+      await refreshOperationsSummary();
+    } catch (error) {
+      pushToast({
+        kind: "error",
+        title: "Rescan failed",
+        message: messageFor(error),
+        onRetry: () => {
+          // Re-derive the rescan call at click time via the ref so
+          // we always invoke the LATEST handleRescan — not the
+          // closure-captured one from the render that pushed this
+          // toast. Fire-and-forget; the inner handler will push its
+          // own success/error toast.
+          void handleRescanRef.current();
+        },
+      });
+      return;
+    } finally {
+      setPending(null);
+    }
+
+    try {
+      const operation = await pollOperation(submittedOperationId);
+      await refreshOperationsSummary();
+      if (operation.status !== "succeeded") {
+        pushToast({
+          kind: operation.status === "cancelled" ? "info" : "error",
+          title: operationTerminalTitle(operation, "Rescan"),
+          message: operationTerminalMessage(operation),
+          onRetry: () => {
+            void handleRescanRef.current();
+          },
+        });
+        return;
+      }
+      const report = operationResultAsRescanReport(operation);
       // Persist the success timestamp + push to local state so the
       // ActionBar caption updates immediately. Per spec, the caption
       // is explicitly scoped to "this browser" so we ONLY write on
@@ -479,6 +577,7 @@ export function App() {
       bumpCacheEpoch();
       await refetchAll();
     } catch (error) {
+      if (isAbortError(error)) return;
       pushToast({
         kind: "error",
         title: "Rescan failed",
@@ -492,10 +591,8 @@ export function App() {
           void handleRescanRef.current();
         },
       });
-    } finally {
-      setPending(null);
     }
-  }, [refetchAll, pushToast]);
+  }, [pollOperation, refetchAll, refreshOperationsSummary, pushToast]);
 
   const handleImport = useCallback(async () => {
     setPending("import");
@@ -543,8 +640,51 @@ export function App() {
     const keysToImport = Array.from(selected).filter((k) =>
       liveVisibleImportable.has(k),
     );
+    let submittedOperationId = "";
     try {
-      const report: ImportReport = await importSourceSessions(keysToImport);
+      const response = await importSourceSessions(keysToImport);
+      submittedOperationId = response.operation_id;
+      await refreshOperationsSummary();
+    } catch (error) {
+      pushToast({
+        kind: "error",
+        title: "Import failed",
+        message: messageFor(error),
+        onRetry: () => {
+          // Per spec: "Error/retry: if Import fails and the user
+          // retries, the retry re-derives the effective selection at
+          // click time — if a rescan fired between attempts, the
+          // payload reflects the new state, never the pre-error
+          // cache." We dispatch through the ref so the click invokes
+          // the LATEST handleImport — its useCallback deps include
+          // `selected`, `sourceState`, `storedState`, `filters`, so
+          // the function identity changes whenever any of those does.
+          // Without the ref hop, this closure would capture the
+          // handler from the render that pushed this toast and would
+          // re-derive against THAT handler's stale closure scope.
+          void handleImportRef.current();
+        },
+      });
+      return;
+    } finally {
+      setPending(null);
+    }
+
+    try {
+      const operation = await pollOperation(submittedOperationId);
+      await refreshOperationsSummary();
+      if (operation.status !== "succeeded") {
+        pushToast({
+          kind: operation.status === "cancelled" ? "info" : "error",
+          title: operationTerminalTitle(operation, "Import"),
+          message: operationTerminalMessage(operation),
+          onRetry: () => {
+            void handleImportRef.current();
+          },
+        });
+        return;
+      }
+      const report = operationResultAsImportReport(operation);
       setSelected(new Set());
       pushToast({
         kind: "success",
@@ -559,6 +699,7 @@ export function App() {
       bumpCacheEpoch();
       await refetchAll();
     } catch (error) {
+      if (isAbortError(error)) return;
       pushToast({
         kind: "error",
         title: "Import failed",
@@ -578,10 +719,17 @@ export function App() {
           void handleImportRef.current();
         },
       });
-    } finally {
-      setPending(null);
     }
-  }, [selected, sourceState, storedState, filters, refetchAll, pushToast]);
+  }, [
+    selected,
+    sourceState,
+    storedState,
+    filters,
+    pollOperation,
+    refetchAll,
+    refreshOperationsSummary,
+    pushToast,
+  ]);
 
   // Keep the refs pointed at the LATEST handler identities so toast
   // Retry closures (pushed earlier) always re-invoke the current
@@ -615,6 +763,14 @@ export function App() {
       hiddenByFilterCount += 1;
     }
   }
+
+  const lastOperationSummary = useMemo(
+    () =>
+      operationSummary.lastTerminal === null
+        ? null
+        : summarizeLastOperation(operationSummary.lastTerminal),
+    [operationSummary.lastTerminal],
+  );
 
   const onClearHidden = useCallback(() => {
     setSelected((prev) => {
@@ -898,6 +1054,10 @@ export function App() {
               onClearSelection={onClearSelection}
               lastRescanAt={lastRescanAt}
               now={now}
+              runningOperationCount={operationSummary.runningCount}
+              lastOperationSummary={lastOperationSummary}
+              operationSummaryRefreshing={operationSummaryRefreshing}
+              onRefreshOperations={handleRefreshOperations}
               selectedRowKey={selectedRowKey}
               onSelectRow={handleSelectRow}
               pendingDeepLinkPulseRowKey={pendingDeepLinkPulseRowKey}
@@ -985,6 +1145,159 @@ function messageFor(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function summarizeOperations(operations: Operation[]): OperationSummarySnapshot {
+  return {
+    runningCount: operations.filter((operation) => !isOperationTerminal(operation.status)).length,
+    lastTerminal:
+      operations.find((operation) => isOperationTerminal(operation.status)) ??
+      null,
+  };
+}
+
+function summarizeLastOperation(operation: Operation): LastOperationSummary {
+  const label = operationKindLabel(operation.kind);
+  if (operation.status === "succeeded") {
+    return {
+      tone: "success",
+      text: `Last: ${label} complete${operationSuccessSuffix(operation)}`,
+    };
+  }
+  if (operation.status === "cancelled") {
+    return {
+      tone: "neutral",
+      text: `Last: ${label} cancelled`,
+    };
+  }
+  return {
+    tone: "error",
+    text: `Last: ${label} ${operation.status.replaceAll("_", " ")}`,
+  };
+}
+
+function operationKindLabel(kind: OperationKind): "Import" | "Rescan" {
+  return kind === "import_sessions" ? "Import" : "Rescan";
+}
+
+function operationSuccessSuffix(operation: Operation): string {
+  if (operation.kind === "import_sessions") {
+    const report = maybeImportReport(operation.result_json);
+    if (report === null) return "";
+    return ` · ${report.requested_sessions} ${pluralize(report.requested_sessions, "session", "sessions")}`;
+  }
+  const report = maybeRescanReport(operation.result_json);
+  if (report === null) return "";
+  return ` · ${report.discovered_files} discovered`;
+}
+
+function operationTerminalTitle(
+  operation: Operation,
+  label: "Import" | "Rescan",
+): string {
+  if (operation.status === "failed") return `${label} failed`;
+  if (operation.status === "cancelled") return `${label} cancelled`;
+  if (operation.status === "interrupted") return `${label} interrupted`;
+  return `${label} ${operation.status.replaceAll("_", " ")}`;
+}
+
+function operationTerminalMessage(operation: Operation): string {
+  const message = errorJsonMessage(operation.error_json);
+  if (message !== null) return message;
+  if (operation.status === "cancelled") {
+    return "The operation was cancelled before it completed.";
+  }
+  if (operation.status === "interrupted") {
+    return "The operation was interrupted before it completed.";
+  }
+  return `Operation ended with status ${operation.status}.`;
+}
+
+function operationResultAsImportReport(operation: Operation): ImportReport {
+  const report = maybeImportReport(operation.result_json);
+  if (report === null) {
+    throw new Error("Import operation completed without an ImportReport result.");
+  }
+  return report;
+}
+
+function operationResultAsRescanReport(operation: Operation): RescanReport {
+  const report = maybeRescanReport(operation.result_json);
+  if (report === null) {
+    throw new Error("Rescan operation completed without a RescanReport result.");
+  }
+  return report;
+}
+
+function maybeImportReport(value: unknown): ImportReport | null {
+  if (!isRecord(value)) return null;
+  const requested_sessions = numberField(value, "requested_sessions");
+  const inserted_sessions = numberField(value, "inserted_sessions");
+  const updated_sessions = numberField(value, "updated_sessions");
+  const unchanged_sessions = numberField(value, "unchanged_sessions");
+  if (
+    requested_sessions === null ||
+    inserted_sessions === null ||
+    updated_sessions === null ||
+    unchanged_sessions === null
+  ) {
+    return null;
+  }
+  return {
+    requested_sessions,
+    inserted_sessions,
+    updated_sessions,
+    unchanged_sessions,
+  };
+}
+
+function maybeRescanReport(value: unknown): RescanReport | null {
+  if (!isRecord(value)) return null;
+  const discovered_files = numberField(value, "discovered_files");
+  const skipped_files = numberField(value, "skipped_files");
+  const parsed_sessions = numberField(value, "parsed_sessions");
+  const not_stored_sessions = numberField(value, "not_stored_sessions");
+  const outdated_sessions = numberField(value, "outdated_sessions");
+  const up_to_date_sessions = numberField(value, "up_to_date_sessions");
+  const scan_errors = numberField(value, "scan_errors");
+  if (
+    discovered_files === null ||
+    skipped_files === null ||
+    parsed_sessions === null ||
+    not_stored_sessions === null ||
+    outdated_sessions === null ||
+    up_to_date_sessions === null ||
+    scan_errors === null
+  ) {
+    return null;
+  }
+  return {
+    discovered_files,
+    skipped_files,
+    parsed_sessions,
+    not_stored_sessions,
+    outdated_sessions,
+    up_to_date_sessions,
+    scan_errors,
+  };
+}
+
+function errorJsonMessage(value: unknown): string | null {
+  if (!isRecord(value)) return null;
+  const message = value["message"];
+  return typeof message === "string" ? message : null;
+}
+
+function numberField(
+  record: Record<string, unknown>,
+  field: string,
+): number | null {
+  const value = record[field];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 // Plain-language summary line for a successful rescan, per spec

@@ -93,7 +93,21 @@ test.describe.serial("inspection surface end-to-end", () => {
       name: /^Import selected \(1\)$/,
     });
     await expect(importButton).toBeEnabled();
+    const importSubmit = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/v1/import") &&
+        response.request().method() === "POST",
+    );
     await importButton.click();
+    const importSubmitResponse = await importSubmit;
+    expect(importSubmitResponse.status()).toBe(202);
+    const importSubmitBody = (await importSubmitResponse.json()) as {
+      operation_id?: unknown;
+      status?: unknown;
+      kind?: unknown;
+    };
+    expect(typeof importSubmitBody.operation_id).toBe("string");
+    expect(importSubmitBody.kind).toBe("import_sessions");
 
     // 5. The ImportReport summary lands as a success toast (M5 swapped
     //    the M3-era inline status paragraph for a Toast queue).
@@ -102,6 +116,10 @@ test.describe.serial("inspection surface end-to-end", () => {
     });
     await expect(importToast).toBeVisible({ timeout: 5_000 });
     await expect(importToast).toContainText(/requested_sessions/);
+    await expect(page.locator(".action-bar-operation-badge")).toHaveCount(0);
+    await expect(page.locator(".action-bar-operation-pill")).toContainText(
+      "Last: Import complete",
+    );
     await importToast.locator(".toast-dismiss").click();
     await expect(importToast).toHaveCount(0);
 
@@ -167,12 +185,30 @@ test.describe.serial("inspection surface end-to-end", () => {
     await expect(sessionUidValue).toBeVisible();
 
     // 8. Rescan must emit a RescanReport summary as a success toast.
+    const rescanSubmit = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/v1/rescan") &&
+        response.request().method() === "POST",
+    );
     await page.getByRole("button", { name: "Rescan" }).click();
+    const rescanSubmitResponse = await rescanSubmit;
+    expect(rescanSubmitResponse.status()).toBe(202);
+    const rescanSubmitBody = (await rescanSubmitResponse.json()) as {
+      operation_id?: unknown;
+      status?: unknown;
+      kind?: unknown;
+    };
+    expect(typeof rescanSubmitBody.operation_id).toBe("string");
+    expect(rescanSubmitBody.kind).toBe("rescan_sources");
     const firstRescanToast = page.locator(".toast.success", {
       hasText: "Rescan complete",
     });
     await expect(firstRescanToast).toBeVisible({ timeout: 5_000 });
     await expect(firstRescanToast).toContainText(/discovered_files/);
+    await expect(page.locator(".action-bar-operation-badge")).toHaveCount(0);
+    await expect(page.locator(".action-bar-operation-pill")).toContainText(
+      "Last: Rescan complete",
+    );
     await firstRescanToast.locator(".toast-dismiss").click();
     await expect(firstRescanToast).toHaveCount(0);
 

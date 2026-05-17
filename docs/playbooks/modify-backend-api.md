@@ -5,10 +5,11 @@
 3. Update the backend implementation in `apps/backend/src/http_api.rs` and any state wiring in `apps/backend/src/app.rs`.
 4. Update the frontend consumer in the typed API layer under `apps/frontend/src/lib/` (`api.ts`, `contracts.ts`).
 5. Adjust page rendering in `apps/frontend/src/App.tsx` (or the relevant component under `apps/frontend/src/components/`) if the API output is shown there.
-6. Run `cargo test -p distill-portal-ui-api-contracts --features ts-bindings` to confirm the TS bindings are fresh.
-7. Run `cargo test -p distill-portal-backend --test http_api`.
-8. Run `cargo test -p distill-portal-e2e --test inspection_surface`.
-9. From `apps/frontend/`, run `bun run test` and `bun run test:e2e`.
+6. For long-running operations, remember that `POST /api/v1/import` and `POST /api/v1/rescan` return `202 Accepted` plus an operation id; clients poll `GET /api/v1/operations/{operation_id}` for the terminal report.
+7. Run `cargo test -p distill-portal-ui-api-contracts --features ts-bindings` to confirm the TS bindings are fresh.
+8. Run `cargo test -p distill-portal-backend --test http_api`.
+9. Run `cargo test -p distill-portal-e2e --test inspection_surface`.
+10. From `apps/frontend/`, run `bun run test` and `bun run test:e2e`.
 
 ## Worked Example: Adding an Enum + Field (Phase 6 `title_source`)
 
@@ -68,3 +69,13 @@ Verification ladder for a change of this shape:
   contains the new field on both list routes)
 - `cargo test -p distill-portal-e2e --test inspection_surface` (typed
   client deserializes the field through the real HTTP boundary)
+
+## Adding A Long-Running Operation Kind
+
+Phase 9a keeps operation kinds concrete. To add one, extend
+`OperationKind` in `components/ui-api-contracts/src/lib.rs`, regenerate
+bindings, add the backend worker handler in `apps/backend/src/app.rs`, and
+route submission through the operations store with a server-computed
+`canonical_params_hash` and kind-specific `input_version`. Do not make
+feature crates depend on `components/operations`; keep checkpoint traits
+generic at the component boundary and let `apps/backend` adapt them.

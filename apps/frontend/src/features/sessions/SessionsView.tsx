@@ -50,7 +50,7 @@ import { isImportable } from "./types";
 import type { SessionRow } from "./types";
 import { SessionFilters } from "./SessionFilters";
 import { SessionsTable } from "./SessionsTable";
-import { ActionBar } from "../../components/ActionBar";
+import { ActionBar, type LastOperationSummary } from "../../components/ActionBar";
 import { Pagination } from "../../components/Pagination";
 import type { PageSize } from "./applyPagination";
 import type { SessionFiltersState } from "./useSessionFilters";
@@ -112,6 +112,10 @@ export type SessionsViewProps = {
    *  Shared with the in-footer ActionBar so the two relative-time
    *  fields agree on the same instant. */
   now: string;
+  runningOperationCount?: number;
+  lastOperationSummary?: LastOperationSummary | null;
+  operationSummaryRefreshing?: boolean;
+  onRefreshOperations?: () => void;
   /** M1a: rowKey of the currently URL-selected session (passed
    *  through to SessionsTable for `aria-current="true"` styling +
    *  the selected-row visual treatment). */
@@ -157,6 +161,10 @@ export function SessionsView({
   onClearSelection,
   lastRescanAt,
   now,
+  runningOperationCount = 0,
+  lastOperationSummary = null,
+  operationSummaryRefreshing = false,
+  onRefreshOperations,
   selectedRowKey,
   onSelectRow,
   pendingDeepLinkPulseRowKey,
@@ -240,7 +248,7 @@ export function SessionsView({
               onClick={onRescan}
               disabled={rescanPending}
             >
-              {rescanPending ? "Rescanning..." : "Rescan"}
+              {rescanPending ? "Starting..." : "Rescan"}
             </button>
           </p>
         </div>
@@ -322,6 +330,10 @@ export function SessionsView({
           onClearSelection={onClearSelection}
           lastRescanAt={lastRescanAt}
           now={now}
+          runningOperationCount={runningOperationCount}
+          lastOperationSummary={lastOperationSummary}
+          operationSummaryRefreshing={operationSummaryRefreshing}
+          onRefreshOperations={onRefreshOperations}
         />
       </div>
     </>

@@ -10,6 +10,7 @@ This file is both the docs entry point and the repo map.
 | --- | --- |
 | Modify the inspection UI | [`playbooks/modify-frontend-page.md`](playbooks/modify-frontend-page.md), [`../apps/frontend/README.md`](../apps/frontend/README.md) |
 | Change a backend API or JSON payload | [`playbooks/modify-backend-api.md`](playbooks/modify-backend-api.md), [`dependency-rules.md`](dependency-rules.md) |
+| Change async operation behavior | [`../components/operations/README.md`](../components/operations/README.md), [`playbooks/modify-backend-api.md`](playbooks/modify-backend-api.md), [`dependency-rules.md`](dependency-rules.md) |
 | Change session storage behavior | [`playbooks/modify-session-store.md`](playbooks/modify-session-store.md) |
 | Change title resolution behavior | [`features/session-store.md`](features/session-store.md) (`TitleSource` enum + parser priority), [`features/session-view.md`](features/session-view.md) (Metadata tab "Title source" caption), [`features/inspection-surface.md`](features/inspection-surface.md) (list-panel title-cell truncation + tooltip), [`playbooks/modify-backend-api.md`](playbooks/modify-backend-api.md) (Phase 6 worked example: enum + field through contract → parser → ingest → store) |
 | Understand transcript rendering (lifecycle pairing, grouping, inline warnings) | [`features/session-view.md#tool-lifecycle--grouping`](features/session-view.md#tool-lifecycle--grouping), [`playbooks/modify-frontend-page.md`](playbooks/modify-frontend-page.md) (render-hint extension pattern) |
@@ -32,6 +33,7 @@ Reusable, app-independent crates. Each owns its own README:
 - [`configuration`](../components/configuration/README.md) — backend runtime config loading
 - [`ingest-service`](../components/ingest-service/README.md) — content-addressed ingest decisions, replace-on-sync
 - [`observability`](../components/observability/README.md) — tracing subscriber bootstrap
+- [`operations`](../components/operations/README.md) — async operation ledger storage, idempotency helpers, and worker substrate entry point
 - [`raw-session-store`](../components/raw-session-store/README.md) — SQLite metadata + blob-store persistence
 - [`ui-api-contracts`](../components/ui-api-contracts/README.md) — shared HTTP payload types; source of truth for the Rust → TS bindings
 
@@ -58,6 +60,7 @@ Short recipes for common changes:
 | Full Rust test suite | `cargo test --workspace` |
 | Backend HTTP API | `cargo test -p distill-portal-backend --test http_api` |
 | Collector parsers | `cargo test -p distill-portal-collector-runtime --test parsers` |
+| Operations ledger | `cargo test -p distill-portal-operations` |
 | Typed Rust-client HTTP smoke | `cargo test -p distill-portal-e2e --test inspection_surface` |
 | TypeScript contract bindings freshness | `cargo test -p distill-portal-ui-api-contracts --features ts-bindings` |
 | Frontend unit tests | `bun run test` (from `apps/frontend/`) |

@@ -10,6 +10,7 @@ use axum::{
 };
 use distill_portal_backend::App;
 use distill_portal_configuration::BackendConfig;
+use distill_portal_operations::{NewOperation, OperationKind, OperationStatus, OperationsStore};
 use distill_portal_ui_api_contracts::{
     source_key, ImportReport, RescanReport, SessionSyncStatus, SourceSessionView,
     StoredSessionView, TitleSource, Tool,
@@ -267,6 +268,115 @@ async fn data_survives_backend_restart() {
     assert_eq!(raw.as_slice(), CLAUDE_FIXTURE);
 }
 
+#[tokio::test]
+async fn startup_reconciles_in_flight_operations_as_interrupted() {
+    let tempdir = TempDir::new().unwrap();
+    let data_dir = tempdir.path().join("data");
+    let operations_store = OperationsStore::open(data_dir.join("distill.db")).unwrap();
+    let running = operations_store
+        .insert(new_operation(
+            OperationKind::ImportSessions,
+            "boot-running",
+            json!({}),
+        ))
+        .unwrap();
+    let cancel_requested = operations_store
+        .insert(new_operation(
+            OperationKind::RescanSources,
+            "boot-cancel",
+            json!({}),
+        ))
+        .unwrap();
+    operations_store
+        .update_status(&running.id, OperationStatus::Running)
+        .unwrap()
+        .unwrap();
+    operations_store
+        .request_cancel(&cancel_requested.id)
+        .unwrap();
+    drop(operations_store);
+
+    let app = App::bootstrap(test_config(data_dir, vec![], vec![]))
+        .await
+        .unwrap();
+    let operations_store = app.state().operations_store();
+
+    assert_eq!(
+        operations_store
+            .get_by_id(&running.id)
+            .unwrap()
+            .unwrap()
+            .status,
+        OperationStatus::Interrupted
+    );
+    assert_eq!(
+        operations_store
+            .get_by_id(&cancel_requested.id)
+            .unwrap()
+            .unwrap()
+            .status,
+        OperationStatus::Interrupted
+    );
+}
+
+#[tokio::test]
+async fn queued_import_operation_runs_after_backend_boot() {
+    let tempdir = TempDir::new().unwrap();
+    let claude_root = seed_claude_source(tempdir.path(), CLAUDE_FIXTURE);
+    let data_dir = tempdir.path().join("data");
+    let key = source_key(Tool::ClaudeCode, CLAUDE_SESSION_ID);
+    let operations_store = OperationsStore::open(data_dir.join("distill.db")).unwrap();
+    let operation = operations_store
+        .insert(new_operation(
+            OperationKind::ImportSessions,
+            "boot-import",
+            json!({ "session_keys": [key] }),
+        ))
+        .unwrap();
+    drop(operations_store);
+
+    let app = App::bootstrap(test_config(data_dir, vec![claude_root], vec![]))
+        .await
+        .unwrap();
+    let operations_store = app.state().operations_store();
+    let finished =
+        wait_operation_status(&operations_store, &operation.id, OperationStatus::Succeeded).await;
+    let report: ImportReport = serde_json::from_value(finished.result_json.unwrap()).unwrap();
+
+    assert_eq!(report.inserted_sessions, 1);
+    let stored_sessions: Vec<StoredSessionView> = get_json(&app, "/api/v1/sessions").await;
+    assert_eq!(stored_sessions.len(), 1);
+    assert_eq!(stored_sessions[0].status, SessionSyncStatus::UpToDate);
+}
+
+#[tokio::test]
+async fn queued_rescan_operation_runs_after_backend_boot() {
+    let tempdir = TempDir::new().unwrap();
+    let (claude_root, codex_root, _, _) = seed_both_sources(tempdir.path());
+    let data_dir = tempdir.path().join("data");
+    let operations_store = OperationsStore::open(data_dir.join("distill.db")).unwrap();
+    let operation = operations_store
+        .insert(new_operation(
+            OperationKind::RescanSources,
+            "boot-rescan",
+            json!({}),
+        ))
+        .unwrap();
+    drop(operations_store);
+
+    let app = App::bootstrap(test_config(data_dir, vec![claude_root], vec![codex_root]))
+        .await
+        .unwrap();
+    let operations_store = app.state().operations_store();
+    let finished =
+        wait_operation_status(&operations_store, &operation.id, OperationStatus::Succeeded).await;
+    let report: RescanReport = serde_json::from_value(finished.result_json.unwrap()).unwrap();
+
+    assert_eq!(report.parsed_sessions, 2);
+    let source_sessions: Vec<SourceSessionView> = get_json(&app, "/api/v1/source-sessions").await;
+    assert_eq!(source_sessions.len(), 2);
+}
+
 fn seed_both_sources(base: &Path) -> (PathBuf, PathBuf, PathBuf, PathBuf) {
     let claude_root = seed_claude_source(base, CLAUDE_FIXTURE);
     let codex_root = base.join("sources/codex/sessions");
@@ -301,6 +411,37 @@ fn test_config(
         claude_roots,
         codex_roots,
     )
+}
+
+fn new_operation(
+    kind: OperationKind,
+    suffix: &str,
+    params_json: serde_json::Value,
+) -> NewOperation {
+    NewOperation {
+        kind,
+        canonical_params_hash: format!("{suffix:0<64}"),
+        input_version: format!("input-{suffix}"),
+        params_json,
+    }
+}
+
+async fn wait_operation_status(
+    operations_store: &OperationsStore,
+    id: &str,
+    status: OperationStatus,
+) -> distill_portal_operations::Operation {
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            let operation = operations_store.get_by_id(id).unwrap().unwrap();
+            if operation.status == status {
+                return operation;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("operation reached expected status")
 }
 
 fn write_file(path: &Path, bytes: &[u8]) {

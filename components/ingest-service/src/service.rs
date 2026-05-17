@@ -31,6 +31,14 @@ pub struct IngestOutcome {
 }
 
 #[derive(Debug, Error)]
+pub enum IngestManyError<E: std::error::Error + 'static> {
+    #[error(transparent)]
+    Ingest(#[from] IngestError),
+    #[error(transparent)]
+    Checkpoint(E),
+}
+
+#[derive(Debug, Error)]
 pub enum IngestError {
     #[error(transparent)]
     Store(#[from] StoreError),
@@ -87,6 +95,24 @@ impl IngestService {
             disposition: IngestDisposition::Inserted,
             session_uid: created.session_uid,
         })
+    }
+
+    pub fn ingest_many_with_checkpoint<I, C, E>(
+        &self,
+        sessions: I,
+        mut checkpoint: C,
+    ) -> Result<Vec<IngestOutcome>, IngestManyError<E>>
+    where
+        I: IntoIterator<Item = ParsedSession>,
+        C: FnMut() -> Result<(), E>,
+        E: std::error::Error + 'static,
+    {
+        let mut outcomes = Vec::new();
+        for session in sessions {
+            checkpoint().map_err(IngestManyError::Checkpoint)?;
+            outcomes.push(self.ingest(session)?);
+        }
+        Ok(outcomes)
     }
 
     pub fn store(&self) -> &Arc<SqliteStore> {

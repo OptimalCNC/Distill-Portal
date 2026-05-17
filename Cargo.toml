@@ -5,6 +5,7 @@ members = [
     "components/configuration",
     "components/ingest-service",
     "components/observability",
+    "components/operations",
     "components/raw-session-store",
     "components/ui-api-contracts",
     "tests/e2e",

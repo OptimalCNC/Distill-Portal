@@ -187,6 +187,7 @@ dependencies = [
  "distill-portal-configuration",
  "distill-portal-ingest-service",
  "distill-portal-observability",
+ "distill-portal-operations",
  "distill-portal-raw-session-store",
  "distill-portal-ui-api-contracts",
  "serde",
@@ -261,6 +262,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "distill-portal-operations"
+version = "0.1.0"
+dependencies = [
+ "distill-portal-ui-api-contracts",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "time",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "distill-portal-raw-session-store"
 version = "0.1.0"
 dependencies = [
@@ -280,6 +298,7 @@ name = "distill-portal-ui-api-contracts"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
  "ts-rs",
 ]
 

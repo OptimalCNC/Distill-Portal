@@ -7,16 +7,34 @@ use std::{
 
 use ::time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use axum::Router;
-use distill_portal_collector_runtime::{ParsedSession, ScanFailure, ScanReport, Scanner};
+use distill_portal_collector_runtime::{
+    ParsedSession, ScanCheckpoint, ScanCheckpointError, ScanFailure, ScanReport, Scanner,
+    SCANNER_CONFIG_VERSION,
+};
 use distill_portal_configuration::{BackendConfig, ConfigurationError};
-use distill_portal_ingest_service::{IngestDisposition, IngestError, IngestService};
+use distill_portal_ingest_service::{
+    service::IngestManyError, IngestDisposition, IngestError, IngestService,
+};
+use distill_portal_operations::{
+    decode_operation_params,
+    idempotency::{
+        canonical_params_hash, import_sessions_input_version, rescan_sources_input_version,
+        IdempotencyError,
+    },
+    CancelRequestOutcome, CancellationToken, CheckpointError, NewOperation, NoopCheckpoint,
+    Operation, OperationCheckpoint, OperationKind, OperationOutcome, OperationWorker,
+    OperationsError, OperationsListQuery, OperationsListResponse, OperationsStore,
+    SubmitOperationResponse,
+};
 use distill_portal_raw_session_store::{
     BlobStore, LocalFsBlobStore, ScanErrorInput, SqliteStore, StoreError,
 };
 use distill_portal_ui_api_contracts::{
-    source_key, ImportReport, PersistedScanError, RescanReport, SessionSyncStatus,
-    SourceSessionView, StoredSessionView,
+    source_key, ImportReport, ImportSourceSessionsRequest, PersistedScanError, RescanReport,
+    SessionSyncStatus, SourceSessionView, StoredSessionView,
 };
+use serde::Serialize;
+use serde_json::Value;
 use tokio::{net::TcpListener, sync::Mutex, task::JoinError, time as tokio_time};
 use tracing::{info, warn};
 
@@ -35,6 +53,12 @@ pub enum AppError {
     #[error(transparent)]
     Scan(#[from] ScanFailure),
     #[error(transparent)]
+    Operations(#[from] OperationsError),
+    #[error(transparent)]
+    Idempotency(#[from] IdempotencyError),
+    #[error(transparent)]
+    Checkpoint(#[from] CheckpointError),
+    #[error(transparent)]
     Join(#[from] JoinError),
 }
 
@@ -49,14 +73,16 @@ struct AppInner {
     store: Arc<SqliteStore>,
     blob_store: Arc<LocalFsBlobStore>,
     ingest_service: Arc<IngestService>,
+    operations_store: Arc<OperationsStore>,
+    operation_cancellations: OperationCancellationSignals,
     source_inventory: RwLock<SourceInventory>,
     scan_lock: Mutex<()>,
 }
 
-#[derive(Clone)]
 pub struct App {
     state: AppState,
     router: Router,
+    operation_workers: Vec<tokio::task::JoinHandle<()>>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -70,12 +96,37 @@ struct InventoryEntry {
     view: SourceSessionView,
 }
 
+#[derive(Clone, Debug, Default)]
+struct OperationCancellationSignals {
+    import_sessions: CancellationToken,
+    rescan_sources: CancellationToken,
+}
+
+struct AppScanCheckpoint<C> {
+    checkpoint: C,
+}
+
+impl<C: OperationCheckpoint> ScanCheckpoint for AppScanCheckpoint<C> {
+    fn check(&mut self) -> Result<(), ScanCheckpointError> {
+        self.checkpoint
+            .check_blocking()
+            .map_err(|error| match error {
+                CheckpointError::CancelRequested(_) => ScanCheckpointError::Cancelled,
+                other => ScanCheckpointError::Failed(other.to_string()),
+            })
+    }
+}
+
 impl App {
     pub async fn bootstrap(config: BackendConfig) -> Result<Self, AppError> {
         std::fs::create_dir_all(&config.data_dir)?;
-        let store = Arc::new(SqliteStore::open(config.data_dir.join("distill.db"))?);
+        let db_path = config.data_dir.join("distill.db");
+        let store = Arc::new(SqliteStore::open(db_path.clone())?);
+        let operations_store = Arc::new(OperationsStore::open(db_path)?);
+        operations_store.reconcile_interrupted()?;
         let blob_store = Arc::new(LocalFsBlobStore::new(config.data_dir.join("blobs"))?);
         let ingest_service = Arc::new(IngestService::new(store.clone(), blob_store.clone()));
+        let operation_cancellations = OperationCancellationSignals::default();
         let state = AppState {
             inner: Arc::new(AppInner {
                 scanner: Scanner::new(config.claude_roots.clone(), config.codex_roots.clone()),
@@ -83,14 +134,21 @@ impl App {
                 store,
                 blob_store,
                 ingest_service,
+                operations_store,
+                operation_cancellations,
                 source_inventory: RwLock::new(SourceInventory::default()),
                 scan_lock: Mutex::new(()),
             }),
         };
         state.startup_maintenance().await?;
         state.rescan().await?;
+        let operation_workers = state.spawn_operation_workers();
         let router = http_api::router(state.clone());
-        Ok(Self { state, router })
+        Ok(Self {
+            state,
+            router,
+            operation_workers,
+        })
     }
 
     pub fn router(&self) -> Router {
@@ -130,21 +188,254 @@ impl App {
     }
 }
 
+impl Drop for App {
+    fn drop(&mut self) {
+        for worker in &self.operation_workers {
+            worker.abort();
+        }
+    }
+}
+
 impl AppState {
     pub async fn rescan(&self) -> Result<RescanReport, AppError> {
-        let _guard = self.inner.scan_lock.lock().await;
-        let state = self.clone();
-        tokio::task::spawn_blocking(move || state.rescan_blocking()).await?
+        self.run_rescan_operation(NoopCheckpoint).await
     }
 
     pub async fn import_source_sessions(
         &self,
         session_keys: Vec<String>,
     ) -> Result<ImportReport, AppError> {
+        self.run_import_operation(session_keys, NoopCheckpoint)
+            .await
+    }
+
+    pub fn operations_store(&self) -> Arc<OperationsStore> {
+        self.inner.operations_store.clone()
+    }
+
+    pub async fn submit_rescan_operation(
+        &self,
+        params_json: Value,
+    ) -> Result<SubmitOperationResponse, AppError> {
+        let input_version = self.compute_rescan_sources_input_version();
+        let operation = self.submit_operation(
+            OperationKind::RescanSources,
+            &params_json,
+            params_json.clone(),
+            input_version,
+        )?;
+        Ok(submit_operation_response(&operation))
+    }
+
+    pub async fn submit_import_operation(
+        &self,
+        session_keys: Vec<String>,
+    ) -> Result<SubmitOperationResponse, AppError> {
+        let request = ImportSourceSessionsRequest { session_keys };
+        let input_version = self.compute_import_sessions_input_version(&request.session_keys)?;
+        let params_json = serde_json::to_value(&request).map_err(OperationsError::from)?;
+        let operation = self.submit_operation(
+            OperationKind::ImportSessions,
+            &request,
+            params_json,
+            input_version,
+        )?;
+        Ok(submit_operation_response(&operation))
+    }
+
+    pub async fn get_operation(&self, id: String) -> Result<Option<Operation>, AppError> {
+        Ok(self.inner.operations_store.get_by_id(&id)?)
+    }
+
+    pub async fn list_operations(
+        &self,
+        query: OperationsListQuery,
+    ) -> Result<OperationsListResponse, AppError> {
+        Ok(OperationsListResponse {
+            operations: self.inner.operations_store.list(query)?,
+        })
+    }
+
+    pub async fn request_operation_cancel(
+        &self,
+        id: String,
+    ) -> Result<CancelRequestOutcome, AppError> {
+        let outcome = self.inner.operations_store.request_cancel(&id)?;
+        if let CancelRequestOutcome::Requested(operation) = &outcome {
+            self.notify_operation_worker(operation.kind);
+        }
+        Ok(outcome)
+    }
+
+    async fn run_rescan_operation<C>(&self, checkpoint: C) -> Result<RescanReport, AppError>
+    where
+        C: OperationCheckpoint,
+    {
+        let _guard = self.inner.scan_lock.lock().await;
+        let state = self.clone();
+        tokio::task::spawn_blocking(move || state.rescan_blocking_with_checkpoint(checkpoint))
+            .await?
+    }
+
+    async fn run_import_operation<C>(
+        &self,
+        session_keys: Vec<String>,
+        checkpoint: C,
+    ) -> Result<ImportReport, AppError>
+    where
+        C: OperationCheckpoint,
+    {
         let _guard = self.inner.scan_lock.lock().await;
         let selected = self.select_inventory_sessions(&session_keys)?;
         let state = self.clone();
-        tokio::task::spawn_blocking(move || state.import_source_sessions_blocking(selected)).await?
+        tokio::task::spawn_blocking(move || {
+            state.import_source_sessions_blocking_with_checkpoint(selected, checkpoint)
+        })
+        .await?
+    }
+
+    fn submit_operation<P>(
+        &self,
+        kind: OperationKind,
+        params: &P,
+        params_json: Value,
+        input_version: String,
+    ) -> Result<Operation, AppError>
+    where
+        P: Serialize,
+    {
+        let canonical_params_hash = canonical_params_hash(params)?;
+        let store = &self.inner.operations_store;
+        if let Some(existing) =
+            store.find_by_idempotency_key(kind, &canonical_params_hash, &input_version)?
+        {
+            return Ok(existing);
+        }
+
+        let input = NewOperation {
+            kind,
+            canonical_params_hash: canonical_params_hash.clone(),
+            input_version: input_version.clone(),
+            params_json,
+        };
+        match store.insert(input) {
+            Ok(operation) => Ok(operation),
+            Err(error) => {
+                if let Some(existing) =
+                    store.find_by_idempotency_key(kind, &canonical_params_hash, &input_version)?
+                {
+                    return Ok(existing);
+                }
+                Err(error.into())
+            }
+        }
+    }
+
+    fn compute_import_sessions_input_version(
+        &self,
+        session_keys: &[String],
+    ) -> Result<String, AppError> {
+        let inventory = self
+            .inner
+            .source_inventory
+            .read()
+            .map_err(|_| AppError::Store(StoreError::LockPoisoned))?;
+        let requested = session_keys
+            .iter()
+            .map(String::as_str)
+            .collect::<HashSet<_>>();
+        let source_fingerprints = inventory.sessions.iter().filter_map(|entry| {
+            if requested.contains(entry.view.session_key.as_str()) {
+                Some((
+                    entry.view.session_key.clone(),
+                    entry.view.source_fingerprint.clone(),
+                ))
+            } else {
+                None
+            }
+        });
+        Ok(import_sessions_input_version(source_fingerprints))
+    }
+
+    fn compute_rescan_sources_input_version(&self) -> String {
+        let roots = self
+            .inner
+            .config
+            .claude_roots
+            .iter()
+            .chain(self.inner.config.codex_roots.iter())
+            .map(|path| path.display().to_string());
+        rescan_sources_input_version(SCANNER_CONFIG_VERSION, roots)
+    }
+
+    fn notify_operation_worker(&self, kind: OperationKind) {
+        match kind {
+            OperationKind::ImportSessions => {
+                self.inner.operation_cancellations.import_sessions.notify()
+            }
+            OperationKind::RescanSources => {
+                self.inner.operation_cancellations.rescan_sources.notify()
+            }
+        }
+    }
+
+    fn spawn_operation_workers(&self) -> Vec<tokio::task::JoinHandle<()>> {
+        let store = self.inner.operations_store.clone();
+        let import_worker = OperationWorker::new_with_cancellation(
+            OperationKind::ImportSessions,
+            store.clone(),
+            self.inner.operation_cancellations.import_sessions.clone(),
+        );
+        let rescan_worker = OperationWorker::new_with_cancellation(
+            OperationKind::RescanSources,
+            store,
+            self.inner.operation_cancellations.rescan_sources.clone(),
+        );
+
+        let import_state = self.clone();
+        let import_handle = import_worker.spawn(move |operation, checkpoint| {
+            let state = import_state.clone();
+            async move { state.execute_import_operation(operation, checkpoint).await }
+        });
+
+        let rescan_state = self.clone();
+        let rescan_handle = rescan_worker.spawn(move |_operation, checkpoint| {
+            let state = rescan_state.clone();
+            async move { state.execute_rescan_operation(checkpoint).await }
+        });
+
+        vec![import_handle, rescan_handle]
+    }
+
+    async fn execute_import_operation(
+        &self,
+        operation: Operation,
+        checkpoint: impl OperationCheckpoint,
+    ) -> OperationOutcome {
+        let request = match decode_operation_params::<ImportSourceSessionsRequest>(&operation) {
+            Ok(request) => request,
+            Err(error) => return OperationOutcome::failed_message(error.to_string()),
+        };
+
+        match self
+            .run_import_operation(request.session_keys, checkpoint)
+            .await
+        {
+            Ok(report) => OperationOutcome::succeeded(report),
+            Err(error) if is_cancelled(&error) => OperationOutcome::cancelled(),
+            Err(error) => OperationOutcome::failed_message(error.to_string()),
+        }
+    }
+
+    async fn execute_rescan_operation(
+        &self,
+        checkpoint: impl OperationCheckpoint,
+    ) -> OperationOutcome {
+        match self.run_rescan_operation(checkpoint).await {
+            Ok(report) => OperationOutcome::succeeded(report),
+            Err(error) if is_cancelled(&error) => OperationOutcome::cancelled(),
+            Err(error) => OperationOutcome::failed_message(error.to_string()),
+        }
     }
 
     pub async fn list_source_sessions(&self) -> Result<Vec<SourceSessionView>, AppError> {
@@ -254,8 +545,15 @@ impl AppState {
         })
     }
 
-    fn rescan_blocking(&self) -> Result<RescanReport, AppError> {
-        let batch = self.inner.scanner.scan()?;
+    fn rescan_blocking_with_checkpoint<C: OperationCheckpoint>(
+        &self,
+        checkpoint: C,
+    ) -> Result<RescanReport, AppError> {
+        let mut scan_checkpoint = AppScanCheckpoint { checkpoint };
+        let batch = self
+            .inner
+            .scanner
+            .scan_with_checkpoint(&mut scan_checkpoint)?;
         for scan_error in &batch.scan_errors {
             self.inner
                 .store
@@ -265,6 +563,7 @@ impl AppState {
         let mut report = scan_batch_report(&batch.report);
         let mut entries = Vec::with_capacity(batch.sessions.len());
         for session in batch.sessions {
+            scan_checkpoint.checkpoint.check_blocking()?;
             self.inner
                 .store
                 .clear_scan_error(session.tool, &session.source_path)?;
@@ -318,24 +617,34 @@ impl AppState {
         Ok(report)
     }
 
-    fn import_source_sessions_blocking(
+    fn import_source_sessions_blocking_with_checkpoint<C: OperationCheckpoint>(
         &self,
         selected_sessions: Vec<ParsedSession>,
+        checkpoint: C,
     ) -> Result<ImportReport, AppError> {
         let mut report = ImportReport {
             requested_sessions: selected_sessions.len(),
             ..ImportReport::default()
         };
 
-        for session in selected_sessions {
-            match self.inner.ingest_service.ingest(session)?.disposition {
+        let outcomes = self
+            .inner
+            .ingest_service
+            .ingest_many_with_checkpoint(selected_sessions, || checkpoint.check_blocking())
+            .map_err(|error| match error {
+                IngestManyError::Ingest(error) => AppError::Ingest(error),
+                IngestManyError::Checkpoint(error) => AppError::Checkpoint(error),
+            })?;
+        for outcome in outcomes {
+            match outcome.disposition {
                 IngestDisposition::Inserted => report.inserted_sessions += 1,
                 IngestDisposition::Replaced => report.updated_sessions += 1,
                 IngestDisposition::Unchanged => report.unchanged_sessions += 1,
             }
         }
 
-        self.rescan_blocking()?;
+        checkpoint.check_blocking()?;
+        self.rescan_blocking_with_checkpoint(checkpoint)?;
         Ok(report)
     }
 
@@ -395,6 +704,22 @@ fn scan_batch_report(scan_report: &ScanReport) -> RescanReport {
     }
 }
 
+fn is_cancelled(error: &AppError) -> bool {
+    matches!(
+        error,
+        AppError::Checkpoint(CheckpointError::CancelRequested(_))
+            | AppError::Scan(ScanFailure::Checkpoint(ScanCheckpointError::Cancelled))
+    )
+}
+
+fn submit_operation_response(operation: &Operation) -> SubmitOperationResponse {
+    SubmitOperationResponse {
+        operation_id: operation.id.clone(),
+        status: operation.status,
+        kind: operation.kind,
+    }
+}
+
 fn source_session_view(
     session: &ParsedSession,
     status: SessionSyncStatus,
@@ -435,4 +760,68 @@ async fn shutdown_signal() {
 
 pub async fn run(config: BackendConfig) -> Result<(), AppError> {
     App::bootstrap(config).await?.run().await
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{net::SocketAddr, path::Path, time::Duration};
+
+    use distill_portal_operations::{CancelRequested, CheckpointError, OperationCheckpoint};
+    use tempfile::TempDir;
+
+    use super::{App, BackendConfig, OperationOutcome};
+
+    #[derive(Clone)]
+    struct CancelImmediately;
+
+    impl OperationCheckpoint for CancelImmediately {
+        fn check_blocking(&self) -> Result<(), CheckpointError> {
+            Err(CancelRequested::new("test-operation").into())
+        }
+    }
+
+    #[tokio::test]
+    async fn rescan_operation_checkpoint_cancel_returns_cancelled_outcome() {
+        let tempdir = TempDir::new().unwrap();
+        let claude_root = tempdir.path().join("sources/claude/projects");
+        write_file(
+            &claude_root.join("project").join("session.jsonl"),
+            b"{\"type\":\"noop\"}\n",
+        );
+        let app = App::bootstrap(test_config(
+            tempdir.path().join("data"),
+            vec![claude_root],
+            vec![],
+        ))
+        .await
+        .unwrap();
+
+        let outcome = app
+            .state()
+            .execute_rescan_operation(CancelImmediately)
+            .await;
+
+        assert!(matches!(outcome, OperationOutcome::Cancelled(None)));
+    }
+
+    fn test_config(
+        data_dir: std::path::PathBuf,
+        claude_roots: Vec<std::path::PathBuf>,
+        codex_roots: Vec<std::path::PathBuf>,
+    ) -> BackendConfig {
+        BackendConfig::new(
+            data_dir,
+            "127.0.0.1:0".parse::<SocketAddr>().unwrap(),
+            Duration::from_secs(3_600),
+            claude_roots,
+            codex_roots,
+        )
+    }
+
+    fn write_file(path: &Path, bytes: &[u8]) {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(path, bytes).unwrap();
+    }
 }
