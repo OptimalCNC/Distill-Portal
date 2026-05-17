@@ -64,3 +64,7 @@
 - Phase 9a M3 local reviews are complete on evidence pack `.tmp/phase-9a-m3-evidence.md`: backend-protection verdict `backend untouched`, normal implementation verdict `approved`; both found no blocking issues and no missing evidence.
 - Commits currently carrying 9a M3 are `4009eab` and `1c426f0`. Verification remains as recorded in the previous 9a M3 update.
 - M3 is not yet formally declared landed for 9b M2 because the cross-family `claude -p` review is still pending or must be explicitly waived by the human. Prompt prepared at `.tmp/phase-9a-m3-claude-review.prompt.md`.
+
+## 2026-05-18 [9b] heartbeat — still waiting
+
+- M1 closed; M2 still blocked on 9a M3-landed declaration (cross-family `claude -p` review or human waiver outstanding). No code-touching work undertaken. `python3 wcag.py` retry continues to fail on the same upstream classifier outage that affected the designer + reviewer rounds.
