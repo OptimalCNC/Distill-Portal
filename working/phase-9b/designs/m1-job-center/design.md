@@ -152,6 +152,16 @@ the Phase 5 M5/M6 disclosure precedent):
   - Glyph: monospaced letter — `I` for `import_sessions`, `R` for
     `rescan_sources`. Future kinds (e.g. `summarize_session` → `S`)
     follow the same one-letter rule. **No emoji** anywhere.
+  - Collision-resolution policy (locked at M1 UI/UX review): when two
+    registered kinds share their first uppercase letter, the
+    LATER-registered kind upgrades to a two-letter monogram derived
+    from the kind name's syllabic split (e.g. if `search_sessions`
+    lands after `summarize_session`, `summarize_session` keeps `S`
+    and `search_sessions` becomes `Se`; the reverse landing order
+    would keep `search_sessions` as `S` and upgrade
+    `summarize_session` to `Su`). Phase 9b ships only `I` + `R`; the
+    rule is documented now so a Phase-10+ developer does not have to
+    re-derive it.
 - Kind label (`.jc-kind`):
   - T: `--font-chrome`, `--text-sm`, weight 600.
   - C: `--color-text`.
@@ -384,9 +394,14 @@ Rationale (referenced in §7 and §10):
   `.action-bar.sticky` regardless of z-index — verified by Phase 5
   precedent.
 - Free `aria-modal="true"` semantics implicit via the dialog role.
-- Precedent: the Phase 5 M5 Metadata drawer already uses
-  `<dialog>.showModal()` in the codebase; the Job Center reuses the
-  same pattern.
+- Precedent (corrected per M1 UI/UX review): the Phase 5 M5 Metadata
+  drawer used `<dialog>.showModal()` but was REMOVED in Phase 5 M2b
+  (App.test.tsx lines 3468–3485 assert no `<dialog>` mounts on row
+  click today). There is no surviving in-repo `<dialog>.showModal()`
+  consumer; the Job Center is the first reintroduction. The platform
+  contract is stable and the design rationale stands on its own — the
+  decision does not depend on a live precedent. `tokens.css` line 83
+  retains `--color-backdrop` for the dialog backdrop alpha.
 
 Alternative considered: non-modal `<aside aria-labelledby=…>` with
 manual focus management + `inert` on the document. Rejected because

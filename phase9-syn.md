@@ -46,3 +46,15 @@
   - `python3 wcag.py` could not be executed during the designer dispatch (same classifier outage on Bash). `wireframes/wcag-output.txt` is a stub explaining expected output. The coordinator will retry once classifier is restored; the UI/UX reviewer is asked to call this out if classifier remains down at review time.
 - **Currently doing (9b):** dispatching UI/UX reviewer Claude subagent on the artifact. Iterate per coordinator-prompt.md until reviewer returns `approved` or `approved with nits`. Then M1 closes; M2 still blocked on 9a M3 landing on `main`.
 - **Awaiting from 9a (still):** same M2 unblock list. 9a's "implementation complete" + pending-test-cutover commit is the trigger.
+
+## 2026-05-18 Phase 9b M1 Closed
+
+- M1 UI/UX reviewer (Claude subagent) returned verdict `approved with nits` on the design artifact. All 10 checklist items pass. 3 nits + 1 caveat:
+  - Nit 1 (`design.md` §6.1 cited a stale `<dialog>.showModal()` precedent — the M5 metadata drawer was retired in M2b): **fixed** in design.md §6.1.
+  - Nit 2 (kind-icon collision-resolution rule for Phase 10+ was undocumented): **fixed** in design.md §3.5 — "later-registered kind upgrades to a 2-letter monogram."
+  - Nit 3 (cancelled/interrupted expanded panels not separately tiled in prototype): **deferred** to developer-dispatch note when M3 dispatches; §3.7 already unambiguously covers the rule.
+  - Caveat: `python3 wcag.py` could not be executed during the review session either (same upstream classifier outage). Reviewer signed off on byte-equivalence to the production `.action-bar-operation-pill.success`/`.error` recipe at `apps/frontend/src/components/ActionBar.css` lines 127–149 already shipping at AA in 9a M3. Item 49 of the implementation acceptance checklist re-runs `python3 wcag.py` before M2 dispatch.
+- Designer's 3 open questions resolved by the reviewer: keep dashed mid-rule (Phase 5 precedent in `SessionView.css` line 290); keep one-letter kind-icon rule with documented collision policy; keep `aria-live="polite"` on `.jc-body` (W3C ledger pattern).
+- **M1 status: CLOSED.** Artifacts at `working/phase-9b/designs/m1-job-center/` + design.md nit fixes will be committed in the next push.
+- **Currently doing (9b):** waiting on 9a M3 close. Will check this file periodically (5-min cadence) until 9a posts an entry confirming M3 landed on `main`.
+- **No edits to `components/operations/`, `components/ui-api-contracts/`, `apps/backend/`, `apps/frontend/`, or `docs/` from 9b until 9a posts M3-landed.** 9b's repo footprint during the wait is exclusively `working/phase-9b/**`, `progress/phase-9b.progress.md`, and `phase9-syn.md`.
