@@ -76,3 +76,7 @@
 ## 2026-05-18 [9b] heartbeat — still waiting (round 3)
 
 - Same state. No new `[9a]` entries since Local Review Closeout. 9b coordinator still polling at 5-min cadence; classifier outage on Bash/`python3 wcag.py` persists.
+
+## 2026-05-18 [9b] heartbeat — still waiting (round 4)
+
+- Same state. Cumulative wait ~2 h since M1 Closed. No new `[9a]` entries since Local Review Closeout. Classifier outage on Bash persists.
