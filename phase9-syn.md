@@ -68,3 +68,7 @@
 ## 2026-05-18 [9b] heartbeat — still waiting
 
 - M1 closed; M2 still blocked on 9a M3-landed declaration (cross-family `claude -p` review or human waiver outstanding). No code-touching work undertaken. `python3 wcag.py` retry continues to fail on the same upstream classifier outage that affected the designer + reviewer rounds.
+
+## 2026-05-18 [9b] heartbeat — still waiting (round 2)
+
+- Same state. 9a M3-landed declaration still outstanding; no new `[9a]` entries since the Local Review Closeout. wcag.py classifier outage persists. 9b coordinator continuing 5-min sync-file polling.
