@@ -1,7 +1,7 @@
 // Typed Rust client against the real backend HTTP stack.
 //
-// Proves that a typed client posting to `/api/v1/source-sessions/import`
-// walks through the full
+// Proves that a typed client posting to `/api/v1/import`, then polling
+// `/api/v1/operations/:id`, walks through the full
 // `collector-runtime -> raw-session-store -> ingest-service` pipeline and
 // gets back the expected `ImportReport`. Browser-level coverage of the
 // inspection workflow (render, interact, proxy) lives in the Playwright
@@ -16,8 +16,9 @@ use bytes::Bytes;
 use distill_portal_backend::App as BackendApp;
 use distill_portal_configuration::BackendConfig;
 use distill_portal_ui_api_contracts::{
-    source_key, ImportReport, ImportSourceSessionsRequest, SessionSyncStatus, SourceSessionView,
-    StoredSessionView, TitleSource, Tool,
+    source_key, ImportReport, ImportSourceSessionsRequest, Operation, OperationStatus,
+    SessionSyncStatus, SourceSessionView, StoredSessionView, SubmitOperationResponse, TitleSource,
+    Tool,
 };
 use http_body_util::{BodyExt, Full};
 use hyper::{header::CONTENT_TYPE, Method, Request, StatusCode, Uri};
@@ -73,25 +74,31 @@ async fn inspection_surface_works_through_frontend_backend_http_boundary() {
     // resolved provenance must be Custom — pinning the parser priority
     // across the entire collector-runtime -> raw-session-store ->
     // ingest-service -> backend wire path.
-    assert_eq!(
-        source_sessions[0].title_source,
-        Some(TitleSource::Custom)
-    );
+    assert_eq!(source_sessions[0].title_source, Some(TitleSource::Custom));
 
     let key = source_key(Tool::ClaudeCode, CLAUDE_SESSION_ID);
-    let import_report: ImportReport = post_json(
+    let submit: SubmitOperationResponse = post_json_with_status(
         backend_addr,
-        "/api/v1/source-sessions/import",
+        "/api/v1/import",
         &ImportSourceSessionsRequest {
             session_keys: vec![key.clone()],
         },
+        StatusCode::ACCEPTED,
     )
     .await;
+    assert_eq!(submit.kind.as_str(), "import_sessions");
+    let operation = wait_operation_status(
+        backend_addr,
+        &submit.operation_id,
+        OperationStatus::Succeeded,
+    )
+    .await;
+    let import_report: ImportReport =
+        serde_json::from_value(operation.result_json.expect("operation result")).unwrap();
     assert_eq!(import_report.requested_sessions, 1);
     assert_eq!(import_report.inserted_sessions, 1);
 
-    let stored_sessions: Vec<StoredSessionView> =
-        get_json(backend_addr, "/api/v1/sessions").await;
+    let stored_sessions: Vec<StoredSessionView> = get_json(backend_addr, "/api/v1/sessions").await;
     assert_eq!(stored_sessions.len(), 1);
     let stored = &stored_sessions[0];
     assert_eq!(stored.status, SessionSyncStatus::UpToDate);
@@ -137,7 +144,31 @@ async fn get_json<T: serde::de::DeserializeOwned>(addr: SocketAddr, path: &str) 
     serde_json::from_slice(&body).unwrap()
 }
 
-async fn post_json<Req, Res>(addr: SocketAddr, path: &str, body: &Req) -> Res
+async fn wait_operation_status(
+    addr: SocketAddr,
+    operation_id: &str,
+    status: OperationStatus,
+) -> Operation {
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let operation: Operation =
+                get_json(addr, &format!("/api/v1/operations/{operation_id}")).await;
+            if operation.status == status {
+                return operation;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("operation reached expected status")
+}
+
+async fn post_json_with_status<Req, Res>(
+    addr: SocketAddr,
+    path: &str,
+    body: &Req,
+    expected_status: StatusCode,
+) -> Res
 where
     Req: serde::Serialize,
     Res: serde::de::DeserializeOwned,
@@ -148,10 +179,10 @@ where
         Method::POST,
         path,
         Some(("application/json", payload)),
-        Some(StatusCode::OK),
+        Some(expected_status),
     )
     .await;
-    assert_eq!(status, StatusCode::OK);
+    assert_eq!(status, expected_status);
     serde_json::from_slice(&body).unwrap()
 }
 

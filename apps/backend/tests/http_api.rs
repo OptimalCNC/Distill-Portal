@@ -12,8 +12,8 @@ use distill_portal_backend::App;
 use distill_portal_configuration::BackendConfig;
 use distill_portal_operations::{NewOperation, OperationKind, OperationStatus, OperationsStore};
 use distill_portal_ui_api_contracts::{
-    source_key, ImportReport, RescanReport, SessionSyncStatus, SourceSessionView,
-    StoredSessionView, TitleSource, Tool,
+    source_key, ImportReport, Operation, OperationsListResponse, RescanReport, SessionSyncStatus,
+    SourceSessionView, StoredSessionView, SubmitOperationResponse, TitleSource, Tool,
 };
 use serde_json::json;
 use tempfile::TempDir;
@@ -77,12 +77,10 @@ async fn importing_selected_session_saves_it_and_marks_it_up_to_date() {
     .unwrap();
 
     let key = source_key(Tool::ClaudeCode, CLAUDE_SESSION_ID);
-    let import_report: ImportReport = post_json_with_body(
-        &app,
-        "/api/v1/source-sessions/import",
-        json!({ "session_keys": [key] }),
-    )
-    .await;
+    let import_response = submit_import_operation(&app, vec![key]).await;
+    assert_eq!(import_response.kind, OperationKind::ImportSessions);
+    let import_report: ImportReport =
+        wait_http_operation_success(&app, &import_response.operation_id).await;
     assert_eq!(import_report.requested_sessions, 1);
     assert_eq!(import_report.inserted_sessions, 1);
 
@@ -111,12 +109,8 @@ async fn rescan_marks_saved_session_outdated_until_reimported() {
     .unwrap();
 
     let key = source_key(Tool::ClaudeCode, CLAUDE_SESSION_ID);
-    let _: ImportReport = post_json_with_body(
-        &app,
-        "/api/v1/source-sessions/import",
-        json!({ "session_keys": [key.clone()] }),
-    )
-    .await;
+    let import_response = submit_import_operation(&app, vec![key.clone()]).await;
+    let _: ImportReport = wait_http_operation_success(&app, &import_response.operation_id).await;
     let before: Vec<StoredSessionView> = get_json(&app, "/api/v1/sessions").await;
     let before_uid = before[0].session.session_uid.clone();
 
@@ -131,7 +125,9 @@ async fn rescan_marks_saved_session_outdated_until_reimported() {
         .as_bytes(),
     );
 
-    let rescan: RescanReport = post_empty_json(&app, "/api/v1/admin/rescan").await;
+    let rescan_response = submit_rescan_operation(&app).await;
+    let rescan: RescanReport =
+        wait_http_operation_success(&app, &rescan_response.operation_id).await;
     assert_eq!(rescan.outdated_sessions, 1);
     assert_eq!(rescan.up_to_date_sessions, 0);
 
@@ -143,12 +139,9 @@ async fn rescan_marks_saved_session_outdated_until_reimported() {
     let stored = &stored_sessions[0];
     assert_eq!(stored.status, SessionSyncStatus::Outdated);
 
-    let import_report: ImportReport = post_json_with_body(
-        &app,
-        "/api/v1/source-sessions/import",
-        json!({ "session_keys": [key] }),
-    )
-    .await;
+    let import_response = submit_import_operation(&app, vec![key]).await;
+    let import_report: ImportReport =
+        wait_http_operation_success(&app, &import_response.operation_id).await;
     assert_eq!(import_report.updated_sessions, 1);
 
     let stored_sessions: Vec<StoredSessionView> = get_json(&app, "/api/v1/sessions").await;
@@ -180,12 +173,8 @@ async fn incomplete_trailing_line_is_ignored_until_completed_and_reimported() {
     .unwrap();
 
     let key = source_key(Tool::ClaudeCode, CLAUDE_SESSION_ID);
-    let _: ImportReport = post_json_with_body(
-        &app,
-        "/api/v1/source-sessions/import",
-        json!({ "session_keys": [key.clone()] }),
-    )
-    .await;
+    let import_response = submit_import_operation(&app, vec![key.clone()]).await;
+    let _: ImportReport = wait_http_operation_success(&app, &import_response.operation_id).await;
     let stored_sessions: Vec<StoredSessionView> = get_json(&app, "/api/v1/sessions").await;
     let stored = &stored_sessions[0];
     let raw_before = get_raw(&app, &stored.session.session_uid).await;
@@ -195,15 +184,13 @@ async fn incomplete_trailing_line_is_ignored_until_completed_and_reimported() {
         .join("-home-huwei-ai-codings-distill-portal")
         .join(format!("{CLAUDE_SESSION_ID}.jsonl"));
     append_to_file(&source_path, b"\"}\n");
-    let rescan: RescanReport = post_empty_json(&app, "/api/v1/admin/rescan").await;
+    let rescan_response = submit_rescan_operation(&app).await;
+    let rescan: RescanReport =
+        wait_http_operation_success(&app, &rescan_response.operation_id).await;
     assert_eq!(rescan.outdated_sessions, 1);
 
-    let _: ImportReport = post_json_with_body(
-        &app,
-        "/api/v1/source-sessions/import",
-        json!({ "session_keys": [key] }),
-    )
-    .await;
+    let import_response = submit_import_operation(&app, vec![key]).await;
+    let _: ImportReport = wait_http_operation_success(&app, &import_response.operation_id).await;
     let stored_sessions: Vec<StoredSessionView> = get_json(&app, "/api/v1/sessions").await;
     let stored = &stored_sessions[0];
     let raw_after = get_raw(&app, &stored.session.session_uid).await;
@@ -246,12 +233,9 @@ async fn data_survives_backend_restart() {
 
     let first_app = App::bootstrap(config.clone()).await.unwrap();
     let key = source_key(Tool::ClaudeCode, CLAUDE_SESSION_ID);
-    let _: ImportReport = post_json_with_body(
-        &first_app,
-        "/api/v1/source-sessions/import",
-        json!({ "session_keys": [key] }),
-    )
-    .await;
+    let import_response = submit_import_operation(&first_app, vec![key]).await;
+    let _: ImportReport =
+        wait_http_operation_success(&first_app, &import_response.operation_id).await;
     let first_sessions: Vec<StoredSessionView> = get_json(&first_app, "/api/v1/sessions").await;
     assert_eq!(first_sessions.len(), 1);
     let first = first_sessions[0].session.clone();
@@ -266,6 +250,67 @@ async fn data_survives_backend_restart() {
 
     let raw = get_raw(&second_app, &second.session.session_uid).await;
     assert_eq!(raw.as_slice(), CLAUDE_FIXTURE);
+}
+
+#[tokio::test]
+async fn import_submit_is_idempotent_and_exposes_operation_endpoints() {
+    let tempdir = TempDir::new().unwrap();
+    let claude_root = seed_claude_source(tempdir.path(), CLAUDE_FIXTURE);
+    let app = App::bootstrap(test_config(
+        tempdir.path().join("data"),
+        vec![claude_root],
+        vec![],
+    ))
+    .await
+    .unwrap();
+
+    let key = source_key(Tool::ClaudeCode, CLAUDE_SESSION_ID);
+    let first = submit_import_operation(&app, vec![key.clone()]).await;
+    let second = submit_import_operation(&app, vec![key]).await;
+    assert_eq!(second.operation_id, first.operation_id);
+    assert_eq!(second.kind, OperationKind::ImportSessions);
+
+    let report: ImportReport = wait_http_operation_success(&app, &first.operation_id).await;
+    assert_eq!(report.inserted_sessions, 1);
+
+    let operation: Operation =
+        get_json(&app, &format!("/api/v1/operations/{}", first.operation_id)).await;
+    assert_eq!(operation.status, OperationStatus::Succeeded);
+    assert_eq!(operation.kind, OperationKind::ImportSessions);
+
+    let list: OperationsListResponse =
+        get_json(&app, "/api/v1/operations?kind=import_sessions&limit=10").await;
+    assert_eq!(list.operations.len(), 1);
+    assert_eq!(list.operations[0].id, first.operation_id);
+}
+
+#[tokio::test]
+async fn delete_operation_requests_cancel_and_worker_completes_queued_cancel() {
+    let tempdir = TempDir::new().unwrap();
+    let app = App::bootstrap(test_config(tempdir.path().join("data"), vec![], vec![]))
+        .await
+        .unwrap();
+    let store = app.state().operations_store();
+    let operation = store
+        .insert(new_operation(
+            OperationKind::RescanSources,
+            "delete-queued",
+            json!({}),
+        ))
+        .unwrap();
+
+    let cancel_requested = delete_operation(&app, &operation.id, StatusCode::OK).await;
+    assert_eq!(cancel_requested.status, OperationStatus::CancelRequested);
+    assert_eq!(cancel_requested.kind, OperationKind::RescanSources);
+
+    let cancelled =
+        wait_http_operation_status(&app, &operation.id, OperationStatus::Cancelled).await;
+    assert_eq!(cancelled.status, OperationStatus::Cancelled);
+
+    assert_eq!(
+        delete_operation_status(&app, &operation.id).await,
+        StatusCode::CONFLICT
+    );
 }
 
 #[tokio::test]
@@ -468,14 +513,82 @@ async fn get_json<T: serde::de::DeserializeOwned>(app: &App, uri: &str) -> T {
     serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
 }
 
-async fn post_empty_json<T: serde::de::DeserializeOwned>(app: &App, uri: &str) -> T {
-    post_json_with_body(app, uri, json!({})).await
+async fn submit_import_operation(app: &App, session_keys: Vec<String>) -> SubmitOperationResponse {
+    post_json_with_body(
+        app,
+        "/api/v1/import",
+        json!({ "session_keys": session_keys }),
+        StatusCode::ACCEPTED,
+    )
+    .await
+}
+
+async fn submit_rescan_operation(app: &App) -> SubmitOperationResponse {
+    post_json_with_body(app, "/api/v1/rescan", json!({}), StatusCode::ACCEPTED).await
+}
+
+async fn wait_http_operation_success<T: serde::de::DeserializeOwned>(
+    app: &App,
+    operation_id: &str,
+) -> T {
+    let operation = wait_http_operation_status(app, operation_id, OperationStatus::Succeeded).await;
+    serde_json::from_value(operation.result_json.expect("terminal result json")).unwrap()
+}
+
+async fn wait_http_operation_status(
+    app: &App,
+    operation_id: &str,
+    status: OperationStatus,
+) -> Operation {
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            let operation: Operation =
+                get_json(app, &format!("/api/v1/operations/{operation_id}")).await;
+            if operation.status == status {
+                return operation;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("HTTP operation reached expected status")
+}
+
+async fn delete_operation(app: &App, operation_id: &str, expected_status: StatusCode) -> Operation {
+    let response = app
+        .router()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/v1/operations/{operation_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), expected_status);
+    serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+}
+
+async fn delete_operation_status(app: &App, operation_id: &str) -> StatusCode {
+    app.router()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/api/v1/operations/{operation_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+        .status()
 }
 
 async fn post_json_with_body<T: serde::de::DeserializeOwned>(
     app: &App,
     uri: &str,
     body: serde_json::Value,
+    expected_status: StatusCode,
 ) -> T {
     let response = app
         .router()
@@ -489,7 +602,7 @@ async fn post_json_with_body<T: serde::de::DeserializeOwned>(
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), expected_status);
     serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
 }
 

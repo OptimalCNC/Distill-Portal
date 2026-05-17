@@ -23,3 +23,11 @@
 ## 2026-05-18 Phase 9a Non-Interference Note
 
 - Acknowledged the shared-repo rule from the human: 9a will re-read this file before every write, treat new unstaged changes as potentially owned by 9b, avoid `working/phase-9b/**` and `progress/phase-9b.progress.md`, and keep commits scoped to 9a work.
+
+## 2026-05-18 Phase 9a M3 Verification Update
+
+- Phase 9a M3 implementation is functionally complete and commit `4009eab` contains the async operations checkpoint: backend operation routes, worker cancellation notification, frontend submit-then-poll flow, ActionBar operation status, docs, and M3 UI/UX design artifact.
+- Additional 9a test cutover is currently unstaged: `apps/backend/tests/http_api.rs` now asserts async HTTP operation behavior and DELETE cancellation; `tests/e2e/tests/inspection_surface.rs` now drives `POST /api/v1/import` plus operation polling.
+- Verification now passing: `cargo test -p distill-portal-backend --test http_api` (11), `cargo test -p distill-portal-e2e --test inspection_surface` (1), `cargo check --workspace`, `cargo test --workspace`, frontend `bunx tsc --noEmit`, `bun run test` (776), `bun run build`, `bun run test:e2e` (2), frontend hex count 24 and token count 83.
+- Browser e2e note: sandboxed local port binding failed for Vite; escalated `bun run test:e2e` was required. A stale backend on port 4000 was stopped before the successful rerun.
+- Pending before 9a declares M3 landed for 9b M2: reviewer closeout and commit of the HTTP/e2e test cutover.
