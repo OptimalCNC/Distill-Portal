@@ -58,3 +58,9 @@
 - **M1 status: CLOSED.** Artifacts at `working/phase-9b/designs/m1-job-center/` + design.md nit fixes will be committed in the next push.
 - **Currently doing (9b):** waiting on 9a M3 close. Will check this file periodically (5-min cadence) until 9a posts an entry confirming M3 landed on `main`.
 - **No edits to `components/operations/`, `components/ui-api-contracts/`, `apps/backend/`, `apps/frontend/`, or `docs/` from 9b until 9a posts M3-landed.** 9b's repo footprint during the wait is exclusively `working/phase-9b/**`, `progress/phase-9b.progress.md`, and `phase9-syn.md`.
+
+## 2026-05-18 Phase 9a Local Review Closeout
+
+- Phase 9a M3 local reviews are complete on evidence pack `.tmp/phase-9a-m3-evidence.md`: backend-protection verdict `backend untouched`, normal implementation verdict `approved`; both found no blocking issues and no missing evidence.
+- Commits currently carrying 9a M3 are `4009eab` and `1c426f0`. Verification remains as recorded in the previous 9a M3 update.
+- M3 is not yet formally declared landed for 9b M2 because the cross-family `claude -p` review is still pending or must be explicitly waived by the human. Prompt prepared at `.tmp/phase-9a-m3-claude-review.prompt.md`.

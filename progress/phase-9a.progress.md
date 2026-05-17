@@ -37,18 +37,18 @@
 - `components/operations/` owns the ledger store, idempotency helpers, cancellation primitives, and workers; `components/ui-api-contracts` owns operation wire types and generated TS bindings.
 - `components/collector-runtime` exposes `SCANNER_CONFIG_VERSION = "scanner-v1"` with README bump discipline.
 - M1 schema uses the human-approved partial unique index over dedupe-blocking statuses (`queued`, `running`, `cancel_requested`, `succeeded`) so retries after `failed`, `cancelled`, and `interrupted` are possible.
-- Full M3 verification has passed locally; M3 reviewer trail is the remaining closeout item.
+- Full M3 verification has passed locally. Local M3 backend-protection and normal reviews are complete; cross-family Claude review or explicit human waiver remains before formal M3 close.
 
 ## Active Plan
 
 - Current chunk: **M3 HTTP cutover + frontend submit-then-poll + e2e + docs**
 - Owner: coordinator, with planner/explorer subagents providing read-only evidence.
-- Status: implementation + verification complete; reviewer closeout pending.
+- Status: implementation + verification complete; local reviewer closeout complete; cross-family Claude review / waiver pending.
 - UI/UX gate: completed for the visible M3 ActionBar/polling/status surface.
 
 ## Remaining Chunks
 
-- **M3 reviewer closeout** — backend-protection review, normal implementation review, and cross-family review or explicit human waiver for `claude -p` if tenant policy still blocks external review.
+- **M3 cross-family closeout** — run the prepared Claude prompt or record an explicit human waiver for `claude -p` if tenant policy still blocks external review.
 
 ## Completed Work Log
 
@@ -109,7 +109,9 @@
 - 2026-05-18: Updated M2 backend-protection review after the TOCTOU fix returned verdict `backend untouched`. Findings: none. Missing evidence: none.
 - 2026-05-18: Updated M2 normal implementation review after the TOCTOU fix returned verdict `approved with nits`. Findings: none blocking. Remaining nits: `Notify` should be wired or documented when DELETE cancellation lands in M3; process-kill crash simulation would be stronger but current seeded-row reconciliation test is acceptable for M2; DELETE cancellation evidence is M3 scope.
 - 2026-05-18: Human waived the updated M2 `claude -p` rerun after the TOCTOU fix and authorized proceeding to M3.
-- 2026-05-18: M3 reviewer trail pending after full local verification. Evidence to include: commit `4009eab`, current uncommitted HTTP/e2e test diff, verification commands listed in the Completed Work Log, and note that `bun run test:e2e` requires escalated local port binding in this sandbox.
+- 2026-05-18: M3 backend-protection review on `.tmp/phase-9a-m3-evidence.md` returned verdict `backend untouched`. Findings: none. Missing evidence: none. Rationale: all reviewed backend/component paths are either Phase 9a released paths or covered by recorded human-approved exceptions; M3 test exceptions stayed limited to async operation HTTP/e2e assertions; Phase 9b and unrelated local files were excluded.
+- 2026-05-18: M3 normal implementation review on `.tmp/phase-9a-m3-evidence.md` returned verdict `approved`. Findings: none. Missing evidence: none. Rationale: async import/rescan submit routes, operation list/detail/delete routes, frontend submit/poll flow, dependency direction, no-SSE/no-Job-Center boundary, and verification evidence satisfy M3.
+- 2026-05-18: M3 cross-family Claude review prompt prepared at `.tmp/phase-9a-m3-claude-review.prompt.md`; not run yet.
 
 ## Other-Subagent Reviewer Availability Log
 
@@ -117,7 +119,7 @@
 - 2026-05-17: A compact-evidence `claude -p --output-format text --tools ""` run was attempted after user approval, but the sandbox approval reviewer rejected it for external private-data transfer risk. After the human explicitly approved the transfer with knowledge of that risk, the retry was still rejected by tenant policy. The human waived this blocked requirement for M1 and instructed the coordinator to proceed to M2.
 - 2026-05-17: M2 has not been sent to `claude -p`; the same tenant policy that blocked M1 external transfer is expected to block `.tmp/phase-9a-m2-evidence.md` as well. M2 needs a human waiver or replacement review mechanism before it can be formally approved.
 - 2026-05-18: Human provided Claude review output manually for M2 before the TOCTOU fix. After the fix and updated local reviews, human waived the updated `claude -p` rerun and authorized proceeding to M3.
-- 2026-05-18: M3 cross-family `claude -p` review has not been run yet. Prior tenant policy blocked local evidence transfer even after human approval, so M3 may need the same human waiver path unless the reviewer command is supplied and accepted externally.
+- 2026-05-18: M3 cross-family `claude -p` review has not been run yet. Prompt file is `.tmp/phase-9a-m3-claude-review.prompt.md`. Prior tenant policy blocked local evidence transfer even after human approval, so M3 may need the same human waiver path unless the human runs the command externally and supplies the output.
 
 ## Protected-Path Exception Log
 
@@ -130,10 +132,10 @@
 ## Open Risks / Open Questions
 
 - The formal Task Invocation Block was inferred, not supplied literally. If later work needs to touch a path outside the Phase 9a released list, the coordinator must ask the human before proceeding.
-- The other-subagent reviewer command is blocked by sandbox/tenant policy for external private-data transfer, even with explicit human approval. M1 has a human waiver; future milestones need either the same human process decision or a replacement review mechanism if the policy remains unchanged.
+- The other-subagent reviewer command is blocked by sandbox/tenant policy for external private-data transfer, even with explicit human approval. M1/M2 have human waivers or manually supplied review; M3 currently needs either the prepared Claude review output or a human waiver.
 - M3 route decision is closed by implementation: the app now uses `/api/v1/import` and `/api/v1/rescan`; the old synchronous routes were removed from the frontend and backend router.
 - Unrelated worktree changes are present in `working/roadmap.md`, untracked `working/phase-10.md`, and untracked Phase 9b design work under `working/phase-9b/`. They are excluded from Phase 9a commits and review evidence.
 
 ## Next Recommended Task
 
-- Run the M3 reviewer closeout, address any findings, commit the M3 HTTP/e2e test cutover, then append a `[9a] M3 landed` entry to `phase9-syn.md` for the Phase 9b coordinator.
+- Obtain M3 cross-family Claude review output or a human waiver, then append a `[9a] M3 landed` entry to `phase9-syn.md` for the Phase 9b coordinator.
