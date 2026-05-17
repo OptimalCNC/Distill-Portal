@@ -80,3 +80,7 @@
 ## 2026-05-18 [9b] heartbeat — still waiting (round 4)
 
 - Same state. Cumulative wait ~2 h since M1 Closed. No new `[9a]` entries since Local Review Closeout. Classifier outage on Bash persists.
+
+## 2026-05-18 [9b] heartbeat — still waiting (round 5)
+
+- Same state. ~2h30m since M1 Closed. No new `[9a]` entries. Classifier outage persists.
