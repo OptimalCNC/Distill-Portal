@@ -1,0 +1,78 @@
+Phase 9b — Per-op card, expanded (native <details>)
+====================================================
+
+Collapsed (default for terminal ops)
+------------------------------------
+
++--------------------------------------------------+
+| [ I ] Import sessions             [ succeeded ]  |
+|       12 m ago                                   |
+|       ----------------------------------------   |
+|       3 sessions imported.                       |  <- success-tinted
++--------------------------------------------------+
+
+
+Expanded (user clicked the card)
+--------------------------------
+
++--------------------------------------------------+
+| [ I ] Import sessions             [ succeeded ]  |  <- summary row remains
+|       12 m ago                                   |     visible.
+|       ----------------------------------------   |
+|       3 sessions imported.                       |
++--------------------------------------------------+
+| Submitted  2026-05-18T14:10:33Z                  |
+| Finished   2026-05-18T14:10:51Z                  |
++--------------------------------------------------+
+| {                                                |
+|   "imported": 3,                                 |  <- pretty-printed
+|   "skipped": 0,                                  |     result_json in a
+|   "failed": 0,                                   |     <pre> block on
+|   "sessions": [                                  |     surface-raised,
+|     "fb12-claude_code",                          |     hairline-bordered.
+|     "fb13-claude_code",                          |
+|     "fb14-codex"                                 |
+|   ]                                              |
+| }                                                |
++--------------------------------------------------+
+
+
+Expanded, failed variant
+------------------------
+
++--------------------------------------------------+
+| [ R ] Rescan sources              [ failed ]     |
+|       18 m ago                                   |
+|       ----------------------------------------   |
+|       Collector root /Users/al…  (title=full)    |  <- error-tinted; the
++--------------------------------------------------+     summary line truncates
+| Submitted  2026-05-18T14:05:18Z                  |     to 80 chars in the
+| Finished   2026-05-18T14:05:18Z                  |     collapsed view but
++--------------------------------------------------+     the full text always
+| {                                                |     lives in the <pre>.
+|   "error": "collector_root_not_found",           |
+|   "detail": "Collector root /Users/alex/.con…",  |
+|   "kind": "rescan_sources",                      |
+|   "retryable": false                             |
+| }                                                |
++--------------------------------------------------+
+
+
+Card anatomy + behavior
+-----------------------
+
+- The card is a native <details>. Browser handles toggle + ARIA.
+- The visible <summary> contains the grid (icon | label/time | pill) +
+  bottom row (cancel|summary). The native marker is hidden via
+  list-style: none + ::-webkit-details-marker: none.
+- The expanded subtree appends a <dl> with submitted/finished
+  timestamps + a <pre> with pretty JSON.
+- Phase 8 upgrade path: when the bespoke JSON inspector lands (Phase 8
+  M2/M3), the <pre> here is swapped for the inspector component
+  without touching the <details>/<summary> shell. The data flow is
+  unchanged: `operation.result_json` / `operation.error_json` is the
+  single source.
+- Active ops (queued / running / cancel_requested) DO NOT show the
+  expand area — there's no terminal result_json yet. The <details>
+  remains usable; expanding it just reveals an empty section showing
+  Submitted timestamp only.

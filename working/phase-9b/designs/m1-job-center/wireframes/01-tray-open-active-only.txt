@@ -1,0 +1,45 @@
+Phase 9b — Tray open, active-only state
+=======================================
+
+      app header (above tray, page-wide)
++---------------------------------------------------------------+
+|                                                       [scrim] |
+|                                                               |
+|     +---------------------------------------+-------+ tray   |
+|     |  Job Center                  [ Close ]| ::backdrop is  |
+|     +---------------------------------------+ a 45% black    |
+|     | ACTIVE  (2)                            | overlay; tray |
+|     | +---+-------------------------------+ | is 360px wide |
+|     | | R | Rescan sources    [ running ] | | anchored to   |
+|     | |   | 3 s ago                       | | the right     |
+|     | |   |  -------------------------    | | edge, full    |
+|     | |   |  Scanning collector roots.    | | viewport      |
+|     | |   |                    [ Cancel ] | | height beneath|
+|     | +---+-------------------------------+ | the app       |
+|     |                                       | header.       |
+|     | +---+-------------------------------+ |              |
+|     | | I | Import sessions    [ queued ] | |              |
+|     | |   | 6 s ago                       | |              |
+|     | |   |  -------------------------    | |              |
+|     | |   |  Queued behind the rescan.    | |              |
+|     | |   |                    [ Cancel ] | |              |
+|     | +---+-------------------------------+ |              |
+|     |                                       |              |
+|     | RECENT  (0)                            |              |
+|     |                                       |              |
+|     |          No recent operations.        |              |
+|     +---------------------------------------+              |
++---------------------------------------------------------------+
+
+Notes
+-----
+- Tray surface is opaque --color-surface; 1px border-inline-start
+  --color-border separates it from the dimmed page beneath the scrim.
+- The horizontal divider between sections is 1px --color-border with
+  --space-6 above and --space-4 below the section header.
+- Each op card is a native <details>; the summary row is the always-
+  visible block above. The dashed mid-rule inside the card separates
+  the kind/status row from the action/summary row.
+- Pills sit at the right edge of the top row; cancel buttons sit at
+  the right edge of the bottom row. The grid keeps them aligned
+  vertically.

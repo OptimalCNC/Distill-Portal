@@ -1,0 +1,54 @@
+Phase 9b — Status pill catalog (7 variants)
+============================================
+
+All seven status pills sit at --text-xs, font-chrome, uppercase,
+letter-spacing 0.04em, --radius-sm. Each carries a 0.5rem-square dot at
+the left edge that doubles as a non-color disambiguator. Border style
+(solid / dotted / dashed) is the second disambiguator.
+
+         pill            border       dot                  recipe
+        ------         --------     ------       --------------------------
+QUEUED  [ • queued ]   1px dotted   hollow ring  fill: surface
+                       border-stg                text: ink-muted
+                                                 border: border-strong dotted
+
+RUNNING [● running ]   1px solid    filled dot,  fill: accent 10% / surface
+                       accent-mix   pulsing      text: accent 75% / ink
+                                                 border: accent 35% / surface
+
+CANCEL_ [░ cancel_req.] 1px dashed  filled dot   fill: warn 12% / surface
+REQ.                    warn-mix                 text: warn 75% / ink
+                                                 border: warn 55% / surface
+                                                         (DASHED)
+
+SUCC.   [● succeeded ] 1px solid    filled dot   fill: success 12% / surface
+                       success-mix                text: success 75% / ink
+                                                 border: success 35% / surface
+
+FAILED  [● failed ]    1px solid    filled dot   fill: error 12% / surface
+                       error-mix                  text: error 75% / ink
+                                                 border: error 35% / surface
+
+CANC.   [■ cancelled]  1px solid    filled        fill: surface-raised
+                       border-stg   SQUARE dot   text: ink-muted
+                                                 border: border-strong
+
+INTER.  [□ interr.]    1px dashed   hollow        fill: surface
+                       border-stg   SQUARE       text: ink-muted
+                                                 border: border-strong DASHED
+
+Visual disambiguation matrix
+----------------------------
+
+Property        queued   running   cancel_req   succeeded   failed   cancelled   interrupted
+border style    dotted   solid     dashed       solid       solid    solid       dashed
+border tint     neutral  accent    warn         success     error    neutral     neutral
+fill tint       none     accent    warn         success     error    neutral     none
+text tint       muted    accent    warn         success     error    muted       muted
+dot shape       round    round     round        round       round    square      square
+dot fill        hollow   filled    filled       filled      filled   filled      hollow
+animation       —        pulsing   —            —           —        —           —
+
+Result: every pair of statuses differs in at least TWO of {border-style,
+fill-tint, text-tint, dot-shape, dot-fill, animation} — robust to
+monochromatic vision, monochrome printing, and brightness-only displays.

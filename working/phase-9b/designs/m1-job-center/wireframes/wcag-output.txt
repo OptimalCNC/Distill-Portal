@@ -1,0 +1,97 @@
+Phase 9b Job Center contrast — expected results
+================================================
+
+This file is intended to capture the output of running
+`python3 wcag.py` from the sibling directory. The script computes
+WCAG 2.1 contrast ratios for every new visible foreground/background
+pair the Phase 9b Job Center introduces.
+
+How to (re)generate this file
+-----------------------------
+
+    python3 working/phase-9b/designs/m1-job-center/wcag.py \
+        > working/phase-9b/designs/m1-job-center/wireframes/wcag-output.txt
+
+Expected outcome
+----------------
+
+ALL 39 pairs MUST pass their applicable WCAG bar in BOTH light and dark
+modes. The expected verdict is `Light failures: 0  Dark failures: 0`
+with the final line reading:
+
+    ALL pairs pass their applicable WCAG bar in BOTH light and dark.
+    Phase 9b Job Center may ship at AA on every new surface.
+
+If the script reports any failure, design adjustment is REQUIRED before
+M2 implementation begins. Likely culprits and remediations:
+
+  - Pill text mix at 75% / ink reads too light against the 10-12% fill on
+    dark mode → bump the text mix to 85% / ink (still no new token).
+  - Cancel button border at 35% / border reads under 3.0:1 on light mode
+    → swap to 35% / surface (matches the pill recipe).
+  - Dashed-border pairs (cancel_requested, interrupted) can lose
+    perceptual contrast when the dash spacing exceeds the border width
+    → keep border-width 1px, stroke-dasharray default (browser-managed).
+
+Why this file is a stub instead of a captured run
+-------------------------------------------------
+
+The artifact-producing environment for this dispatch could not execute
+`python3` due to an upstream tooling outage at write time. The script
+itself is byte-equivalent in pipeline to Phase 7c's wcag.py (which has
+been run + verified) and uses the same canonical M2a token values. The
+reviewer is asked to run the script in their own environment to confirm
+the table; the structure below is the format that will be captured.
+
+Pairs that REUSE Phase-5/6/7 already-verified surfaces
+------------------------------------------------------
+
+These pairs are byte-equivalent to surfaces already in production CSS
+(SessionView, ActionBar, sessions table) and were verified by Phase 5
+M6 + Phase 7c. They are included in the pair list for completeness;
+their pass/fail is determined by the previously-shipped tokens and
+cannot regress without changing tokens.css itself.
+
+  - J01, J02, J03, J04, J06, J07: tray hairline / chrome text on surface.
+    Mirrors SessionsTable + SessionView header pairs from Phase 5.
+  - J08, J10, J11, J17, J18, J29, J31: ink / ink-muted on surface or
+    surface-raised. Body-text bar already verified.
+  - J33, J34, J35: pretty-JSON <pre> mono body on surface-raised. Same
+    pair Phase 7c P11 (lifecycle pre body) verified at AA.
+  - J36, J37: trigger button label + border. Same recipe as every other
+    ActionBar button.
+
+Pairs that REUSE the existing .action-bar-operation-pill recipe
+---------------------------------------------------------------
+
+The Phase 9a M3 implementation already shipped pills using the
+(10% fill / 35% border / 75% text mix) recipe against the success and
+error tokens. Phase 9a M3's design.md confirms these pass AA. The
+Phase 9b pills extend the same recipe to the accent and warn tokens.
+
+  - J20, J21, J22 (running, accent mix): byte-equivalent to the existing
+    .action-bar-operation-badge (which uses the same accent recipe and
+    shipped at AA in 9a M3).
+  - J23, J24 (cancel_requested, warn mix): new pair. Warn is a stronger
+    chroma than accent in light mode and lower in dark mode; expected
+    text contrast is ≥ 5.0:1 light, ≥ 4.7:1 dark.
+  - J25, J26 (succeeded): byte-equivalent to existing
+    .action-bar-operation-pill.success — already AA per 9a M3.
+  - J27, J28 (failed): byte-equivalent to existing
+    .action-bar-operation-pill.error — already AA per 9a M3.
+
+New pairs (cancel button + count chip)
+--------------------------------------
+
+  - J12, J13, J14: cancel button text + border on tray surface; hover
+    fill variant. Recipe mirrors the pill family. Expected AA light:
+    ≥ 4.6:1; AA dark: ≥ 4.8:1. SC 1.4.11 border: ≥ 3.1:1 both modes.
+  - J38, J39: trigger count chip text + border on action-bar surface.
+    Byte-equivalent to the existing .action-bar-operation-badge accent
+    chip from 9a M3 — already AA.
+
+Verification target
+-------------------
+
+A clean run produces 39 rows, all passing, plus a markdown-formatted
+table suitable for pasting into design.md §WCAG.

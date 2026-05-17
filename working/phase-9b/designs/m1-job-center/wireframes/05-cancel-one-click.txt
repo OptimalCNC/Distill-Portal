@@ -1,0 +1,59 @@
+Phase 9b — Cancel pattern: ONE-CLICK (no confirm modal)
+=======================================================
+
+Step 1 — Active running card
+-----------------------------
+
++--------------------------------------------------+
+| [ R ] Rescan sources             [ running ●○○ ] |  <- pulsing dot
+|       3 s ago                                    |
+|       ----------------------------------------   |
+|       Scanning collector roots.                  |
+|                                       [ Cancel ] |  <- error-tint border
++--------------------------------------------------+
+
+
+Step 2 — User clicks Cancel
+---------------------------
+
+(immediate, no intermediate modal, no second-click confirm)
+
++--------------------------------------------------+
+| [ R ] Rescan sources    [ cancel_requested ░░░ ] |  <- dashed border,
+|       3 s ago                                    |     warn-mix fill
+|       ----------------------------------------   |
+|       Cancelling… stopping at next checkpoint.   |
+|                                  [ Cancelling… ] |  <- disabled, still
++--------------------------------------------------+     visible so the
+                                                         user sees their
+                                                         action took effect.
+
+Step 3 — Worker reaches its next checkpoint, transitions to cancelled
+----------------------------------------------------------------------
+
+card disappears from Active, re-appears in Recent:
+
++--------------------------------------------------+
+| [ R ] Rescan sources             [ cancelled ]   |
+|       just now                                   |
+|       ----------------------------------------   |
+|       Cancelled by user.                         |
++--------------------------------------------------+
+
+
+Why one-click (rationale stays in design.md §7.1)
+--------------------------------------------------
+
+1. Cancel is recoverable. A `cancelled` row is terminal but does not
+   block resubmission (Phase 9a §Idempotency Model — cancelled and
+   failed rows do NOT participate in the idempotency lookup).
+2. A confirm modal adds friction for a recoverable, low-stakes action.
+3. Second-click confirm muddies the "Cancel" click target — users
+   either fight the dwell delay or learn to double-click everything.
+4. The visible feedback (pill flip + summary line + disabled button)
+   answers the "did my click register?" question within one paint
+   frame.
+5. If the worker had already reached terminal state between the SSE
+   event and the click, the DELETE returns 409; the client gracefully
+   removes the Cancel button and shows the current terminal state.
+   The user sees their click was meaningfully observed by the system.

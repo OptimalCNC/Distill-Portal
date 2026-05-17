@@ -1,0 +1,53 @@
+Phase 9b — ActionBar trigger button (replaces 9a's .action-bar-operation-badge)
+================================================================================
+
+The 9a `.action-bar-operation-pill` (last-completed) is REMOVED in 9b. Its
+information now lives in the tray's Recent section. The 9a badge becomes a
+labelled button with an inline count chip.
+
+count = 0  (no non-terminal operations)
+                                              hairline-bordered chip is HIDDEN
++-----------------------------------------+   when count=0; the button label
+| Rescan  | last rescan 3 m ago | Import   |  itself stays visible.
+|         selected (0) | [ Job Center  ]   |
++-----------------------------------------+
+
+
+count = 1
++-----------------------------------------+   small chip "1" in accent-mix
+| Rescan  | ... | [ Job Center  [ 1 ] ]    |  fill, mono tabular numerals.
++-----------------------------------------+
+
+
+count = 2
++-----------------------------------------+
+| Rescan  | ... | [ Job Center  [ 2 ] ]    |
++-----------------------------------------+
+
+
+count > 9
++-----------------------------------------+   chip shows "9+" (aria-label
+| Rescan  | ... | [ Job Center  [ 9+ ] ]   |  reads the actual integer).
++-----------------------------------------+
+
+
+Anatomy of the trigger button
+-----------------------------
+
+    [ Job Center  [ N ] ]
+    ^             ^
+    |             +-- inline count chip
+    |                 - 1px hairline border at accent 35% / surface mix
+    |                 - background at accent 10% / surface mix
+    |                 - text at accent 75% / ink mix
+    |                 - font-mono, --text-xs, tabular numerals
+    |                 - min-width 1.5rem so single-digit + "9+" share width
+    |                 - HIDDEN when count = 0
+    +-- button shell
+        - 1px solid --color-border-strong border
+        - --color-surface background, --color-text label
+        - font-chrome, --text-base
+        - aria-haspopup="dialog", aria-controls="jc-dialog"
+        - aria-expanded toggles with dialog open/close
+        - focus ring: 2px solid --color-accent at outline-offset 2px
+        - hover lift: border-color → --color-text

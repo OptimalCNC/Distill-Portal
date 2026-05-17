@@ -1,0 +1,31 @@
+Phase 9b — Tray open, empty state
+==================================
+
++---------------------------------------+
+|  Job Center                  [ Close ]|
++---------------------------------------+
+|                                       |
+|                                       |
+|                                       |
+|                                       |
+|             No operations.            |  <- italic, ink-muted,
+|                                       |     center-aligned, --space-6
+|                                       |     vertical padding above and
+|                                       |     below the single line.
+|                                       |
+|                                       |
+|                                       |
+|                                       |
++---------------------------------------+
+
+Notes
+-----
+- A single muted italic line. No sectioned skeleton ("Active (0)" /
+  "Recent (0)") — those subdivisions are noisy when the tray has
+  nothing to show.
+- Production: when EITHER section has zero entries while the other has
+  ≥1, the populated section renders its label + cards and the empty
+  section renders a smaller "No active operations." / "No recent
+  operations." italic line beneath its own label (see 01- and 04-
+  wireframes). The single "No operations." copy is reserved for the
+  truly-empty tray.
