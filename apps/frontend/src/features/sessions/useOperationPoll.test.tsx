@@ -4,6 +4,7 @@ import type { Operation } from "../../lib/contracts";
 import {
   isOperationTerminal,
   nextOperationPollDelay,
+  pollOperationOnce,
   useOperationPoll,
 } from "./useOperationPoll";
 
@@ -66,6 +67,46 @@ test("useOperationPoll aborts in-flight polling on unmount", async () => {
   expect(observed.signal?.aborted).toBe(true);
   expect(error).toBeInstanceOf(DOMException);
   expect((error as DOMException).name).toBe("AbortError");
+});
+
+test("pollOperationOnce issues exactly one request and honors AbortSignal", async () => {
+  // First half: single-call semantics — one fetch invocation per call,
+  // regardless of the row's status. This is the property `useOperationsFeed`
+  // relies on during its polling-fallback window (the outer 5 s cadence
+  // owns the looping; this helper stays pure).
+  const fetchMock = mock(async () => jsonResponse(operationFixture("running")));
+  globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+  const op = await pollOperationOnce("op-1");
+  expect(op.status).toBe("running");
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+
+  // Second half: the AbortSignal is forwarded to the underlying fetch call,
+  // so a never-resolving fetch can be aborted from the outside. The fetch
+  // mock observes the signal so the test asserts the helper's transparency
+  // rather than the platform's fetch-on-aborted-signal behavior (which
+  // varies by polyfill in test environments).
+  const observed: { signal: AbortSignal | null } = { signal: null };
+  const abortingFetch = mock(
+    async (_input: Request | string | URL, init?: RequestInit) => {
+      observed.signal = init?.signal ?? null;
+      return new Promise<Response>((_resolve, reject) => {
+        observed.signal?.addEventListener("abort", () => {
+          reject(new DOMException("Aborted", "AbortError"));
+        });
+      });
+    },
+  );
+  globalThis.fetch = abortingFetch as unknown as typeof globalThis.fetch;
+  const controller = new AbortController();
+  const pending = pollOperationOnce("op-2", controller.signal).catch(
+    (error: unknown) => error,
+  );
+  controller.abort();
+  const result = await pending;
+  expect(observed.signal?.aborted).toBe(true);
+  expect(result).toBeInstanceOf(DOMException);
+  expect((result as DOMException).name).toBe("AbortError");
 });
 
 function jsonResponse(payload: unknown): Response {

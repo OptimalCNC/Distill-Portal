@@ -22,3 +22,4 @@ export type { OperationStatus } from "@contracts/OperationStatus";
 export type { SubmitOperationResponse } from "@contracts/SubmitOperationResponse";
 export type { OperationsListResponse } from "@contracts/OperationsListResponse";
 export type { OperationsListQuery } from "@contracts/OperationsListQuery";
+export type { OperationTransitionEvent } from "@contracts/OperationTransitionEvent";

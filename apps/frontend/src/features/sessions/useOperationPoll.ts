@@ -21,6 +21,24 @@ export function nextOperationPollDelay(elapsedMs: number): number {
   return OPERATION_POLL_INITIAL_MS;
 }
 
+/**
+ * Single-shot operation read. Issues ONE `GET /api/v1/operations/:id` and
+ * returns the row — no loop, no terminal-state polling. The optional
+ * `signal` is forwarded straight to `getOperation()` so callers can abort
+ * an in-flight read (e.g. when an SSE event arrives first and renders the
+ * pending fetch obsolete).
+ *
+ * Consumed by `useOperationsFeed` during its polling-fallback window. The
+ * fallback's outer cadence (5 s `setInterval`) lives at the call site;
+ * this helper stays pure and unaware of timers.
+ */
+export function pollOperationOnce(
+  operationId: string,
+  signal?: AbortSignal,
+): Promise<Operation> {
+  return getOperation(operationId, signal);
+}
+
 export function useOperationPoll(): {
   pollOperation: (operationId: string) => Promise<Operation>;
   abortAll: () => void;

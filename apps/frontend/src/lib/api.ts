@@ -22,7 +22,21 @@ export const SCAN_ERRORS_PATH = "/api/v1/admin/scan-errors";
 export const RESCAN_PATH = "/api/v1/rescan";
 export const IMPORT_PATH = "/api/v1/import";
 export const OPERATIONS_PATH = "/api/v1/operations";
+export const OPERATIONS_EVENTS_PATH = "/api/v1/operations/events";
 export type OperationsListRequest = Partial<OperationsListQuery>;
+
+/**
+ * Absolute URL for the operations SSE stream
+ * (`GET /api/v1/operations/events`).
+ *
+ * Returned as a string so the consumer can pass it directly into the
+ * native `EventSource` constructor. The `API_BASE` prefix mirrors the
+ * other endpoints in this module; the dev Vite proxy and same-origin
+ * production deployments both fall through to a relative URL.
+ */
+export function apiOperationsEventsUrl(): string {
+  return `${API_BASE}${OPERATIONS_EVENTS_PATH}`;
+}
 /**
  * Path constructor for the streaming raw NDJSON endpoint.
  *
