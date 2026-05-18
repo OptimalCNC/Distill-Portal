@@ -53,14 +53,15 @@ Phase 9b shares the repo with a parallel Phase 9a coordinator. Coordination is l
 - Phase 9b coordinator engaged at 2026-05-18.
 - **M1 closed**: UI/UX design gate complete.
 - **M2 closed**: M2-A (trait + kinds extraction, Option A-plus) + M2-B (broadcaster + SSE + ts-rs binding) both delivered. All three reviewers approved each chunk on the same evidence pack. Spec AC-1, AC-2, AC-3, AC-4, AC-5 satisfied. On-disk schema unchanged. Only new direct Rust dep: `futures-core = "0.3"` (spec-authorized escape hatch).
-- **M3 about to dispatch**: Job Center UI + frontend SSE client + 6-surface doc sweep. Consumes the M1 design artifact + the M2 SSE wire contract.
+- **M3 dispatching**: 3-chunk decomposition adopted from M3 planner (`working/phase-9b/m3-plan.md`). M3-A (data layer) about to dispatch; M3-B (presentation) blocked on M3-A; M3-C (integration + close + 6-surface doc sweep) blocked on M3-B.
 
 ## Active Plan
 
-- Current chunk: **M3 (Job Center UI + frontend SSE client + 6-surface doc sweep)** — about to dispatch planner subagent to recommend the M3 chunk decomposition.
+- Current chunk: **M3-A (data layer)** — about to dispatch developer subagent.
 - Owner: coordinator.
-- Status: M2 closed; planner brief drawing from `working/phase-9b/designs/m1-job-center/` (54-item implementation acceptance checklist) + the M2 SSE wire contract (`OperationTransitionEvent`, `event: snapshot` / `transition` / `resync` separation, native `EventSource` consumption pattern).
+- Status: M3 planner returned 3-chunk decomposition; plan materialized at `working/phase-9b/m3-plan.md`; 4 open questions + 3 ambiguities resolved by coordinator (see plan §8 + §9).
 - UI/UX gate: not required for M3 — the M1 design artifact is the gate output; developer implements against it. Any in-implementation UX questions return to the design artifact (single source of truth).
+- Pre-dispatch verification: hex count = 24, token count = 83 (M3 baseline matches spec invariants). `python3 wcag.py` retry continues to fail on the same upstream classifier outage; the M1 reviewer's byte-equivalence sign-off stands; checklist item 49 (`wcag.py exit 0`) owned by M3-B's first CSS chunk.
 
 ## Completed Work Log
 
@@ -90,6 +91,16 @@ Phase 9b shares the repo with a parallel Phase 9a coordinator. Coordination is l
   - **Normal implementation reviewer** (Claude Explore subagent): initial `needs changes` (asked to remove the `From<HandlerError>` impl); re-review on `d41ecab` returned `approved` after recognizing the impl is reachable via `?` and the new doc comment resolves the visibility concern.
   - **Codex cross-family reviewer** (`codex exec`): initial `approved with nits` (cargo fmt diffs + lib.rs doc duplication); final `approved` on `b9fb37d` (M2-A files fmt-clean, sign-off Y).
 - 2026-05-18: **M2-A CLOSED**. Spec AC-3, AC-4, AC-5 advanced. AC-4's spec-literal reading ("kinds modules contain handler impls") was traded for the codex-recommended Option A-plus (impls in backend, helpers in operations crate) — deviation documented in `components/operations/README.md` and `phase9-syn.md`.
+- 2026-05-18: M2-B landed across two commits: `7079eda` (initial) + `7eb1d75` (codex review-response — fixed HIGH-severity snapshot/subscribe race in `apps/backend/src/http_api.rs` + applied 4 rustfmt diffs). Three-reviewer trail complete on `7eb1d75` evidence pack: backend-protection `backend untouched`; normal `approved`; codex `approved` after re-review. Only new direct dep: `futures-core = "0.3"` (spec §"Dependency Policy" escape hatch with documented Chromium-equivalent reproducer in `components/operations/README.md`).
+- 2026-05-18: **M2-B CLOSED + M2 CLOSED**. Spec AC-1, AC-2 satisfied. M2 milestone "Definition of done" fully met. Codex pre-consult workflow's six refinements (single Mutex<Inner>, mpsc bridge task, futures-core escape hatch, all-transitions-published, cancel-before-notify, snapshot order, KeepAlive default) shaped the implementation; codex caught the one real-world race the developer's "subscribe after snapshot" interpretation introduced.
+- 2026-05-18: M3 planner subagent (read-only Plan agent) dispatched; returned a 3-chunk decomposition + 4 open questions + 3 ambiguities. Plan materialized at `working/phase-9b/m3-plan.md`. Coordinator resolved all open questions:
+  - Connection-status indicator: NOT shipped in 9b (M1 design is silent; hook exposes status string; no visible badge). Future Phase 10+ may add via design amendment.
+  - Polling-fallback trigger: engaged after 5-step SSE backoff (1+2+5+10+30 s) reaches its terminal 30 s slot. Retry SSE every 30 s in parallel with 5 s polling cadence; on SSE reconnect, drop polling.
+  - `.jc-trigger` CSS home: `JobCenter.css` (cohesion with dialog vocabulary).
+  - Status pill: inline JSX in `OperationCard.tsx` (single consumer; no standalone module).
+  - `<pre>` content for null-payload terminal statuses: skip `<pre>` when both `result_json` and `error_json` are null; always render `<dl>` metadata. Rule applies uniformly to all 4 terminal statuses per M1 §3.7 + reviewer caveat #3.
+  - `python3 wcag.py` re-run cadence: M3-B owns first run (mandatory item 49); M3-C re-runs as regression check after ActionBar.css delta.
+- 2026-05-18: M3-A about to dispatch. Developer brief draws from `working/phase-9b/m3-plan.md` §2 + the 7 pinned implementation rules in §7.
 
 ## UI/UX Design Log
 
@@ -118,8 +129,14 @@ Phase 9b shares the repo with a parallel Phase 9a coordinator. Coordination is l
 
 ## Next Recommended Task
 
-- WAIT for Phase 9a M3 to close on `main` (`phase9-syn.md` will carry the trigger entry from the 9a coordinator). Then:
-  1. Re-read `components/operations/src/lib.rs`, `components/operations/src/worker.rs`, `components/operations/src/store.rs`, `apps/backend/src/app.rs`, `apps/backend/src/http_api.rs`, `apps/frontend/src/features/sessions/useOperationPoll.ts`, and `apps/frontend/src/components/ActionBar.tsx` to absorb the 9a M3 baseline.
-  2. Run `python3 wcag.py` against the M1 artifact (item 49 of the implementation acceptance checklist) and capture the output into `working/phase-9b/designs/m1-job-center/wireframes/wcag-output.txt`.
-  3. Dispatch the planner subagent for M2 chunk decomposition. Likely decomposition: (a) `OperationsBroadcaster` + ring buffer in `components/operations/src/sse.rs`; (b) `OperationHandler` trait + dispatcher in `components/operations/src/dispatcher.rs` + extraction of 9a's worker logic into `components/operations/kinds/{import_sessions,rescan_sources}.rs`; (c) `GET /api/v1/operations/events` SSE handler in `apps/backend/src/http_api.rs`; (d) `OperationTransitionEvent` + ts-rs binding in `components/ui-api-contracts/src/lib.rs`; (e) M2 integration tests for SSE replay correctness, dispatcher routing, and trait-refactor regression.
-  4. After M2 closes, dispatch M3: `useOperationsFeed.ts` (SSE client + polling fallback), `JobCenter.tsx` + `OperationCard.tsx`, `ActionBar.tsx` cutover (badge → trigger; pill removed), e2e extension, 6-surface doc sweep.
+- Dispatch M3-A developer subagent per `working/phase-9b/m3-plan.md` §2. Developer brief:
+  - Implement `apps/frontend/src/features/operations/useOperationsFeed.ts` per plan §2 (native EventSource + 5-step backoff + polling fallback engaging at 30 s steady-state + dedupe-by-`operation.id` + `cancelOperation` 409-swallow).
+  - Implement `apps/frontend/src/features/operations/useOperationsFeed.test.ts` covering snapshot/transition/resync/backoff/fallback/unmount/cancel-409.
+  - Add `OPERATIONS_EVENTS_PATH` + `apiOperationsEventsUrl()` to `apps/frontend/src/lib/api.ts`.
+  - Re-export `OperationTransitionEvent` in `apps/frontend/src/lib/contracts.ts`.
+  - In `apps/frontend/src/features/sessions/useOperationPoll.ts`: ADD `pollOperationOnce(operationId, signal)` pure helper alongside the existing hook export (hook export removal happens in M3-C).
+  - Add ONE test for `pollOperationOnce` in `useOperationPoll.test.tsx`.
+  - Verification: `bun run test`, `bunx tsc --noEmit`, `bun run build` all clean; hex/token invariants 24/83 preserved; `bun run test:e2e` is NOT required for M3-A (no visible surface).
+  - Three-reviewer rule applies at close: backend-protection (Claude Explore) + normal (Claude review) + codex cross-family (`codex exec`).
+- After M3-A closes: dispatch M3-B (presentation layer) per plan §3.
+- After M3-B closes: dispatch M3-C (integration + close + 6-surface doc sweep) per plan §4.

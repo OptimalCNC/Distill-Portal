@@ -279,3 +279,18 @@ Residual risks: clock-skew double-row creation (the unique index is on `(kind, h
 - **M2-B CLOSED** — Spec AC-1 + AC-2 satisfied; spec §"Milestones" Milestone 2 → "Definition of done" fully met. The codex pre-consult workflow (single Mutex<Inner>, mpsc bridge task, futures-core escape hatch, all-transitions-published, cancel-before-notify, snapshot order, KeepAlive default) was the principal architectural lever; codex caught the one real-world race the developer's "subscribe after snapshot" interpretation introduced.
 - **M2 CLOSED** — M2-A (trait + kinds extraction, Option A-plus) + M2-B (broadcaster + SSE + ts-rs binding) both delivered. Phase 9b M2 is complete.
 - **Currently doing (9b):** transitioning to M3 (Job Center UI + frontend SSE client + 6-surface doc sweep). M3 is frontend-heavy and consumes the M1 design artifact + the M2 SSE wire contract. Will dispatch M3 planner + developer subagents next.
+
+## 2026-05-18 [9b] M3 plan + M3-A dispatch
+
+- M3 planner subagent (read-only Plan agent) returned a 3-chunk decomposition. Plan materialized at `working/phase-9b/m3-plan.md`:
+  - **M3-A** — Data layer. New: `apps/frontend/src/features/operations/useOperationsFeed.ts` (+ `.test.ts`). Touched: `lib/api.ts` (`apiOperationsEventsUrl()`), `lib/contracts.ts` (`OperationTransitionEvent` re-export), `features/sessions/useOperationPoll.ts` (ADD `pollOperationOnce` pure helper; keep hook export). No visible UI change.
+  - **M3-B** — Presentation layer. New: `features/operations/{JobCenter, OperationCard}.{tsx, css, test.tsx}`. Owns checklist item 49 (`python3 wcag.py exit 0`).
+  - **M3-C** — Integration + close. Touched: `components/ActionBar.tsx` + `.css`, `App.tsx`, `App.test.tsx`, `e2e/inspection.spec.ts`, plus 6-surface doc sweep (`docs/README.md`, `docs/features/inspection-surface.md`, `docs/features/operations.md` NEW, `docs/playbooks/modify-{backend-api,frontend-page}.md`, `docs/dev-commands.md`). 24/83 invariant re-verification. e2e Job Center workflow + cancel-flow.
+- Open questions resolved by coordinator (recorded in plan §8):
+  - **Connection-status indicator** NOT shipped in 9b (M1 design is silent; hook exposes status string; no visible badge).
+  - **Polling-fallback trigger** engaged after 5-step SSE backoff (1+2+5+10+30 s) reaches its terminal 30 s slot; SSE retry every 30 s in parallel with 5 s polling cadence; on SSE reconnect, drop polling.
+  - **`.jc-trigger` CSS home** → `JobCenter.css`.
+  - **Status pill** inline JSX in `OperationCard.tsx` (single consumer; no standalone module).
+- Implementation pins (plan §7): uniform `<dl>` + `<pre>?` (null-payload skip) for all 4 terminal statuses; ActionBar prop API breakage swept inside M3-C (drops `runningOperationCount`, `lastOperationSummary`, `operationSummaryRefreshing`, `onRefreshOperations`, `showManualRefresh`; adds `onOpenJobCenter`, `runningCount`, `jobCenterOpen`); `useOperationPoll` hook export removed only in M3-C after App.tsx wiring change; ZERO new hex literals, ZERO new tokens.
+- **Currently doing (9b):** dispatching M3-A developer subagent. Three-reviewer rule applies at close (backend-protection + normal + codex cross-family).
+- **Phase 9a is read-only for 9b throughout M3.** No coordination required from 9a unless 9b discovers a 9a-M3-implementation regression while integrating against the substrate.
