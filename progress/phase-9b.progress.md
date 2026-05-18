@@ -52,16 +52,15 @@ Phase 9b shares the repo with a parallel Phase 9a coordinator. Coordination is l
 
 - Phase 9b coordinator engaged at 2026-05-18.
 - **M1 closed**: UI/UX design gate complete.
-- **M2-A closed**: trait + kinds extraction landed (Option A-plus per codex consultation). Three-reviewer trail complete: backend-protection `backend untouched`; normal `approved` on `d41ecab`; codex cross-family `approved` on `b9fb37d`. All 11 9a HTTP regression tests pass byte-equivalent. No new external Rust deps. Schema unchanged.
-- **M2-B in flight**: broadcaster + SSE route + ts-rs binding (combined chunk). About to dispatch developer.
-- **M3 blocked**: depends on M2-B.
+- **M2 closed**: M2-A (trait + kinds extraction, Option A-plus) + M2-B (broadcaster + SSE + ts-rs binding) both delivered. All three reviewers approved each chunk on the same evidence pack. Spec AC-1, AC-2, AC-3, AC-4, AC-5 satisfied. On-disk schema unchanged. Only new direct Rust dep: `futures-core = "0.3"` (spec-authorized escape hatch).
+- **M3 about to dispatch**: Job Center UI + frontend SSE client + 6-surface doc sweep. Consumes the M1 design artifact + the M2 SSE wire contract.
 
 ## Active Plan
 
-- Current chunk: **M2-B (broadcaster + SSE route + ts-rs binding, combined)** — about to dispatch developer subagent.
-- Owner: coordinator (locked design from planner recon + codex consultation; codex will be re-consulted on the broadcaster shape + stream adapter design before developer writes code).
-- Status: M2-A closed; M2-B planner brief in `working/phase-9b/m2-recon.md` is still authoritative.
-- UI/UX gate: not applicable (M2-B is backend-only per spec §"Milestones" Milestone 2 → "No frontend changes yet").
+- Current chunk: **M3 (Job Center UI + frontend SSE client + 6-surface doc sweep)** — about to dispatch planner subagent to recommend the M3 chunk decomposition.
+- Owner: coordinator.
+- Status: M2 closed; planner brief drawing from `working/phase-9b/designs/m1-job-center/` (54-item implementation acceptance checklist) + the M2 SSE wire contract (`OperationTransitionEvent`, `event: snapshot` / `transition` / `resync` separation, native `EventSource` consumption pattern).
+- UI/UX gate: not required for M3 — the M1 design artifact is the gate output; developer implements against it. Any in-implementation UX questions return to the design artifact (single source of truth).
 
 ## Completed Work Log
 
