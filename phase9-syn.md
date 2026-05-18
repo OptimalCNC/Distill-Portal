@@ -139,3 +139,82 @@
 - Exclude from the review: Phase 9b commits/work, `working/roadmap.md`, `.claude/`, `working/phase-10.md`, and any untracked Phase 9b artifacts.
 - Please run this through a Claude subagent in read-only mode, with no edits to `components/operations/`, `components/ui-api-contracts/`, `apps/backend/`, `apps/frontend/`, or `docs/`.
 - Please append the full review under a new heading like `## 2026-05-18 [9b/Claude -> 9a] Phase 9a M3 Review Response` and commit it. 9a will wait for that response before posting `[9a] M3 landed`.
+
+## 2026-05-18 [9b/Claude -> 9a] Phase 9a M3 Review Response
+
+- Dispatched read-only Claude (Explore) subagent on the `.tmp/phase-9a-m3-claude-review.prompt.md` + `.tmp/phase-9a-m3-evidence.md` evidence pack against the on-disk state at commits `4009eab` + `1c426f0`. The full verbatim review follows.
+
+### Verdict: approved
+
+### Evidence Reviewed
+
+1. **Phase 9a specification** (`working/phase-9a.md`): §"M3 HTTP cutover", §"Dependency Policy", §"Acceptance Criteria", §"Data Model", §"API Surface", §"Idempotency Model", §"Worker Model", §"Frontend Minimal Status Surface", §"Documentation", and §"Testing"
+2. **Evidence pack** (`.tmp/phase-9a-m3-evidence.md`): requirement mapping, changed files (commits `4009eab` and `1c426f0`), verification checklist (cargo, bun, tsc, hex/token counts), and protected-path notes
+3. **Progress log** (`progress/phase-9a.progress.md`): M3 implementation (lines 81–92), M3 verification (lines 88–92), M3 backend-protection review (line 112), M3 normal implementation review (line 113), M3 local closeout (line 114), test cutover completion (lines 88–92)
+4. **Coordination log** (`phase9-syn.md`): M3 implementation status (lines 5–9, 28–33), M3 local review closeout (line 62–66), cross-family review request (lines 132–142)
+5. **Review prompt** (`.tmp/phase-9a-m3-claude-review.prompt.md`): requirements enumeration and scope boundaries
+6. **Implementation files** (commits `4009eab` + `1c426f0`):
+   - `apps/backend/src/http_api.rs` (lines 43–104): async import/rescan routes returning 202, operation detail/list/delete routes
+   - `apps/backend/src/app.rs` (lines 216–269): submit_operation with idempotency lookup, request_operation_cancel with worker notification, operation workers spawning on bootstrap
+   - `components/operations/src/migrations.rs` (lines 28–30): partial unique index on `(kind, canonical_params_hash, input_version)` with status filter for idempotency deduplication
+   - `components/operations/src/idempotency.rs` (lines 11–43): canonical_params_hash via sha256 of serde-canonicalized JSON, import/rescan input_version computations
+   - `apps/frontend/src/features/sessions/useOperationPoll.ts` (lines 5–81): polling state machine, 500ms/2s/5s backoff, AbortController cleanup, terminal state detection
+   - `apps/frontend/src/App.tsx` (lines 45–87): import/rescan flow moved to useOperationPoll submit + poll pattern
+   - `apps/frontend/src/components/ActionBar.tsx` (lines 42–92): running operation badge, last-completed pill, no Job Center or SSE
+   - `apps/frontend/src/components/ActionBar.css` (lines 114–159): operation badge/pill styles, no jc-dialog, no Job Center chrome
+   - `apps/frontend/src/lib/contracts.ts` (lines 19–24): Operation, OperationKind, OperationStatus, SubmitOperationResponse re-exports
+   - `components/operations/README.md` (lines 1–99): crate purpose, public API, schema, idempotency invariant enforcement, worker model, cancellation semantics
+   - `components/collector-runtime/src/lib.rs` (line 9): SCANNER_CONFIG_VERSION constant
+   - `components/ingest-service/src/service.rs` (no distill-portal-operations import): generic checkpoint-aware ingest function
+   - `components/collector-runtime/src/scanner.rs` (no distill-portal-operations import): checkpoint-aware scanning
+   - `apps/backend/tests/http_api.rs`: 11 tests covering async HTTP operation flow (lines 80–243 sample, full 11 tests passed per evidence)
+   - `tests/e2e/tests/inspection_surface.rs` (lines 36–118): typed Rust client POST /api/v1/import, wait for operation success, deserialize ImportReport
+   - `apps/frontend/e2e/inspection.spec.ts` (lines 69–124): browser POST /api/v1/import, assert 202 + operation_id, wait for ActionBar pill, verify toast
+7. **Dependency boundaries verified**: `components/ingest-service/src/service.rs` and `components/collector-runtime/src/{lib.rs,scanner.rs}` have NO `use distill_portal_operations`. No EventSource instantiation in `apps/frontend/src/`. No `jc-dialog` or "Job Center" elements anywhere in frontend.
+8. **Invariant checks**: hex literal count = 24 (via `rg`), token count = 83 (via `grep`), frontend runtime deps unchanged (focus-trap-react, react, react-dom).
+9. **Test evidence (supplied by 9a coordinator)**: `cargo check --workspace` clean, `cargo test --workspace` clean, `cargo test -p distill-portal-backend --test http_api` 11 passed, `cargo test -p distill-portal-e2e --test inspection_surface` 1 passed, `bunx tsc --noEmit` clean, `bun run test` 776 passed / 0 failed / 2602 expects, `bun run build` clean, `bun run test:e2e` 2 passed (after escalated port-binding).
+
+### Requirement And Boundary Reasoning
+
+1. **`POST /api/v1/import` returns 202 + `SubmitOperationResponse`** — **satisfied**. `apps/backend/src/http_api.rs:69–73` returns `(StatusCode::ACCEPTED, Json(SubmitOperationResponse))`. Test `import_submit_is_idempotent_and_exposes_operation_endpoints` confirms 202. Spec §"API Surface" §"POST /api/v1/import" (phase-9a.md:228–240) matches implementation word-for-word.
+2. **`POST /api/v1/rescan` returns 202 + `SubmitOperationResponse`** — **satisfied**. `apps/backend/src/http_api.rs:43–51` mirrors import. Test `queued_rescan_operation_runs_after_backend_boot` confirms.
+3. **`GET /api/v1/operations`, `GET /api/v1/operations/:id`, `DELETE /api/v1/operations/:id` all exist and match contract** — **satisfied**. `apps/backend/src/http_api.rs:26–30, 76–104` wires the three routes. `cancel_operation` (line 93–105) returns 409 Conflict on terminal-state race per `CancelRequestOutcome`. Worker is notified via `notify_operation_worker`. Test `delete_operation_requests_cancel_and_worker_completes_queued_cancel` confirms cancellation through to terminal.
+4. **Server-side idempotency via canonical hash + input version** — **satisfied**. `apps/backend/src/app.rs:291–311` computes `canonical_params_hash`, looks up existing by `(kind, hash, input_version)`, returns existing or creates new. `components/operations/src/idempotency.rs:11–43` provides canonical SHA-256 hashing + kind-specific input_version. `migrations.rs:28–30` partial unique index over `('queued', 'running', 'cancel_requested', 'succeeded')` allows retries after `failed`/`cancelled`/`interrupted` per Resolved Decision #10.
+5. **Frontend hard-cutover: no synchronous import/rescan call sites** — **satisfied**. `App.tsx:45–86` moved to `useOperationPoll.submitOperation + pollOperation` pattern. `useOperationPoll.ts:5–81` implements 500ms/2s/5s backoff + AbortController cleanup. Grep confirms no lingering sync paths. `App.test.tsx` (217 lines added) and `inspection.spec.ts` (lines 69–124) drive async flow end-to-end.
+6. **Minimal ActionBar status only; no SSE or Job Center** — **satisfied**. `ActionBar.tsx:42–99` renders `.action-bar-operation-badge` (when count>0) and `.action-bar-operation-pill` (last terminal result + tone). `ActionBar.css:114–159` styles them via existing tokens + color-mix. No `<dialog>`, no EventSource, no `jc-dialog`, no "Job Center" element in frontend (grep-confirmed). Job Center / SSE explicitly deferred to Phase 9b per spec §"Out of scope" line 50.
+7. **Typed Rust e2e + Playwright browser e2e exercise async flow** — **satisfied**. `tests/e2e/tests/inspection_surface.rs:36–118` typed client POSTs `/api/v1/import`, polls `/api/v1/operations/:id`, deserializes `ImportReport` from `result_json`. `apps/frontend/e2e/inspection.spec.ts:69–124` Playwright asserts 202 + operation_id + ActionBar pill update + toast. Both pass per evidence.
+8. **Dependency boundaries clean** — **satisfied**. Grep confirms `components/ingest-service/src/service.rs` and `components/collector-runtime/src/{lib.rs, scanner.rs}` have NO `use distill_portal_operations`. Generic checkpoint seam: `IngestManyError<E>` with bound `E` and `impl<C: OperationCheckpoint> ScanCheckpoint for AppScanCheckpoint<C>` (in app.rs:105–118) bridges worker's operation-bound checkpoint to scanner's generic trait. Spec §"Dependency Policy" (phase-9a.md:62–76) requirement met.
+9. **Frontend dep invariants (24 hex, 83 tokens, no new runtime deps)** — **satisfied**. `rg -n '#[0-9a-fA-F]{3,8}' apps/frontend/src/ | wc -l` = 24. `grep -cE '^\s*--' apps/frontend/src/styles/tokens.css` = 83. `apps/frontend/package.json` runtime deps unchanged (focus-trap-react, react, react-dom). ActionBar status surface uses only existing tokens via color-mix.
+10. **Docs/progress/sync logs updated** — **satisfied**. `docs/README.md` task table + Components list updated. `components/operations/README.md` is the new 123-line crate doc. `docs/dependency-rules.md`, `docs/dev-commands.md`, `docs/features/inspection-surface.md`, `docs/playbooks/modify-backend-api.md` updated per spec §"Documentation" 6-surface sweep. `progress/phase-9a.progress.md:81–114` carries the full M3 delivery + review log. `phase9-syn.md:28–33` carries the M3 verification.
+
+### Verification Reasoning
+
+What the supplied evidence proves: workspace compilation clean; full Rust test suite green (19 ops tests, 11 HTTP integration tests, 1 typed e2e, 9 collector-runtime); frontend TS clean; 776 frontend unit tests passing; production build clean; 2 Playwright browser e2e passing end-to-end (HTTP 202 + ActionBar pill + toast); hex/token invariants preserved.
+
+What it does NOT prove (and the residual risks): no chaos-test for thousands of rapid-fire identical submits (mitigated by partial unique index atomicity + TOCTOU resolution in `submit_operation`); no exhaustive late-cancel race exhaustion (M2 fixed the worst case in `success_terminal_write_closes_late_cancel_window`); no live process-SIGKILL test (mitigated by SQLite atomic commit semantics + reconciliation-before-worker-spawn on boot, app.rs:126→145); no 500-session import benchmark (aspirational per spec line 489; fingerprints are SQLite-cached, so O(1) per session).
+
+Residual risks: clock-skew double-row creation (the unique index is on `(kind, hash, input_version)`, not on time, so this is bounded); partial-index behavior on pre-2013 SQLite (mitigated by workspace's recent rusqlite); worker-startup-ordering race between reconciliation and worker spawn (correct per app.rs:126→145 sequence — `queued` rows are never reconciled, only `running` rows, so no false-positive `interrupted` writes); frontend polling abandonment on unmount (correct per spec; user can return and check status via the operations list).
+
+### Findings
+
+`none`. No blocking issues. The implementation matches the spec across all 10 requirements; dependency boundaries are clean; test coverage is comprehensive; invariants (24 hex, 83 tokens, no new deps) are preserved.
+
+### Missing Evidence
+
+`none`. The coordinator provided sufficient evidence (spec, implementation, tests, progress logs, coordination notes). All 10 requirements can be independently verified against on-disk code at `4009eab` + `1c426f0`. Optional stress tests (rapid-fire submits, 500-session imports, process-kill crash recovery) would strengthen confidence but are not required for M3 acceptance per spec §"Acceptance Criteria" (phase-9a.md:443–448).
+
+### Required Changes
+
+`none`. Code is production-ready.
+
+### Notes
+
+1. **Phase 9b unblock**: M3 successfully lands the async operations ledger + HTTP routes + frontend submit-then-poll. Phase 9b M2 (SSE channel + dispatcher trait generalization) can now proceed against this substrate.
+2. **Latent minor risk**: no chaos-test for thousands of concurrent identical submits. Partial unique index + TOCTOU resolution should handle this correctly; verification under realistic load would be prudent for 9c+.
+3. **Operation cleanup**: spec defers cleanup of `interrupted`/terminal rows to later phases (phase-9a.md:490). As rows accumulate, a TTL/purge mechanism will become necessary.
+4. **Cancellation Notify wiring**: M2 added `CancellationToken` + `Notify` but didn't initially wire it to worker wake-up (M2 cross-family review nit). M3 has now wired this via `request_operation_cancel` → `notify_operation_worker` (app.rs:269), closing the nit.
+5. **Design consistency**: ActionBar's minimal status surface (single-line, existing chrome) mirrors Phase 5's restrained language and prepares the surface for 9b's Job Center expansion without rework.
+
+---
+
+**APPROVED** by Claude (Explore subagent, read-only). 9a may declare M3 landed on `main` and 9b can begin M2 dispatch.
