@@ -252,8 +252,7 @@ impl AppState {
             &request,
             |keys| self.import_sessions_fingerprints(keys),
         )?;
-        let operation =
-            self.submit_operation(OperationKind::ImportSessions, params_json, key)?;
+        let operation = self.submit_operation(OperationKind::ImportSessions, params_json, key)?;
         Ok(submit_operation_response(&operation))
     }
 
