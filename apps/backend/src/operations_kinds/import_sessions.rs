@@ -105,7 +105,10 @@ mod tests {
 
         // Bootstrap runs a rescan which populates the source inventory.
         let inventory = app.state().list_source_sessions().await.unwrap();
-        assert!(!inventory.is_empty(), "expected inventory to have a session");
+        assert!(
+            !inventory.is_empty(),
+            "expected inventory to have a session"
+        );
 
         let session_keys: Vec<String> = inventory
             .iter()
@@ -138,7 +141,9 @@ mod tests {
         assert_eq!(key.input_version, stored.input_version);
 
         // Sanity: empty params produce a deterministic key, not a panic.
-        let empty_key = handler.idempotency_key(&json!({"session_keys": []})).unwrap();
+        let empty_key = handler
+            .idempotency_key(&json!({"session_keys": []}))
+            .unwrap();
         assert!(!empty_key.canonical_params_hash.is_empty());
         assert!(!empty_key.input_version.is_empty());
     }

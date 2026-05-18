@@ -204,32 +204,16 @@ mod tests {
     fn register_panics_on_duplicate_kind() {
         let mut dispatcher = Dispatcher::new();
         dispatcher
-            .register(RecordingHandler::new(
-                "kind_a",
-                empty_key("a"),
-                json!({}),
-            ))
-            .register(RecordingHandler::new(
-                "kind_a",
-                empty_key("a2"),
-                json!({}),
-            ));
+            .register(RecordingHandler::new("kind_a", empty_key("a"), json!({})))
+            .register(RecordingHandler::new("kind_a", empty_key("a2"), json!({})));
     }
 
     #[test]
     fn kinds_iterator_returns_all_registered() {
         let mut dispatcher = Dispatcher::new();
         dispatcher
-            .register(RecordingHandler::new(
-                "kind_a",
-                empty_key("a"),
-                json!({}),
-            ))
-            .register(RecordingHandler::new(
-                "kind_b",
-                empty_key("b"),
-                json!({}),
-            ));
+            .register(RecordingHandler::new("kind_a", empty_key("a"), json!({})))
+            .register(RecordingHandler::new("kind_b", empty_key("b"), json!({})));
 
         let mut kinds = dispatcher.kinds().collect::<Vec<_>>();
         kinds.sort();

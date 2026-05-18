@@ -238,8 +238,7 @@ impl AppState {
             SCANNER_CONFIG_VERSION,
             self.scanner_roots_display(),
         )?;
-        let operation =
-            self.submit_operation(OperationKind::RescanSources, params_json, key)?;
+        let operation = self.submit_operation(OperationKind::RescanSources, params_json, key)?;
         Ok(submit_operation_response(&operation))
     }
 
@@ -356,9 +355,11 @@ impl AppState {
         &self,
         session_keys: &[String],
     ) -> Result<Vec<(String, String)>, HandlerError> {
-        let inventory = self.inner.source_inventory.read().map_err(|_| {
-            HandlerError::Internal(StoreError::LockPoisoned.to_string())
-        })?;
+        let inventory = self
+            .inner
+            .source_inventory
+            .read()
+            .map_err(|_| HandlerError::Internal(StoreError::LockPoisoned.to_string()))?;
         let requested = session_keys
             .iter()
             .map(String::as_str)
@@ -707,8 +708,7 @@ fn spawn_operation_workers(
                 OperationKind::ImportSessions => cancellations.import_sessions.clone(),
                 OperationKind::RescanSources => cancellations.rescan_sources.clone(),
             };
-            let worker =
-                OperationWorker::new_with_cancellation(kind, store.clone(), cancellation);
+            let worker = OperationWorker::new_with_cancellation(kind, store.clone(), cancellation);
             worker.spawn(move |operation, checkpoint| {
                 let handler = handler.clone();
                 async move {
