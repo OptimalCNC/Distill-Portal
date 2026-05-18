@@ -1,0 +1,345 @@
+/*
+ * Feature-local CSS for `OperationCard.tsx`.
+ *
+ * Phase 9b M3-B — the per-operation card living inside the Job Center
+ * tray. Selectors owned here:
+ *   - `.jc-card` / `.jc-card[open]` — native `<details>` shell.
+ *   - `.jc-card-summary` — CSS Grid summary row (icon / kind / time /
+ *     pill / bottom row).
+ *   - `.jc-icon`, `.jc-kind`, `.jc-time` — summary fields.
+ *   - `.jc-bottom-row` — full-width cancel-or-summary line.
+ *   - `.jc-summary-text` — terminal-op result line.
+ *   - `.jc-cancel` / `.jc-cancel:hover` / `.jc-cancel[disabled]` —
+ *     one-click cancel button.
+ *   - `.jc-pill` + 7 status-variant rules (queued / running /
+ *     cancel_requested / succeeded / failed / cancelled / interrupted).
+ *   - `.jc-pill-dot` + the `data-pulse="true"` animation hook.
+ *   - `.jc-expand`, `.jc-expand-meta`, `.jc-expand-json` — expanded
+ *     panel inside `<details>`.
+ *
+ * Design contract: `working/phase-9b/designs/m1-job-center/design.md`
+ * §3.5 (card anatomy), §3.6 (pill recipe matrix), §3.7 (expanded
+ * panel). Every visible color is a `color-mix(in srgb, ...)` against
+ * an existing token in `apps/frontend/src/styles/tokens.css`. ZERO new
+ * tokens; ZERO new hex literals. The same 75% text / 35% border / 8%
+ * hover-fill / 10-12% background recipe used by the existing
+ * `.action-bar-operation-pill` family (see ActionBar.css lines
+ * 127–149) is mirrored here for the cancel button + the seven pill
+ * variants, so AA contrast is guaranteed by induction.
+ *
+ * The pulsing-dot animation is toggled via `data-pulse="true"` on the
+ * pill (CSS attribute selector). React never remounts the dot element
+ * across status changes — the animation survives status transitions
+ * without restart. Reduced-motion is honoured by the page-wide rule
+ * in `global.css`.
+ */
+
+/* ===== Card shell ======================================= */
+
+.jc-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  margin-block-end: var(--space-2);
+  overflow: hidden;
+}
+
+.jc-card[open] {
+  border-color: var(--color-border-strong);
+}
+
+.jc-card > summary.jc-card-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: var(--space-3);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: auto auto auto;
+  column-gap: var(--space-3);
+  row-gap: var(--space-1);
+  align-items: center;
+}
+
+.jc-card > summary.jc-card-summary::-webkit-details-marker {
+  display: none;
+}
+
+.jc-card > summary.jc-card-summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+/* ===== Summary cells ==================================== */
+
+.jc-icon {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+  background: var(--color-surface-raised);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.jc-kind {
+  grid-column: 2;
+  grid-row: 1;
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+.jc-time {
+  grid-column: 2;
+  grid-row: 2;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+  line-height: 1.2;
+}
+
+.jc-pill {
+  /* Pill anchors to the rightmost column of the summary grid. */
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+}
+
+.jc-bottom-row {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-block-start: 1px dashed var(--color-border);
+  min-width: 0;
+}
+
+.jc-summary-text {
+  font-family: var(--font-chrome);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ===== Cancel button ==================================== */
+
+.jc-cancel {
+  appearance: none;
+  cursor: pointer;
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid
+    color-mix(in srgb, var(--color-error) 35%, var(--color-border));
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: color-mix(in srgb, var(--color-error) 75%, var(--color-text));
+  flex-shrink: 0;
+  transition:
+    background-color var(--motion-fast) linear,
+    border-color var(--motion-fast) linear;
+}
+
+.jc-cancel:hover {
+  background: color-mix(in srgb, var(--color-error) 8%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-error) 55%, var(--color-border));
+}
+
+.jc-cancel:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.jc-cancel[disabled] {
+  cursor: default;
+  opacity: 0.55;
+}
+
+/* ===== Expanded panel =================================== */
+
+.jc-expand {
+  padding: var(--space-3);
+  border-block-start: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+}
+
+.jc-expand-meta {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  margin: 0 0 var(--space-2);
+}
+
+.jc-expand-meta > div {
+  display: inline-flex;
+  flex-direction: row;
+  gap: var(--space-1);
+}
+
+.jc-expand-meta dt {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.jc-expand-meta dd {
+  margin: 0;
+}
+
+.jc-expand-json {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  overflow-x: auto;
+  color: var(--color-text);
+  white-space: pre;
+}
+
+/* ===== Status pill — base recipe ======================== */
+
+.jc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 1.25rem;
+  padding: 0 var(--space-2);
+  font-family: var(--font-chrome);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  background: var(--color-surface);
+  white-space: nowrap;
+  transition:
+    background-color var(--motion-base) var(--ease-out),
+    border-color var(--motion-base) var(--ease-out),
+    color var(--motion-base) var(--ease-out);
+}
+
+.jc-pill .jc-pill-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.jc-pill[data-pulse="true"] .jc-pill-dot {
+  animation: jc-pulse var(--motion-pulse) ease-in-out infinite;
+}
+
+@keyframes jc-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.75); }
+}
+
+/* ===== Status pill — seven variants =====================
+ *
+ * Per M1 design.md §3.6 table. Each variant differs in at least TWO
+ * of {border-style, fill tint, text tint, dot shape, dot fill,
+ * animation} so the family stays legible under monochromatic vision
+ * and reduced-color filters. The grep invariant from checklist
+ * item 33 expects exactly 7 matches against the regex
+ *   `jc-pill\.(queued|running|cancel_requested|succeeded|failed|cancelled|interrupted)`
+ * inside this file. Adding a new variant requires updating the
+ * checklist + the wcag.py pairs.
+ */
+
+/* queued — neutral surface, dotted border, hollow ring dot */
+.jc-pill.queued {
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  border: 1px dotted var(--color-border-strong);
+}
+
+.jc-pill.queued .jc-pill-dot {
+  background: transparent;
+  border: 1px solid currentColor;
+}
+
+/* running — accent fill, solid border, filled dot (pulses via
+ * data-pulse="true") */
+.jc-pill.running {
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-accent) 75%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-surface));
+}
+
+/* cancel_requested — warn fill, dashed border, filled dot */
+.jc-pill.cancel_requested {
+  background: color-mix(in srgb, var(--color-warn) 12%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-warn) 75%, var(--color-text));
+  border: 1px dashed
+    color-mix(in srgb, var(--color-warn) 55%, var(--color-surface));
+}
+
+/* succeeded — success fill, solid border, filled dot */
+.jc-pill.succeeded {
+  background: color-mix(in srgb, var(--color-success) 12%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-success) 75%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-success) 35%, var(--color-surface));
+}
+
+/* failed — error fill, solid border, filled dot */
+.jc-pill.failed {
+  background: color-mix(in srgb, var(--color-error) 12%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-error) 75%, var(--color-text));
+  border-color: color-mix(in srgb, var(--color-error) 35%, var(--color-surface));
+}
+
+/* cancelled — muted neutral, solid border, filled square dot */
+.jc-pill.cancelled {
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+  border-color: var(--color-border-strong);
+}
+
+.jc-pill.cancelled .jc-pill-dot {
+  border-radius: 0;
+}
+
+/* interrupted — muted surface, dashed border, hollow square dot */
+.jc-pill.interrupted {
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  border: 1px dashed var(--color-border-strong);
+}
+
+.jc-pill.interrupted .jc-pill-dot {
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 0;
+}
