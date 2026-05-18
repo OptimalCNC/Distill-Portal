@@ -51,14 +51,17 @@ Phase 9b shares the repo with a parallel Phase 9a coordinator. Coordination is l
 ## Current Snapshot
 
 - Phase 9b coordinator engaged at 2026-05-18.
-- **M1 closed**: UI/UX design gate complete; designer + reviewer round both done; reviewer verdict `approved with nits`; two nit fixes applied to `design.md`; third nit deferred to developer dispatch.
-- **M2 blocked**: waiting for Phase 9a M3 to land on `main` (per `phase9-syn.md`, 9a M3 is functionally complete and verified; pending reviewer closeout + commit of unstaged HTTP/e2e test cutover).
-- **M3 blocked**: depends on M2.
-- Periodic 5-min check on `phase9-syn.md` armed via CronCreate to surface 9a M3 close as soon as it lands.
+- **M1 closed**: UI/UX design gate complete.
+- **M2-A closed**: trait + kinds extraction landed (Option A-plus per codex consultation). Three-reviewer trail complete: backend-protection `backend untouched`; normal `approved` on `d41ecab`; codex cross-family `approved` on `b9fb37d`. All 11 9a HTTP regression tests pass byte-equivalent. No new external Rust deps. Schema unchanged.
+- **M2-B in flight**: broadcaster + SSE route + ts-rs binding (combined chunk). About to dispatch developer.
+- **M3 blocked**: depends on M2-B.
 
 ## Active Plan
 
-- Current chunk: **blocked / waiting** — no chunk in flight. Waiting on 9a M3 close per `phase9-syn.md`. When 9a posts an entry confirming M3 landed on `main`, the coordinator dispatches the planner subagent to recommend the M2 chunk decomposition (SSE broadcaster → dispatcher refactor → ts-rs binding → integration tests), then the developer subagent.
+- Current chunk: **M2-B (broadcaster + SSE route + ts-rs binding, combined)** — about to dispatch developer subagent.
+- Owner: coordinator (locked design from planner recon + codex consultation; codex will be re-consulted on the broadcaster shape + stream adapter design before developer writes code).
+- Status: M2-A closed; M2-B planner brief in `working/phase-9b/m2-recon.md` is still authoritative.
+- UI/UX gate: not applicable (M2-B is backend-only per spec §"Milestones" Milestone 2 → "No frontend changes yet").
 
 ## Completed Work Log
 
@@ -77,6 +80,17 @@ Phase 9b shares the repo with a parallel Phase 9a coordinator. Coordination is l
   - Waiver acknowledgment: `python3 wcag.py` could not be executed during the review session either (same upstream classifier outage). Reviewer signed off on byte-equivalence to the production `.action-bar-operation-pill.success`/`.error` recipe in `ActionBar.css` lines 127–149 that already ships at AA per Phase 9a M3. Item 49 in the implementation acceptance checklist will re-run `python3 wcag.py` and assert `exit == 0` before M2 dispatch.
 - 2026-05-18: Designer's 3 open questions resolved by the UI/UX reviewer: (1) keep the dashed mid-rule inside cards (Phase 5 precedent in `SessionView.css` line 290 + `SessionMetadata.css` line 108); (2) keep the one-letter kind-icon rule with the documented collision-resolution policy; (3) keep `aria-live="polite"` on `.jc-body` (W3C ledger/queue pattern).
 - 2026-05-18: M1 UI/UX design gate **CLOSED** — designer + reviewer round complete, two nit fixes applied to design.md, third nit deferred to developer dispatch. M2 still blocked on 9a M3 landing on `main`.
+- 2026-05-18: 9a M3 landed on `main` (commit `16dab86 phase9a close m3 after claude review`) after the coordinator dispatched a read-only Claude Explore subagent to perform the cross-family review 9a required. Claude review verdict `approved`; recorded verbatim in `phase9-syn.md`. M2 unblocked.
+- 2026-05-18: M2 planner dispatched + returned a two-chunk decomposition (M2-A trait + kinds extraction; M2-B broadcaster + SSE + ts-rs binding). Codex consulted on the M2-A blocking question (handler impl location); codex recommended Option A-plus (impls in `apps/backend/src/operations_kinds/`, helpers in `components/operations/kinds/`, no AppContext trait). Decision locked. Codex consulted a second time on the developer's pre-implementation design proposal; codex returned three refinements (idempotency SSOT helper shared by submit + handler; HandlerFuture bounded `'static`; defer the OperationCancellationSignals HashMap refactor as scope creep).
+- 2026-05-18: M2-A implementation landed across three commits:
+  - `5013cb8` — initial M2-A: 872 insertions / 117 deletions across 11 files (`components/operations/src/dispatcher.rs` NEW, `components/operations/kinds/*` NEW, `apps/backend/src/operations_kinds/*` NEW, `apps/backend/src/app.rs` refactor, `components/operations/{lib.rs, README.md}` updates).
+  - `d41ecab` — review-response fixes: kept `From<HandlerError> for AppError` impl (normal reviewer's "unreachable" assessment was incorrect — the impl IS reached via the `?` operator at `submit_*_operation` sites; coordinator's removal attempt broke the build); added an explanatory doc comment naming the call sites; deduped a kinds-module doc paragraph in `components/operations/src/lib.rs` (codex nit); wrapped the `Dispatcher::handlers` iterator signature (codex nit).
+  - `99ab8f2` + `b9fb37d` — apply remaining rustfmt diffs codex's sandbox flagged (the local classifier outage prevented running `cargo fmt --check` throughout the M2-A delivery; codex's sandbox bypassed the outage and provided the exact diffs).
+- 2026-05-18: M2-A three-reviewer trail complete on the same evidence pack:
+  - **Backend-protection** (Claude Explore subagent): `backend untouched`. All 11 touched files within the M2 released-paths set + the Option A-plus extension (`apps/backend/src/operations_kinds/` NEW dir); protected modules (`migrations.rs`, `store.rs`, `cancel.rs`, `idempotency.rs`, `types.rs`, `worker.rs`) byte-identical; 11 HTTP regression tests pass; no new external Rust deps.
+  - **Normal implementation reviewer** (Claude Explore subagent): initial `needs changes` (asked to remove the `From<HandlerError>` impl); re-review on `d41ecab` returned `approved` after recognizing the impl is reachable via `?` and the new doc comment resolves the visibility concern.
+  - **Codex cross-family reviewer** (`codex exec`): initial `approved with nits` (cargo fmt diffs + lib.rs doc duplication); final `approved` on `b9fb37d` (M2-A files fmt-clean, sign-off Y).
+- 2026-05-18: **M2-A CLOSED**. Spec AC-3, AC-4, AC-5 advanced. AC-4's spec-literal reading ("kinds modules contain handler impls") was traded for the codex-recommended Option A-plus (impls in backend, helpers in operations crate) — deviation documented in `components/operations/README.md` and `phase9-syn.md`.
 
 ## UI/UX Design Log
 

@@ -247,3 +247,14 @@ Residual risks: clock-skew double-row creation (the unique index is on `(kind, h
   - Codex byte-equivalence confidence: Option A ≈ 90-95% (recommended); Option B ≈ 45-60% (wrong risk profile for a pure refactor).
   - AC-4 reading: A satisfies the structural requirement (`kinds/` directory contains one module per kind via helper modules). Codex's framing: this is a "deliberate architecture correction" of the spec prose, not literal compliance — to be documented explicitly in the M2 progress entry + the operations crate README.
 - **Currently doing (9b):** dispatching the M2-A developer subagent. Developer is instructed to escalate non-trivial design questions to the coordinator, who will consult `codex exec` (per the user's explicit guidance: "request suggestions, reviews, and designs from codex frequently during delivery"). After developer reports done, the standard three-reviewer rule applies: backend-protection (subagent) + normal (subagent) + Codex cross-family (via `codex exec`).
+
+## 2026-05-18 [9b] M2-A CLOSED
+
+- M2-A landed across four commits: `5013cb8` (initial), `d41ecab` (review-response: From<HandlerError> doc + lib.rs doc dedupe + dispatcher.rs line-wrap), `99ab8f2` (apply codex's reported rustfmt diffs), `b9fb37d` (final fmt fix on submit_import_operation).
+- Three-reviewer trail complete on the b9fb37d evidence pack:
+  - Backend-protection (Claude Explore): `backend untouched`. 11 touched files within released set; 6 protected modules byte-identical; 11 HTTP regression tests pass; no new external deps.
+  - Normal implementation (Claude Explore): initial `needs changes` (asked to remove `From<HandlerError>` impl); re-review `approved` after recognizing the impl IS reachable via `?` at submit_*_operation and the new doc comment resolves the visibility concern.
+  - Codex cross-family (`codex exec`): three rounds — `approved with nits` → `needs changes` (fmt) → `approved` (M2-A files fmt-clean, sign-off Y).
+- Verification at close: `cargo check --workspace` clean; `cargo test --workspace` green (all packages); `cargo test -p distill-portal-backend --test http_api` 11/11; `cargo test -p distill-portal-operations` 24/24; `cargo test -p distill-portal-backend --lib` 3/3 (including 2 idempotency-SSOT parity tests proving the trait's `idempotency_key()` produces byte-equal IdempotencyKey to the submit path).
+- Spec-deviation note: AC-4 satisfied via Option A-plus (handler impls in `apps/backend/src/operations_kinds/`; per-kind helpers in `components/operations/kinds/`). Documented in `components/operations/README.md` + commit messages + this log.
+- **Currently doing (9b):** about to dispatch M2-B (broadcaster + SSE route + ts-rs binding, combined chunk per planner recommendation). Codex will be re-consulted on the broadcaster shape + the `broadcast::Receiver → Stream` adapter before developer writes code.
