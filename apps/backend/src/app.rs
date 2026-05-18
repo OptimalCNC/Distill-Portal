@@ -16,15 +16,10 @@ use distill_portal_ingest_service::{
     service::IngestManyError, IngestDisposition, IngestError, IngestService,
 };
 use distill_portal_operations::{
-    decode_operation_params,
-    idempotency::{
-        canonical_params_hash, import_sessions_input_version, rescan_sources_input_version,
-        IdempotencyError,
-    },
-    CancelRequestOutcome, CancellationToken, CheckpointError, NewOperation, NoopCheckpoint,
-    Operation, OperationCheckpoint, OperationKind, OperationOutcome, OperationWorker,
-    OperationsError, OperationsListQuery, OperationsListResponse, OperationsStore,
-    SubmitOperationResponse,
+    idempotency::IdempotencyError, CancelRequestOutcome, CancellationToken, CheckpointError,
+    Dispatcher, HandlerError, IdempotencyKey, NewOperation, NoopCheckpoint, Operation,
+    OperationCheckpoint, OperationKind, OperationOutcome, OperationWorker, OperationsError,
+    OperationsListQuery, OperationsListResponse, OperationsStore, SubmitOperationResponse,
 };
 use distill_portal_raw_session_store::{
     BlobStore, LocalFsBlobStore, ScanErrorInput, SqliteStore, StoreError,
@@ -33,7 +28,6 @@ use distill_portal_ui_api_contracts::{
     source_key, ImportReport, ImportSourceSessionsRequest, PersistedScanError, RescanReport,
     SessionSyncStatus, SourceSessionView, StoredSessionView,
 };
-use serde::Serialize;
 use serde_json::Value;
 use tokio::{net::TcpListener, sync::Mutex, task::JoinError, time as tokio_time};
 use tracing::{info, warn};
@@ -60,6 +54,20 @@ pub enum AppError {
     Checkpoint(#[from] CheckpointError),
     #[error(transparent)]
     Join(#[from] JoinError),
+    #[error("operation handler error: {0}")]
+    Handler(String),
+}
+
+impl From<HandlerError> for AppError {
+    fn from(error: HandlerError) -> Self {
+        match error {
+            HandlerError::InvalidParams(message) => Self::Handler(message),
+            HandlerError::Cancelled => Self::Checkpoint(CheckpointError::CancelRequested(
+                distill_portal_operations::CancelRequested::new("handler"),
+            )),
+            HandlerError::Internal(message) => Self::Handler(message),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -142,7 +150,8 @@ impl App {
         };
         state.startup_maintenance().await?;
         state.rescan().await?;
-        let operation_workers = state.spawn_operation_workers();
+        let dispatcher = crate::operations_kinds::build_dispatcher(state.clone());
+        let operation_workers = state.spawn_operation_workers(&dispatcher);
         let router = http_api::router(state.clone());
         Ok(Self {
             state,
@@ -217,13 +226,13 @@ impl AppState {
         &self,
         params_json: Value,
     ) -> Result<SubmitOperationResponse, AppError> {
-        let input_version = self.compute_rescan_sources_input_version();
-        let operation = self.submit_operation(
-            OperationKind::RescanSources,
+        let key = distill_portal_operations::kinds::rescan_sources::idempotency_key_for(
             &params_json,
-            params_json.clone(),
-            input_version,
+            SCANNER_CONFIG_VERSION,
+            self.scanner_roots_display(),
         )?;
+        let operation =
+            self.submit_operation(OperationKind::RescanSources, params_json, key)?;
         Ok(submit_operation_response(&operation))
     }
 
@@ -232,14 +241,13 @@ impl AppState {
         session_keys: Vec<String>,
     ) -> Result<SubmitOperationResponse, AppError> {
         let request = ImportSourceSessionsRequest { session_keys };
-        let input_version = self.compute_import_sessions_input_version(&request.session_keys)?;
         let params_json = serde_json::to_value(&request).map_err(OperationsError::from)?;
-        let operation = self.submit_operation(
-            OperationKind::ImportSessions,
+        let key = distill_portal_operations::kinds::import_sessions::idempotency_key_for(
             &request,
-            params_json,
-            input_version,
+            |keys| self.import_sessions_fingerprints(keys),
         )?;
+        let operation =
+            self.submit_operation(OperationKind::ImportSessions, params_json, key)?;
         Ok(submit_operation_response(&operation))
     }
 
@@ -267,7 +275,10 @@ impl AppState {
         Ok(outcome)
     }
 
-    async fn run_rescan_operation<C>(&self, checkpoint: C) -> Result<RescanReport, AppError>
+    pub(crate) async fn run_rescan_operation<C>(
+        &self,
+        checkpoint: C,
+    ) -> Result<RescanReport, AppError>
     where
         C: OperationCheckpoint,
     {
@@ -277,7 +288,7 @@ impl AppState {
             .await?
     }
 
-    async fn run_import_operation<C>(
+    pub(crate) async fn run_import_operation<C>(
         &self,
         session_keys: Vec<String>,
         checkpoint: C,
@@ -294,17 +305,16 @@ impl AppState {
         .await?
     }
 
-    fn submit_operation<P>(
+    fn submit_operation(
         &self,
         kind: OperationKind,
-        params: &P,
         params_json: Value,
-        input_version: String,
-    ) -> Result<Operation, AppError>
-    where
-        P: Serialize,
-    {
-        let canonical_params_hash = canonical_params_hash(params)?;
+        key: IdempotencyKey,
+    ) -> Result<Operation, AppError> {
+        let IdempotencyKey {
+            canonical_params_hash,
+            input_version,
+        } = key;
         let store = &self.inner.operations_store;
         if let Some(existing) =
             store.find_by_idempotency_key(kind, &canonical_params_hash, &input_version)?
@@ -331,41 +341,48 @@ impl AppState {
         }
     }
 
-    fn compute_import_sessions_input_version(
+    /// Look up `(session_key, source_fingerprint)` pairs for the requested
+    /// keys from the live source inventory. Shared by `submit_import_operation`
+    /// and the `ImportSessionsHandler::idempotency_key` impl via the kinds
+    /// helper closure — single source of truth.
+    pub(crate) fn import_sessions_fingerprints(
         &self,
         session_keys: &[String],
-    ) -> Result<String, AppError> {
-        let inventory = self
-            .inner
-            .source_inventory
-            .read()
-            .map_err(|_| AppError::Store(StoreError::LockPoisoned))?;
+    ) -> Result<Vec<(String, String)>, HandlerError> {
+        let inventory = self.inner.source_inventory.read().map_err(|_| {
+            HandlerError::Internal(StoreError::LockPoisoned.to_string())
+        })?;
         let requested = session_keys
             .iter()
             .map(String::as_str)
             .collect::<HashSet<_>>();
-        let source_fingerprints = inventory.sessions.iter().filter_map(|entry| {
-            if requested.contains(entry.view.session_key.as_str()) {
-                Some((
-                    entry.view.session_key.clone(),
-                    entry.view.source_fingerprint.clone(),
-                ))
-            } else {
-                None
-            }
-        });
-        Ok(import_sessions_input_version(source_fingerprints))
+        Ok(inventory
+            .sessions
+            .iter()
+            .filter_map(|entry| {
+                if requested.contains(entry.view.session_key.as_str()) {
+                    Some((
+                        entry.view.session_key.clone(),
+                        entry.view.source_fingerprint.clone(),
+                    ))
+                } else {
+                    None
+                }
+            })
+            .collect())
     }
 
-    fn compute_rescan_sources_input_version(&self) -> String {
-        let roots = self
-            .inner
+    /// Configured Claude + Codex source-root display strings, used to compute
+    /// the `rescan_sources` input version. Shared by `submit_rescan_operation`
+    /// and the `RescanSourcesHandler::idempotency_key` impl.
+    pub(crate) fn scanner_roots_display(&self) -> Vec<String> {
+        self.inner
             .config
             .claude_roots
             .iter()
             .chain(self.inner.config.codex_roots.iter())
-            .map(|path| path.display().to_string());
-        rescan_sources_input_version(SCANNER_CONFIG_VERSION, roots)
+            .map(|path| path.display().to_string())
+            .collect()
     }
 
     fn notify_operation_worker(&self, kind: OperationKind) {
@@ -379,63 +396,15 @@ impl AppState {
         }
     }
 
-    fn spawn_operation_workers(&self) -> Vec<tokio::task::JoinHandle<()>> {
-        let store = self.inner.operations_store.clone();
-        let import_worker = OperationWorker::new_with_cancellation(
-            OperationKind::ImportSessions,
-            store.clone(),
-            self.inner.operation_cancellations.import_sessions.clone(),
-        );
-        let rescan_worker = OperationWorker::new_with_cancellation(
-            OperationKind::RescanSources,
-            store,
-            self.inner.operation_cancellations.rescan_sources.clone(),
-        );
-
-        let import_state = self.clone();
-        let import_handle = import_worker.spawn(move |operation, checkpoint| {
-            let state = import_state.clone();
-            async move { state.execute_import_operation(operation, checkpoint).await }
-        });
-
-        let rescan_state = self.clone();
-        let rescan_handle = rescan_worker.spawn(move |_operation, checkpoint| {
-            let state = rescan_state.clone();
-            async move { state.execute_rescan_operation(checkpoint).await }
-        });
-
-        vec![import_handle, rescan_handle]
-    }
-
-    async fn execute_import_operation(
+    fn spawn_operation_workers(
         &self,
-        operation: Operation,
-        checkpoint: impl OperationCheckpoint,
-    ) -> OperationOutcome {
-        let request = match decode_operation_params::<ImportSourceSessionsRequest>(&operation) {
-            Ok(request) => request,
-            Err(error) => return OperationOutcome::failed_message(error.to_string()),
-        };
-
-        match self
-            .run_import_operation(request.session_keys, checkpoint)
-            .await
-        {
-            Ok(report) => OperationOutcome::succeeded(report),
-            Err(error) if is_cancelled(&error) => OperationOutcome::cancelled(),
-            Err(error) => OperationOutcome::failed_message(error.to_string()),
-        }
-    }
-
-    async fn execute_rescan_operation(
-        &self,
-        checkpoint: impl OperationCheckpoint,
-    ) -> OperationOutcome {
-        match self.run_rescan_operation(checkpoint).await {
-            Ok(report) => OperationOutcome::succeeded(report),
-            Err(error) if is_cancelled(&error) => OperationOutcome::cancelled(),
-            Err(error) => OperationOutcome::failed_message(error.to_string()),
-        }
+        dispatcher: &Arc<Dispatcher>,
+    ) -> Vec<tokio::task::JoinHandle<()>> {
+        spawn_operation_workers(
+            dispatcher,
+            self.inner.operations_store.clone(),
+            &self.inner.operation_cancellations,
+        )
     }
 
     pub async fn list_source_sessions(&self) -> Result<Vec<SourceSessionView>, AppError> {
@@ -704,12 +673,48 @@ fn scan_batch_report(scan_report: &ScanReport) -> RescanReport {
     }
 }
 
-fn is_cancelled(error: &AppError) -> bool {
+pub(crate) fn is_cancelled(error: &AppError) -> bool {
     matches!(
         error,
         AppError::Checkpoint(CheckpointError::CancelRequested(_))
             | AppError::Scan(ScanFailure::Checkpoint(ScanCheckpointError::Cancelled))
     )
+}
+
+fn spawn_operation_workers(
+    dispatcher: &Arc<Dispatcher>,
+    store: Arc<OperationsStore>,
+    cancellations: &OperationCancellationSignals,
+) -> Vec<tokio::task::JoinHandle<()>> {
+    use std::str::FromStr;
+
+    dispatcher
+        .handlers()
+        .map(|(kind_name, handler)| {
+            let handler = handler.clone();
+            let kind = OperationKind::from_str(kind_name)
+                .expect("dispatcher kind must parse to OperationKind enum");
+            // Typed signals (per Phase 9b M2-A locked decision); a hashmap
+            // refactor was scope creep.
+            let cancellation = match kind {
+                OperationKind::ImportSessions => cancellations.import_sessions.clone(),
+                OperationKind::RescanSources => cancellations.rescan_sources.clone(),
+            };
+            let worker =
+                OperationWorker::new_with_cancellation(kind, store.clone(), cancellation);
+            worker.spawn(move |operation, checkpoint| {
+                let handler = handler.clone();
+                async move {
+                    let params = operation.params_json.clone();
+                    match handler.run(params, checkpoint).await {
+                        Ok(value) => OperationOutcome::Succeeded(value),
+                        Err(HandlerError::Cancelled) => OperationOutcome::cancelled(),
+                        Err(error) => OperationOutcome::failed_message(error.to_string()),
+                    }
+                }
+            })
+        })
+        .collect()
 }
 
 fn submit_operation_response(operation: &Operation) -> SubmitOperationResponse {
@@ -769,7 +774,7 @@ mod tests {
     use distill_portal_operations::{CancelRequested, CheckpointError, OperationCheckpoint};
     use tempfile::TempDir;
 
-    use super::{App, BackendConfig, OperationOutcome};
+    use super::{is_cancelled, App, BackendConfig};
 
     #[derive(Clone)]
     struct CancelImmediately;
@@ -796,12 +801,16 @@ mod tests {
         .await
         .unwrap();
 
-        let outcome = app
+        // The handler maps an AppError-with-cancellation onto HandlerError::Cancelled,
+        // which the worker translates into OperationOutcome::cancelled(). The
+        // underlying invariant (a cancelled checkpoint yields the cancellation
+        // path) is asserted via `is_cancelled` here without spinning the worker.
+        let error = app
             .state()
-            .execute_rescan_operation(CancelImmediately)
-            .await;
-
-        assert!(matches!(outcome, OperationOutcome::Cancelled(None)));
+            .run_rescan_operation(CancelImmediately)
+            .await
+            .expect_err("cancelled checkpoint produces AppError::Checkpoint");
+        assert!(is_cancelled(&error));
     }
 
     fn test_config(

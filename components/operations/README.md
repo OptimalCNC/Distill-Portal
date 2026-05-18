@@ -22,6 +22,9 @@ access layer, and runs one worker loop per concrete operation kind.
 - `src/idempotency.rs`
 - `src/cancel.rs`
 - `src/worker.rs`
+- `src/dispatcher.rs` *(Phase 9b M2-A — trait-based handler registry)*
+- `kinds/import_sessions.rs` *(Phase 9b M2-A — per-kind idempotency helper)*
+- `kinds/rescan_sources.rs` *(Phase 9b M2-A — per-kind idempotency helper)*
 
 ## Public API / Entry Points
 
@@ -35,6 +38,9 @@ access layer, and runs one worker loop per concrete operation kind.
 - `NoopCheckpoint`
 - `OperationWorker`
 - `OperationOutcome`
+- `Dispatcher`, `OperationHandler`, `HandlerFuture`, `HandlerError`, `IdempotencyKey` *(Phase 9b M2-A)*
+- `kinds::import_sessions::{KIND_NAME, decode_params, idempotency_key_for}` *(Phase 9b M2-A)*
+- `kinds::rescan_sources::{KIND_NAME, idempotency_key_for}` *(Phase 9b M2-A)*
 - `idempotency::canonical_params_hash`
 - `idempotency::import_sessions_input_version`
 - `idempotency::rescan_sources_input_version`
@@ -81,6 +87,33 @@ colliding with that crate's `migrations` table.
 The backend intentionally opens both `raw-session-store` and `operations`
 against the same `distill.db` file. Operations enables WAL mode on its SQLite
 connection; the two crates keep separate migration tables and table namespaces.
+
+## Architecture (Phase 9b M2-A update)
+
+The crate now exposes a trait-based dispatcher so future operation kinds plug
+in without touching the worker loop:
+
+- `OperationHandler` is the per-kind extension contract: a stable
+  `kind() -> &'static str`, schema-validated `idempotency_key(raw_params)`, and
+  a `'static` async `run(params, checkpoint)` future. The `Pin<Box<dyn Future>>`
+  return shape composes with `OperationWorker::spawn`'s `Send + 'static` bound;
+  impls clone owned state INTO the async block.
+- `Dispatcher` holds an in-process `HashMap<&'static str, Arc<dyn OperationHandler>>`.
+  `register()` panics on duplicate kinds (programmer error). The backend
+  builds it once at startup, then `spawn_operation_workers` iterates the
+  dispatcher to spin up one worker per registered kind.
+- `kinds/` siblings the `src/` directory and holds the *pure* per-kind helpers:
+  `KIND_NAME` constants, `decode_params` mappers, and `idempotency_key_for`
+  builders. These are the SINGLE SOURCE OF TRUTH for the kind's idempotency
+  computation; both the backend's submit path AND the handler's
+  `idempotency_key()` impl call the same helper so the two paths cannot drift.
+- The handler `impl OperationHandler` blocks live in
+  `apps/backend/src/operations_kinds/` (they need owned `AppState`), not in
+  this crate. This crate exposes the contract; the backend owns the concrete
+  wiring.
+
+The on-disk schema is unchanged from Phase 9a — the refactor is purely
+in-process plumbing.
 
 ## Worker And Cancellation Model
 
