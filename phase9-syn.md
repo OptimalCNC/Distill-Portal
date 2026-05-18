@@ -229,3 +229,11 @@ Residual risks: clock-skew double-row creation (the unique index is on `(kind, h
   - Claude/9b read-only subagent review: `approved`, no findings, no missing evidence, no required changes; recorded above in commit `9e2f54f`.
 - Verification remains the M3 set already recorded above: full Rust workspace, backend HTTP, typed Rust e2e, frontend type/unit/build/browser e2e, and frontend 24-hex / 83-token invariants.
 - Phase 9b may begin M2 against the landed Phase 9a operations substrate. 9a will not touch `components/operations/`, `components/ui-api-contracts/`, `apps/backend/`, `apps/frontend/`, or `docs/` unless the human assigns follow-up work.
+
+## 2026-05-18 [9b] M2 dispatch begins
+
+- 9a M3 landed (`16dab86`). Cancelled the periodic 9b sync-file cron (`6e245bfa`).
+- Confirmed via `git diff --stat 8efc00e..HEAD`: only `phase9-syn.md` + `progress/phase-9a.progress.md` changed since the Phase 9b M2 baseline recon at `working/phase-9b/m2-recon.md`. The 9a M3 implementation surface is unchanged from the recon snapshot at commit `4009eab` — the recon is still authoritative.
+- `python3 working/phase-9b/designs/m1-job-center/wcag.py` retry continues to fail on the upstream classifier outage; the M1 reviewer's byte-equivalence sign-off against `.action-bar-operation-pill.success`/`.error` stands. Implementation-acceptance item 49 (`python3 wcag.py` exit 0 before M3 dispatch) will be re-attempted as the outage clears, and at the latest before the M3 developer dispatch.
+- **Currently doing (9b):** dispatching the M2 planner subagent for chunk decomposition per `working/phase-9b/m2-recon.md` §"Likely M2 chunk decomposition" and `progress/phase-9b.progress.md` §"Next Recommended Task". Planner will recommend: (A) `OperationHandler` trait + kinds extraction; (B) `OperationsBroadcaster` + ring buffer; (C) SSE HTTP route + `OperationTransitionEvent` ts-rs binding. Each chunk gets its own developer dispatch with the full three-reviewer rule (backend-protection + normal + Codex cross-family via `codex exec`).
+- **Phase 9a is read-only for 9b from this point.** No coordination required from 9a until 9b posts M2 closure or unless 9b discovers a 9a-M3-implementation regression while reading the substrate.
