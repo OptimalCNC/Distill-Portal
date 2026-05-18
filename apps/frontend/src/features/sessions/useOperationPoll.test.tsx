@@ -71,9 +71,10 @@ test("useOperationPoll aborts in-flight polling on unmount", async () => {
 
 test("pollOperationOnce issues exactly one request and honors AbortSignal", async () => {
   // First half: single-call semantics — one fetch invocation per call,
-  // regardless of the row's status. This is the property `useOperationsFeed`
-  // relies on during its polling-fallback window (the outer 5 s cadence
-  // owns the looping; this helper stays pure).
+  // regardless of the row's status. This is the property M3-C consumers
+  // (App.tsx terminal-toast effect on the user-submitted operation id)
+  // rely on; the helper stays pure and unaware of timers. `useOperationsFeed`
+  // does NOT use this — its polling fallback calls `listOperations({limit:50})`.
   const fetchMock = mock(async () => jsonResponse(operationFixture("running")));
   globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
