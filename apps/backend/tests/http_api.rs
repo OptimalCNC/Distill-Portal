@@ -679,13 +679,30 @@ async fn spawn_app_on_port(app: App) -> (u16, oneshot::Sender<()>, tokio::task::
 
 /// Open a raw TCP connection to the bound port and send the SSE request.
 async fn open_sse_stream(port: u16, last_event_id: Option<u64>) -> TcpStream {
+    open_sse_stream_with(port, last_event_id, None).await
+}
+
+/// Like `open_sse_stream` but also supports the `?last_event_id=<seq>`
+/// query parameter. Phase 9b M3-A codex review fix #1 adds this fallback
+/// channel because browsers can't set the `Last-Event-ID` header on
+/// `new EventSource(url)`. Caller controls both inputs independently so
+/// header-vs-query precedence can be asserted.
+async fn open_sse_stream_with(
+    port: u16,
+    header_last_event_id: Option<u64>,
+    query_last_event_id: Option<u64>,
+) -> TcpStream {
     let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
     let mut request = String::new();
-    request.push_str("GET /api/v1/operations/events HTTP/1.1\r\n");
+    let path = match query_last_event_id {
+        Some(id) => format!("/api/v1/operations/events?last_event_id={id}"),
+        None => "/api/v1/operations/events".to_string(),
+    };
+    request.push_str(&format!("GET {path} HTTP/1.1\r\n"));
     request.push_str("Host: localhost\r\n");
     request.push_str("Accept: text/event-stream\r\n");
     request.push_str("Connection: keep-alive\r\n");
-    if let Some(id) = last_event_id {
+    if let Some(id) = header_last_event_id {
         request.push_str(&format!("Last-Event-ID: {id}\r\n"));
     }
     request.push_str("\r\n");
@@ -1028,6 +1045,73 @@ async fn sse_endpoint_emits_resync_when_last_event_id_too_old() {
         events,
     );
     assert!(events[0].id.is_none(), "resync events must not carry id:");
+}
+
+#[tokio::test]
+async fn sse_endpoint_accepts_last_event_id_query_param() {
+    // Phase 9b M3-A codex review fix #1: browsers can't set the
+    // `Last-Event-ID` header on `new EventSource(url)`, so the manual
+    // reconnect path uses `?last_event_id=<seq>` instead. The query param
+    // must produce identical resync semantics to the header path.
+    let tempdir = TempDir::new().unwrap();
+    let app = App::bootstrap(test_config(tempdir.path().join("data"), vec![], vec![]))
+        .await
+        .unwrap();
+    let broadcaster = app.state().operations_broadcaster();
+    for index in 0..260 {
+        broadcaster.publish(synthetic_operation(index));
+    }
+    let (port, shutdown_tx, server_handle) = spawn_app_on_port(app).await;
+    // No `Last-Event-ID` header; supply the value via the query param.
+    let mut stream = open_sse_stream_with(port, None, Some(1)).await;
+    let events = read_sse_events(&mut stream, 1, Duration::from_secs(3)).await;
+    drop(stream);
+    let _ = shutdown_tx.send(());
+    let _ = server_handle.await;
+
+    assert!(!events.is_empty(), "expected at least one event");
+    assert_eq!(
+        events[0].event.as_deref(),
+        Some("resync"),
+        "first event after stale query last_event_id must be resync; got {:?}",
+        events,
+    );
+    assert!(events[0].id.is_none(), "resync events must not carry id:");
+}
+
+#[tokio::test]
+async fn sse_endpoint_prefers_header_over_query() {
+    // Phase 9b M3-A codex review fix #1: when both inputs are present, the
+    // `Last-Event-ID` header wins so native automatic reconnects remain
+    // canonical. Here we send a STALE header (forces resync) AND a
+    // currently-valid query param. The handler must honor the header
+    // (resync), not silently accept the query value.
+    let tempdir = TempDir::new().unwrap();
+    let app = App::bootstrap(test_config(tempdir.path().join("data"), vec![], vec![]))
+        .await
+        .unwrap();
+    let broadcaster = app.state().operations_broadcaster();
+    for index in 0..260 {
+        broadcaster.publish(synthetic_operation(index));
+    }
+    // After 260 publishes, the ring buffer (capacity 200) has evicted the
+    // earliest seqs. seq=1 is stale; seq=260 is fresh. Send seq=1 in the
+    // header and seq=260 in the query — the header must win and force
+    // resync.
+    let (port, shutdown_tx, server_handle) = spawn_app_on_port(app).await;
+    let mut stream = open_sse_stream_with(port, Some(1), Some(260)).await;
+    let events = read_sse_events(&mut stream, 1, Duration::from_secs(3)).await;
+    drop(stream);
+    let _ = shutdown_tx.send(());
+    let _ = server_handle.await;
+
+    assert!(!events.is_empty(), "expected at least one event");
+    assert_eq!(
+        events[0].event.as_deref(),
+        Some("resync"),
+        "header value (stale) must take precedence and force resync; got {:?}",
+        events,
+    );
 }
 
 fn synthetic_operation(index: usize) -> distill_portal_operations::Operation {

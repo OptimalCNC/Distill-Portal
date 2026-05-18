@@ -31,14 +31,21 @@
 // Reconnect protocol: on `EventSource.onerror`, we close the source, advance
 // a backoff ladder (1 s → 2 s → 5 s → 10 s → 30 s, then 30 s for ever), and
 // schedule a fresh `new EventSource(url)`. The native `EventSource` API
-// reattaches `Last-Event-ID` automatically when any id'd frame arrived
-// previously, so the server's ring-buffer replay path engages on its own.
+// does NOT attach `Last-Event-ID` on the `new EventSource(url)` path —
+// the header only fires on the *implicit* automatic reconnect (which only
+// happens when the previous connection had id'd events AND the browser
+// itself decided to retry). Manual reconnects (this hook's backoff ladder)
+// therefore pass the last observed seq via the `?last_event_id=<seq>`
+// query parameter; the backend accepts header OR query, header wins when
+// both are present (see `apps/backend/src/http_api.rs::operations_events`).
 //
-// Polling fallback: when the 5-step SSE backoff has reached its terminal
-// 30 s slot (5 consecutive failures), we additionally start a 5 s
-// `setInterval` polling `listOperations({ limit: 50 })`. The SSE retry loop
-// keeps trying every 30 s in parallel. On the first successful SSE event
-// (snapshot or transition) we tear the interval down and reset the backoff.
+// Polling fallback: when the 5-step SSE backoff has fully elapsed (all
+// five ladder slots have fired and failed; we're now scheduling the 6th
+// retry — cumulative SSE outage ~48 s), we additionally start a 5 s
+// `setInterval` polling `listOperations({ limit: 50 })`. The SSE retry
+// loop keeps trying every 30 s in parallel. On the first successful SSE
+// event (snapshot or transition) we tear the interval down and reset the
+// backoff.
 //
 // React StrictMode safety: the lifecycle effect closes the EventSource +
 // clears the timers on cleanup, so the dev-mode double-mount does not
@@ -57,7 +64,6 @@ import type {
 } from "../../lib/contracts";
 
 export type FeedStatus =
-  | "idle"
   | "connecting"
   | "streaming"
   | "polling"
@@ -85,14 +91,33 @@ const POLL_FALLBACK_INTERVAL_MS = 5_000;
 // map size stays bounded under sustained SSE outage.
 const FALLBACK_LIST_LIMIT = 50;
 
-// Number of consecutive SSE failures that mark the system as being in a
-// steady 30 s retry loop. Matches the brief's "polling fallback activates
-// after the 5th failed attempt".
+// Number of consecutive SSE failures after which the steady 30 s retry
+// loop has fully engaged and the polling fallback activates. Matches the
+// spec §"Client side": the ladder is 5 slots (1, 2, 5, 10, 30 s); polling
+// engages when we are scheduling the NEXT retry past the final slot — i.e.
+// after the 30 s slot has fired and failed (cumulative SSE outage ~48 s).
 const POLLING_ACTIVATION_THRESHOLD = BACKOFF_LADDER_MS.length;
 
 function backoffDelayMs(failureIndex: number): number {
   const clamped = Math.min(failureIndex, BACKOFF_LADDER_MS.length - 1);
   return BACKOFF_LADDER_MS[clamped];
+}
+
+/**
+ * Build the SSE URL for `new EventSource(...)`. When `lastEventSeq` is
+ * non-null, append `?last_event_id=<seq>` so the backend can resume from
+ * the broadcaster's ring buffer — the native EventSource API does NOT
+ * forward `Last-Event-ID` on the `new EventSource(url)` path; the manual
+ * reconnect ladder owns the resume protocol via this query parameter.
+ *
+ * The first connect (lastEventSeq === null) passes no query param, which
+ * also matches the snapshot-only flow expected on a cold mount.
+ */
+function buildSseUrl(lastEventSeq: number | null): string {
+  const base = apiOperationsEventsUrl();
+  if (lastEventSeq === null) return base;
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}last_event_id=${lastEventSeq}`;
 }
 
 function buildOperationsMap(
@@ -137,6 +162,11 @@ export function useOperationsFeed(): UseOperationsFeedReturn {
   const resyncAbortRef = useRef<AbortController | null>(null);
   const failureCountRef = useRef(0);
   const mountedRef = useRef(true);
+  // Mirror of `lastEventSeq` state for read-time access inside the
+  // EventSource constructor on manual reconnect (codex review fix #1).
+  // The state setter feeds this ref synchronously alongside React's
+  // commit so the resume URL always reflects the highest seq observed.
+  const lastEventSeqRef = useRef<number | null>(null);
 
   const stopPolling = useCallback(() => {
     if (pollIntervalRef.current !== null) {
@@ -209,15 +239,17 @@ export function useOperationsFeed(): UseOperationsFeedReturn {
   const handleSnapshotFrame = useCallback(() => {
     // A snapshot frame is a "sign of life" — it proves the EventSource is
     // up. We reset the backoff ladder + tear down any polling loop so the
-    // next outage starts fresh. The status flip differs from a transition
-    // frame: during the INITIAL `connecting` phase, the snapshot phase
-    // legitimately precedes any `transition` and the brief pins status to
-    // stay `connecting` until the first `transition` arrives. From any
-    // other state (`polling` / `reconnecting` / `streaming`), the snapshot
-    // arrival means we are streaming again.
+    // next outage starts fresh, and flip status to `streaming`.
+    //
+    // Status semantics (codex review fix #2): `connecting` means "no data
+    // received yet". Once ANY frame (snapshot OR transition) arrives we
+    // ARE streaming. On a quiet system with only snapshot frames and no
+    // live transitions, the old preserve-`connecting` behavior left the
+    // hook stuck reporting `connecting` forever even though the stream
+    // was working correctly.
     failureCountRef.current = 0;
     stopPolling();
-    setStatus((prev) => (prev === "connecting" ? prev : "streaming"));
+    setStatus("streaming");
   }, [stopPolling]);
 
   const handleTransitionFrame = useCallback(() => {
@@ -236,6 +268,7 @@ export function useOperationsFeed(): UseOperationsFeedReturn {
     resyncAbortRef.current = controller;
     setOperations({});
     setLastEventSeq(null);
+    lastEventSeqRef.current = null;
     try {
       const response = await listOperations(
         { limit: FALLBACK_LIST_LIMIT },
@@ -261,13 +294,18 @@ export function useOperationsFeed(): UseOperationsFeedReturn {
     failureCountRef.current = failureIndex + 1;
     const delay = backoffDelayMs(failureIndex);
 
-    // Activate polling fallback once we are in the steady 30 s retry loop.
-    // `failureIndex + 1` is the count of failures that have now occurred;
-    // once it reaches the terminal slot count (5), we are entering the
-    // 30 s loop and the user has been without data for ~48 s. Start a
-    // 5 s polling cadence in parallel; keep retrying SSE every 30 s.
+    // Activate polling fallback only AFTER the full backoff ladder has
+    // been exhausted (codex review fix #3). The ladder has 5 slots
+    // (1, 2, 5, 10, 30 s). `failureIndex` is the 0-indexed slot we are
+    // about to schedule: 0..=4 are ladder slots; once it reaches
+    // `BACKOFF_LADDER_MS.length` (5) we are scheduling the 6th retry —
+    // which means the 5th attempt (the 30 s slot) has already FIRED and
+    // FAILED. Only at that point do we engage the polling loop; the
+    // cumulative SSE outage at this moment is ~48 s, matching the spec's
+    // "polling fallback engages after the 30 s slot has elapsed without
+    // success".
     if (
-      failureCountRef.current >= POLLING_ACTIVATION_THRESHOLD &&
+      failureIndex >= POLLING_ACTIVATION_THRESHOLD &&
       pollIntervalRef.current === null
     ) {
       setStatus("polling");
@@ -292,7 +330,11 @@ export function useOperationsFeed(): UseOperationsFeedReturn {
 
   const connect = useCallback(() => {
     closeEventSource();
-    const source = new EventSource(apiOperationsEventsUrl());
+    // On manual reconnects we pass the last observed seq via the
+    // `?last_event_id=<seq>` query param so the backend can resume from
+    // the broadcaster's ring buffer (codex review fix #1). On the first
+    // connect, `lastEventSeqRef.current` is null and no query is appended.
+    const source = new EventSource(buildSseUrl(lastEventSeqRef.current));
     eventSourceRef.current = source;
 
     // Named events only — `EventSource.onmessage` handles unnamed events,
@@ -321,6 +363,13 @@ export function useOperationsFeed(): UseOperationsFeedReturn {
           if (prev === null) return payload.seq;
           return payload.seq > prev ? payload.seq : prev;
         });
+        // Mirror to the ref so a subsequent manual reconnect can build
+        // the resume URL synchronously (codex review fix #1). The ref
+        // tracks the same monotonic max the state tracks.
+        const prevRef = lastEventSeqRef.current;
+        if (prevRef === null || payload.seq > prevRef) {
+          lastEventSeqRef.current = payload.seq;
+        }
         handleTransitionFrame();
       } catch {
         // See snapshot handler. A malformed transition frame is non-fatal.

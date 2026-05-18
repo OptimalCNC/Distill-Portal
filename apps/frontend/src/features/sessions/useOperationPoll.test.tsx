@@ -16,7 +16,7 @@ afterEach(() => {
   mock.restore();
 });
 
-test("nextOperationPollDelay follows the M3 cadence", () => {
+test("nextOperationPollDelay follows the polling-fallback cadence", () => {
   expect(nextOperationPollDelay(0)).toBe(500);
   expect(nextOperationPollDelay(9_999)).toBe(500);
   expect(nextOperationPollDelay(10_000)).toBe(2_000);

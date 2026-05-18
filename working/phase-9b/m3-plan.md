@@ -28,15 +28,18 @@
 
 #### `apps/frontend/src/features/operations/useOperationsFeed.ts`
 
-Returns `{ operations: Record<string, Operation>, status: "idle" | "connecting" | "streaming" | "polling" | "reconnecting", lastEventSeq: number | null, cancelOperation(id) }`.
+Returns `{ operations: Record<string, Operation>, status: "connecting" | "streaming" | "polling" | "reconnecting", lastEventSeq: number | null, cancelOperation(id) }`.
+
+`status` semantics: `connecting` means "no data received yet"; the first frame (snapshot OR transition) flips status to `streaming`. The `idle` member was removed during the M3-A codex review pass (nit #2) — it was never returned and no consumer read it.
 
 Behavior:
 - Native `EventSource` against `apiOperationsEventsUrl()`. No library.
 - Per-event-type handlers: `addEventListener("snapshot", ...)`, `addEventListener("transition", ...)`, `addEventListener("resync", ...)`. The native `EventSource.onmessage` handles only unnamed events; M2 emits three named types.
 - `lastEventSeq` advances ONLY on `event: transition`. Snapshot rows have no `id:` so the native API will not advance its internal `Last-Event-ID` on snapshot frames.
+- `snapshot` handler: always flips status to `streaming` when an event arrives (codex review fix #2). The previous "preserve `connecting` until first transition" rule left the hook stuck on quiet systems that only emit snapshot rows.
 - On `resync`: drop the in-memory map, call `listOperations({ limit: 50 })`, re-prime the map, flip state to `streaming`.
-- On `EventSource` `error` / close: exponential backoff per spec §"Client side": 1 s → 2 s → 5 s → 10 s → 30 s. Each retry constructs a fresh `EventSource` (native API attaches `Last-Event-ID` automatically when the previous connection had id'd events).
-- Polling fallback (open question 2 resolved): after the 5-step backoff ladder has reached its terminal 30 s slot (cumulative ~48 s of SSE outage), flip state to `polling`; call `listOperations({ limit: 50 })` on a 5 s interval; in parallel continue retrying `EventSource` every 30 s. On SSE reconnect success, drop polling.
+- On `EventSource` `error` / close: exponential backoff per spec §"Client side": 1 s → 2 s → 5 s → 10 s → 30 s. Each retry constructs a fresh `EventSource` with the URL built as `apiOperationsEventsUrl()` + (`lastEventSeq` != null ? `?last_event_id=${lastEventSeq}` : ""). The backend prefers the `Last-Event-ID` header (used by native automatic reconnects) and falls back to the `last_event_id` query param (used by manual reconnects). This is codex review fix #1 — the original plan incorrectly claimed `new EventSource(url)` attaches `Last-Event-ID` automatically; it does not.
+- Polling fallback (open question 2 resolved): activates when the backoff index reaches the end of the ladder — i.e., after the 30 s slot has FIRED and FAILED and the hook is scheduling the NEXT retry. Cumulative SSE outage at this point is ~48 s. On entry, flip state to `polling`; call `listOperations({ limit: 50 })` on a 5 s interval; in parallel continue retrying `EventSource` every 30 s. On SSE reconnect success, drop polling.
 - Dedupe by `operation.id`: snapshot rows + live transitions can overlap; last-write-wins by `id` is sufficient because the broadcaster publishes only after the store commits (spec §"Risks" + the M2-B race fix at `apps/backend/src/http_api.rs:191`), so a later live transition always reflects a fresher state than an earlier snapshot row.
 - `cancelOperation(id)`: thin wrapper around the existing `cancelOperation()` in `lib/api.ts`; on 409 (`ApiError.status === 409`), swallow the error — the SSE transition is the canonical state change per checklist item 38.
 - Cleanup: on hook unmount, close the `EventSource` and any active polling timer / fetch `AbortController`.
@@ -55,7 +58,7 @@ bun:test + `@testing-library/react renderHook`. Mocked `EventSource` (test-local
 
 - `lib/api.ts`: add `OPERATIONS_EVENTS_PATH` constant + `apiOperationsEventsUrl()` helper.
 - `lib/contracts.ts`: re-export `OperationTransitionEvent` from `@contracts/OperationTransitionEvent`.
-- `features/sessions/useOperationPoll.ts`: ADDITIVE only in M3-A — keep `useOperationPoll` hook export untouched (App.tsx still consumes it during M3-A/B); ADD pure `pollOperationOnce(operationId, signal)` helper that `useOperationsFeed` polling-fallback path consumes. Hook export is REMOVED in M3-C after App.tsx wiring change.
+- `features/sessions/useOperationPoll.ts`: ADDITIVE only in M3-A — keep `useOperationPoll` hook export untouched (App.tsx still consumes it during M3-A/B); ADD pure `pollOperationOnce(operationId, signal)` helper for FUTURE M3-C consumers (specifically App.tsx terminal-toast detection on the user's submitted operation). It is NOT consumed by `useOperationsFeed`'s polling-fallback path — that path uses `listOperations({ limit: 50 })` per spec because the fallback is across the live tail of operations, not a single one. The previous version of this doc incorrectly stated `useOperationsFeed` consumed `pollOperationOnce`; corrected in the M3-A codex review pass (fix #4). Hook export is REMOVED in M3-C after App.tsx wiring change.
 - `features/sessions/useOperationPoll.test.tsx`: add ONE test for `pollOperationOnce` (single-call semantics; AbortSignal honored). Existing tests stay green.
 
 ### Checklist coverage (M3-A)
@@ -330,8 +333,8 @@ Bonus load-bearing references:
 6. **ActionBar prop API breakage** in M3-C: removes `runningOperationCount`, `lastOperationSummary`, `operationSummaryRefreshing`, `onRefreshOperations`, `showManualRefresh`; adds `onOpenJobCenter`, `runningCount`, `jobCenterOpen`. Sweep `App.test.tsx` (and any other ActionBar test sites) in the same chunk.
 
 7. **`useOperationPoll.ts` lifecycle**:
-   - M3-A: keep hook export intact; ADD `pollOperationOnce` pure helper.
-   - M3-C: REMOVE hook export after App.tsx wiring change.
+   - M3-A: keep hook export intact; ADD `pollOperationOnce` pure helper FOR FUTURE M3-C CONSUMERS (App.tsx terminal-toast detection for the single user-submitted operation). It is NOT consumed by `useOperationsFeed`'s fallback path; that path uses `listOperations({ limit: 50 })` per spec — polling there scans the live tail, not a single op. The plan's earlier wording that conflated the two was corrected in the M3-A codex review pass (fix #4).
+   - M3-C: REMOVE hook export after App.tsx wiring change; App.tsx and any other consumer use `pollOperationOnce` directly.
 
 8. **24 / 83 invariants** must be preserved across all three chunks. ZERO new hex literals. ZERO new tokens. Any deviation requires a documented amendment per Phase 5 pattern with WCAG-justified contrast measurements.
 
@@ -354,6 +357,7 @@ Bonus load-bearing references:
 - **Brief references to M1 §3.8 connection-status / §6.5 polling-fallback** were incorrect. M1 §3.8 is "Backdrop, empty state"; M1 has no §6.5. The spec §"Client side" carries the canonical policy. Resolved: no visible connection-status in 9b; polling-fallback trigger per resolution #5 above.
 - **`<pre>` content for null-payload terminal statuses**: skip `<pre>` when both `result_json` and `error_json` are null. Always render `<dl>`. (Pinned rule #1 above.)
 - **`useOperationPoll.test.tsx` comment** at line 18 ("follows the M3 cadence") originates in 9a M3 (polling cadence). Optionally update to "polling-fallback cadence" in M3-C for clarity; assertion content unchanged.
+- **Codex caught (M3-A round 1)**: the original plan §2 incorrectly stated 'native API attaches Last-Event-ID automatically' on manual reconnect. Replaced with the query-param fallback design (Option A). Backend now accepts `?last_event_id=N` as fallback for the header; header still wins when both are present. Frontend builds the URL with the query param on every manual reconnect that has a non-null `lastEventSeq`. This is a small additive backend change to `apps/backend/src/http_api.rs::operations_events`, authorized by the released-paths set for Phase 9b.
 
 ---
 

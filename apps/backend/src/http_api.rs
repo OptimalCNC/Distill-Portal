@@ -172,14 +172,29 @@ async fn get_raw(
 /// that the SSE response streams from. On `RecvError::Lagged`, emit one
 /// `event: resync` and close — continuing after data loss confuses the
 /// client.
+///
+/// Last-Event-ID resolution (Phase 9b M3-A codex review fix #1): the
+/// browser's native `EventSource` constructor cannot attach the
+/// `Last-Event-ID` header on `new EventSource(url)` — it only sends the
+/// header on the implicit *automatic* reconnect path, and only if the
+/// previous connection had emitted an `id:` line. Manual reconnects (the
+/// frontend's backoff ladder constructs a fresh `EventSource` after closing
+/// the prior one) therefore have no way to resume via the header. To make
+/// the manual reconnect path correct, this handler accepts a
+/// `?last_event_id=<seq>` query parameter as a fallback channel. The
+/// `Last-Event-ID` header takes precedence so native automatic reconnects
+/// remain canonical; the query parameter only applies when the header is
+/// absent.
 async fn operations_events(
     State(state): State<AppState>,
+    Query(query): Query<OperationsEventsQuery>,
     headers: HeaderMap,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let last_event_id = headers
         .get("last-event-id")
         .and_then(|value| value.to_str().ok())
-        .and_then(|s| s.parse::<u64>().ok());
+        .and_then(|s| s.parse::<u64>().ok())
+        .or(query.last_event_id);
 
     // Subscribe to the broadcaster BEFORE reading the database snapshot.
     // If we read the snapshot first, an operation that commits + publishes
@@ -326,6 +341,16 @@ struct RawOperationsListQuery {
     status: Option<String>,
     kind: Option<String>,
     limit: Option<usize>,
+}
+
+/// Query parameters accepted by `GET /api/v1/operations/events`.
+///
+/// `last_event_id` is the manual-reconnect fallback for the `Last-Event-ID`
+/// header. See the doc comment on `operations_events` for the precedence
+/// rule (header > query).
+#[derive(Debug, Default, Deserialize)]
+struct OperationsEventsQuery {
+    last_event_id: Option<u64>,
 }
 
 impl RawOperationsListQuery {

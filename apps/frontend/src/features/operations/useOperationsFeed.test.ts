@@ -219,7 +219,7 @@ afterEach(() => {
 });
 
 describe("snapshot + transition + resync handling", () => {
-  test("snapshot frames populate the map without advancing lastEventSeq", async () => {
+  test("snapshot frames populate the map and flip status to streaming", async () => {
     const { result } = renderHook(() => useOperationsFeed());
 
     expect(result.current.status).toBe("connecting");
@@ -237,11 +237,11 @@ describe("snapshot + transition + resync handling", () => {
       expect(result.current.operations["op-A"]?.id).toBe("op-A");
     });
     expect(result.current.lastEventSeq).toBeNull();
-    // Snapshot frames during the initial `connecting` phase do not flip the
-    // status — only the first `transition` does (brief §"snapshot event
-    // handler"). On reconnect / polling-fallback paths, a snapshot frame
-    // does flip the status; that path is exercised separately below.
-    expect(result.current.status).toBe("connecting");
+    // Codex review fix #2: `connecting` means "no data received yet". Any
+    // frame (snapshot or transition) flips status to `streaming`. The
+    // previous "preserve connecting until first transition" semantics
+    // left the hook stuck on quiet systems that only emit snapshot rows.
+    expect(result.current.status).toBe("streaming");
   });
 
   test("transition frames merge by id and advance lastEventSeq monotonically", async () => {
@@ -343,7 +343,47 @@ describe("backoff + polling fallback", () => {
     expect(eventSources).toHaveLength(2);
   });
 
-  test("polling fallback activates after the 5th consecutive SSE failure", async () => {
+  test("first connect carries no last_event_id query param", () => {
+    // Codex review fix #1: when `lastEventSeqRef` is null (cold mount),
+    // the EventSource URL has no `?last_event_id=` query.
+    renderHook(() => useOperationsFeed());
+    const source = latestEventSource();
+    expect(source.url).not.toContain("last_event_id=");
+  });
+
+  test("manual reconnect after a seq'd transition includes last_event_id query param", () => {
+    // Codex review fix #1: native `EventSource` does not auto-attach
+    // `Last-Event-ID` on `new EventSource(url)`. The manual reconnect
+    // path must therefore carry the last observed seq via the
+    // `?last_event_id=<seq>` query so the backend resumes from the ring
+    // buffer.
+    installFakeTimers();
+    renderHook(() => useOperationsFeed());
+    const firstSource = latestEventSource();
+
+    act(() => {
+      firstSource.__dispatch(
+        "transition",
+        JSON.stringify({
+          operation: makeOperation({ id: "op-A", status: "running" }),
+          seq: 42,
+        }),
+      );
+    });
+
+    act(() => {
+      firstSource.__triggerError();
+    });
+    act(() => {
+      fireTimeout();
+    });
+
+    expect(eventSources).toHaveLength(2);
+    const secondSource = eventSources[1]!;
+    expect(secondSource.url).toContain("last_event_id=42");
+  });
+
+  test("polling fallback activates only after the full 5-step ladder has elapsed", async () => {
     installFakeTimers();
     const fetchMock = mock(async () =>
       jsonResponse({ operations: [makeOperation({ id: "op-P" })] }),
@@ -352,6 +392,14 @@ describe("backoff + polling fallback", () => {
 
     const { result } = renderHook(() => useOperationsFeed());
 
+    // Cycle through ALL 5 ladder slots. On each iteration: trigger an
+    // error → assert the scheduled backoff delay → fire the timeout. After
+    // these 5 iterations, the 30 s slot has fired and the 6th reconnect
+    // attempt is live but has not failed yet, so polling is NOT engaged
+    // yet (status is still `reconnecting`, no interval scheduled). Codex
+    // review fix #3: the engagement is gated on the 30 s slot having
+    // ELAPSED without success — i.e. the SSE outage is cumulative ~48 s
+    // (1+2+5+10+30) before polling kicks in.
     const expectedDelays = [1_000, 2_000, 5_000, 10_000, 30_000];
     for (let failure = 0; failure < expectedDelays.length; failure++) {
       const source = latestEventSource();
@@ -360,19 +408,33 @@ describe("backoff + polling fallback", () => {
       });
       const pending = findPendingTimeout();
       expect(pending?.delay).toBe(expectedDelays[failure]);
+      // Polling must NOT engage until the FULL ladder has elapsed: even
+      // on the 30 s scheduling step (failure index 4), there's no
+      // interval yet.
+      expect(findPendingInterval()).toBeUndefined();
+      expect(result.current.status).toBe("reconnecting");
       act(() => {
         fireTimeout();
       });
     }
 
+    // Now the 30 s slot has fired and the 6th EventSource is live but
+    // has not yet succeeded or failed. Polling still NOT engaged.
+    expect(result.current.status).toBe("reconnecting");
+    expect(findPendingInterval()).toBeUndefined();
+
+    // The 6th EventSource fails: this is the moment polling engages.
+    const sixthSource = latestEventSource();
+    act(() => {
+      sixthSource.__triggerError();
+    });
+
     expect(result.current.status).toBe("polling");
     const interval = findPendingInterval();
     expect(interval?.delay).toBe(5_000);
+    // SSE retry continues every 30 s alongside polling.
+    expect(findPendingTimeout()?.delay).toBe(30_000);
 
-    // Flush the eager first tick that startPollingLoop scheduled. `await
-    // flushPromises()` plus an `act` boundary reseats React state from the
-    // resolved fetch without needing the real setTimeout (which fake-
-    // timers have replaced).
     await act(async () => {
       await flushPromises();
     });
@@ -388,6 +450,8 @@ describe("backoff + polling fallback", () => {
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
     const { result } = renderHook(() => useOperationsFeed());
+    // Walk the 5-step ladder (fix #3): 5 errors + 5 fired timeouts gets us
+    // to a 6th live EventSource. Polling has NOT engaged yet.
     for (let i = 0; i < 5; i++) {
       const source = latestEventSource();
       act(() => {
@@ -397,12 +461,24 @@ describe("backoff + polling fallback", () => {
         fireTimeout();
       });
     }
+    expect(findPendingInterval()).toBeUndefined();
+    // The 6th EventSource also errors — now polling engages.
+    const sixthSource = latestEventSource();
+    act(() => {
+      sixthSource.__triggerError();
+    });
     await act(async () => {
       await flushPromises();
     });
     expect(result.current.status).toBe("polling");
     const interval = findPendingInterval();
     expect(interval).toBeDefined();
+
+    // Fire the 30 s SSE retry timer to construct the 7th EventSource,
+    // which will receive the recovering live event.
+    act(() => {
+      fireTimeout();
+    });
 
     const liveSource = latestEventSource();
     act(() => {
