@@ -11,12 +11,9 @@ pub mod worker;
 ///
 /// Each module under `kinds/` is a thin layer of constants + decode helpers
 /// + an idempotency-key builder that is the single source of truth for the
-/// kind's `canonical_params_hash` + `input_version` pair.
-///
-/// The handler `impl OperationHandler` lives in the backend crate (it needs
-/// owned backend state), not here.
-/// Per-kind helpers shared by the submit path and the per-kind handler impls
-/// that live in `apps/backend/src/operations_kinds/`.
+/// kind's `canonical_params_hash` + `input_version` pair. The handler
+/// `impl OperationHandler` lives in the backend crate (it needs owned
+/// backend state), not here.
 ///
 /// The on-disk layout (`components/operations/kinds/*.rs`, NOT
 /// `components/operations/src/kinds/*.rs`) is locked by Phase 9b AC-4. We

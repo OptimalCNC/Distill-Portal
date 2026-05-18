@@ -58,6 +58,13 @@ pub enum AppError {
     Handler(String),
 }
 
+/// Lifts a `HandlerError` into `AppError` on the **submit path**. Reached
+/// only via the `?` operator in `submit_rescan_operation` and
+/// `submit_import_operation` when the kinds-helper idempotency-key
+/// computation fails (e.g. invalid params, or a poisoned inventory lock
+/// in `import_sessions_fingerprints`). The worker spawn closure does NOT
+/// use this impl — it matches `HandlerError` variants directly into
+/// `OperationOutcome`. See `dispatcher.rs` for the trait surface.
 impl From<HandlerError> for AppError {
     fn from(error: HandlerError) -> Self {
         match error {

@@ -109,7 +109,9 @@ impl Dispatcher {
     }
 
     /// Iterate `(kind_name, handler)` pairs. Order is unspecified.
-    pub fn handlers(&self) -> impl Iterator<Item = (&'static str, &Arc<dyn OperationHandler>)> + '_ {
+    pub fn handlers(
+        &self,
+    ) -> impl Iterator<Item = (&'static str, &Arc<dyn OperationHandler>)> + '_ {
         self.handlers.iter().map(|(k, v)| (*k, v))
     }
 }
