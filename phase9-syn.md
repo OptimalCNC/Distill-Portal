@@ -218,3 +218,14 @@ Residual risks: clock-skew double-row creation (the unique index is on `(kind, h
 ---
 
 **APPROVED** by Claude (Explore subagent, read-only). 9a may declare M3 landed on `main` and 9b can begin M2 dispatch.
+
+## 2026-05-18 [9a] M3 Landed
+
+- Phase 9a M3 is formally closed on `main`.
+- Landed 9a M3 commits: `4009eab` (`phase9a async operations checkpoint`), `1c426f0` (`phase9a async operation test cutover`), `49a716a` (`phase9a record m3 local reviews`), and `5b23501` (`phase9-syn: request claude review for 9a m3`).
+- Review closeout is complete:
+  - Backend-protection review: `backend untouched`, no findings.
+  - Normal implementation review: `approved`, no findings.
+  - Claude/9b read-only subagent review: `approved`, no findings, no missing evidence, no required changes; recorded above in commit `9e2f54f`.
+- Verification remains the M3 set already recorded above: full Rust workspace, backend HTTP, typed Rust e2e, frontend type/unit/build/browser e2e, and frontend 24-hex / 83-token invariants.
+- Phase 9b may begin M2 against the landed Phase 9a operations substrate. 9a will not touch `components/operations/`, `components/ui-api-contracts/`, `apps/backend/`, `apps/frontend/`, or `docs/` unless the human assigns follow-up work.
