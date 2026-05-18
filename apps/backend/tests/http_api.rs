@@ -987,8 +987,7 @@ async fn sse_endpoint_replays_from_last_event_id() {
         if e.event.as_deref() != Some("transition") {
             return false;
         }
-        e.id
-            .as_ref()
+        e.id.as_ref()
             .and_then(|id| id.parse::<u64>().ok())
             .map(|seq| seq > highest_seq)
             .unwrap_or(false)

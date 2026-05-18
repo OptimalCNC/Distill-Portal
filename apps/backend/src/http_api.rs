@@ -181,12 +181,13 @@ async fn operations_events(
         .and_then(|value| value.to_str().ok())
         .and_then(|s| s.parse::<u64>().ok());
 
-    // Snapshot read (database) BEFORE live subscribe is fine here because
-    // any transition that lands between the two will be picked up on the
-    // live channel; the bridge task emits the database snapshot first, so
-    // the client sees a consistent picture before live transitions tail.
-    let snapshot = state.operations_snapshot_for_sse().await.unwrap_or_default();
-
+    // Subscribe to the broadcaster BEFORE reading the database snapshot.
+    // If we read the snapshot first, an operation that commits + publishes
+    // between the snapshot read and the subscribe call is LOST (not in the
+    // snapshot, not on the live channel — the receiver wasn't connected
+    // yet). Subscribing first means every event lands somewhere: snapshot
+    // OR backlog OR live tail. Duplicates between snapshot and live are
+    // expected and deduped by the M3 client via operation.id.
     let subscription = state.operations_broadcaster().subscribe(last_event_id);
     let Subscription {
         backlog,
@@ -194,6 +195,11 @@ async fn operations_events(
         mut receiver,
         resync_reason,
     } = subscription;
+
+    let snapshot = state
+        .operations_snapshot_for_sse()
+        .await
+        .unwrap_or_default();
 
     // mpsc capacity is generous; the bridge task drains it as fast as the
     // SSE response can flush bytes to the client. If a client wedges hard
@@ -241,9 +247,9 @@ async fn operations_events(
                     }
                 }
                 Err(RecvError::Lagged(_)) => {
-                    let event = Event::default().event("resync").data(
-                        "subscriber lagged; please re-fetch via GET /api/v1/operations",
-                    );
+                    let event = Event::default()
+                        .event("resync")
+                        .data("subscriber lagged; please re-fetch via GET /api/v1/operations");
                     let _ = tx.send(Ok(event)).await;
                     break;
                 }

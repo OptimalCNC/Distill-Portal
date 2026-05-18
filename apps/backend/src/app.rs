@@ -341,9 +341,7 @@ impl AppState {
             // Publish the `cancel_requested` transition BEFORE notifying
             // the worker. Codex pre-consult refinement: the worker can
             // race ahead and publish `cancelled` first if we notify first.
-            self.inner
-                .operations_broadcaster
-                .publish(operation.clone());
+            self.inner.operations_broadcaster.publish(operation.clone());
             self.notify_operation_worker(operation.kind);
         }
         Ok(outcome)
@@ -408,9 +406,7 @@ impl AppState {
             Ok(operation) => {
                 // Newly-inserted queued row: publish the `queued`
                 // transition AFTER the insert transaction commits.
-                self.inner
-                    .operations_broadcaster
-                    .publish(operation.clone());
+                self.inner.operations_broadcaster.publish(operation.clone());
                 Ok(operation)
             }
             Err(error) => {
