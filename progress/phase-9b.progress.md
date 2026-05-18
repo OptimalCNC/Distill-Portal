@@ -53,15 +53,17 @@ Phase 9b shares the repo with a parallel Phase 9a coordinator. Coordination is l
 - Phase 9b coordinator engaged at 2026-05-18.
 - **M1 closed**: UI/UX design gate complete.
 - **M2 closed**: M2-A (trait + kinds extraction, Option A-plus) + M2-B (broadcaster + SSE + ts-rs binding) both delivered. All three reviewers approved each chunk on the same evidence pack. Spec AC-1, AC-2, AC-3, AC-4, AC-5 satisfied. On-disk schema unchanged. Only new direct Rust dep: `futures-core = "0.3"` (spec-authorized escape hatch).
-- **M3 dispatching**: 3-chunk decomposition adopted from M3 planner (`working/phase-9b/m3-plan.md`). M3-A (data layer) about to dispatch; M3-B (presentation) blocked on M3-A; M3-C (integration + close + 6-surface doc sweep) blocked on M3-B.
+- **M3-A closed**: data layer (`useOperationsFeed.ts` SSE+fallback hook + `pollOperationOnce` helper + small backend query-param extension). Spec AC items 6 (data layer; partial), 7 advanced. Four commits + three-reviewer trail; codex caught 4 required findings on round 1 + 2 more nits across 2 follow-up rounds before final approval on `3de8547`.
+- **M3-B dispatching**: presentation layer (JobCenter dialog + OperationCard + CSS + tests). Owns mandatory `python3 wcag.py exit 0` checklist item 49.
+- **M3-C pending**: integration + close + 6-surface doc sweep (blocked on M3-B).
 
 ## Active Plan
 
-- Current chunk: **M3-A (data layer)** — about to dispatch developer subagent.
+- Current chunk: **M3-B (presentation layer)** — about to dispatch developer subagent.
 - Owner: coordinator.
-- Status: M3 planner returned 3-chunk decomposition; plan materialized at `working/phase-9b/m3-plan.md`; 4 open questions + 3 ambiguities resolved by coordinator (see plan §8 + §9).
+- Status: M3-A closed at `3de8547`. M3-A scope expansion logged in `phase9-syn.md` (backend query-param fallback for Last-Event-ID resume; codex round-1 caught the original plan claim was wrong). Plan §2/§4/§7/§9 amended to reflect the actual implementation.
 - UI/UX gate: not required for M3 — the M1 design artifact is the gate output; developer implements against it. Any in-implementation UX questions return to the design artifact (single source of truth).
-- Pre-dispatch verification: hex count = 24, token count = 83 (M3 baseline matches spec invariants). `python3 wcag.py` retry continues to fail on the same upstream classifier outage; the M1 reviewer's byte-equivalence sign-off stands; checklist item 49 (`wcag.py exit 0`) owned by M3-B's first CSS chunk.
+- Pre-dispatch verification: hex count = 24, token count = 83 (M3-A baseline preserved). `python3 wcag.py` carries forward to M3-B as the mandatory checklist item 49.
 
 ## Completed Work Log
 
@@ -101,6 +103,14 @@ Phase 9b shares the repo with a parallel Phase 9a coordinator. Coordination is l
   - `<pre>` content for null-payload terminal statuses: skip `<pre>` when both `result_json` and `error_json` are null; always render `<dl>` metadata. Rule applies uniformly to all 4 terminal statuses per M1 §3.7 + reviewer caveat #3.
   - `python3 wcag.py` re-run cadence: M3-B owns first run (mandatory item 49); M3-C re-runs as regression check after ActionBar.css delta.
 - 2026-05-18: M3-A about to dispatch. Developer brief draws from `working/phase-9b/m3-plan.md` §2 + the 7 pinned implementation rules in §7.
+- 2026-05-18: M3-A landed across four commits: `13cc98c` (initial: useOperationsFeed.ts + .test.ts + lib/api.ts apiOperationsEventsUrl + lib/contracts.ts re-export + useOperationPoll.ts pollOperationOnce helper + 1 test), `2f40799` (codex round-1 review-response: Last-Event-ID resume + 3 other findings + 2 nits), `cac7824` (codex round-2: 2 stale doc references), `3de8547` (codex round-3: final stale test comment).
+- 2026-05-18: M3-A three-reviewer trail:
+  - **Backend-protection** (Claude Explore): `backend untouched` on round 1 commit `13cc98c`. After round-2 expanded scope to additive backend change at `apps/backend/src/http_api.rs::operations_events` (query-param fallback to Last-Event-ID header), the scope remained within spec-authorized released paths (line 29 of this progress log) — no re-review required for the explicitly released SSE-route extension.
+  - **Normal implementation** (Claude Explore): `approved` on round 1; no required changes.
+  - **Codex cross-family** (`codex exec`): 4 rounds — `needs changes` (4 required findings + 2 nits) → `needs changes` (2 stale doc references in plan §4 + source comment) → `needs changes` (1 stale test comment) → `approved`. Final sign-off on `3de8547`.
+- 2026-05-18: M3-A codex's load-bearing finding: the original plan §2 incorrectly claimed `new EventSource(url)` attaches `Last-Event-ID` automatically. This is wrong — native `Last-Event-ID` is per-EventSource-instance and only carried on the SAME object's automatic reconnects. Manual `close() + new EventSource()` starts empty. Spec mandates the documented manual backoff ladder, so the fix path was a small backend-side change: `apps/backend/src/http_api.rs::operations_events` now accepts `?last_event_id=N` as a fallback for the header; frontend manual reconnects build the URL with the query param when `lastEventSeq` is non-null; native auto-reconnects continue to use the header. 2 new backend tests pin: header wins when both supplied; query alone triggers the same resync semantics. Plan §2/§4/§7/§9 amended.
+- 2026-05-18: M3-A verification at close: `cargo check --workspace` clean; `cargo test --workspace` green; `cargo test -p distill-portal-backend --test http_api` 17/17 (15 prior + 2 new); `cargo test -p distill-portal-operations` 31/31; `bun run test` 788/0; `bunx tsc --noEmit` clean; `bun run build` clean; hex count 24; token count 83.
+- 2026-05-18: **M3-A CLOSED**. Spec AC items 6 (data layer; partial), 7 (`useOperationsFeed.ts` SSE client with polling fallback + state machine) advanced. ActionBar cutover + dialog/card UI still pending (M3-B + M3-C). M3-B about to dispatch.
 
 ## UI/UX Design Log
 
@@ -129,14 +139,10 @@ Phase 9b shares the repo with a parallel Phase 9a coordinator. Coordination is l
 
 ## Next Recommended Task
 
-- Dispatch M3-A developer subagent per `working/phase-9b/m3-plan.md` §2. Developer brief:
-  - Implement `apps/frontend/src/features/operations/useOperationsFeed.ts` per plan §2 (native EventSource + 5-step backoff + polling fallback engaging at 30 s steady-state + dedupe-by-`operation.id` + `cancelOperation` 409-swallow).
-  - Implement `apps/frontend/src/features/operations/useOperationsFeed.test.ts` covering snapshot/transition/resync/backoff/fallback/unmount/cancel-409.
-  - Add `OPERATIONS_EVENTS_PATH` + `apiOperationsEventsUrl()` to `apps/frontend/src/lib/api.ts`.
-  - Re-export `OperationTransitionEvent` in `apps/frontend/src/lib/contracts.ts`.
-  - In `apps/frontend/src/features/sessions/useOperationPoll.ts`: ADD `pollOperationOnce(operationId, signal)` pure helper alongside the existing hook export (hook export removal happens in M3-C).
-  - Add ONE test for `pollOperationOnce` in `useOperationPoll.test.tsx`.
-  - Verification: `bun run test`, `bunx tsc --noEmit`, `bun run build` all clean; hex/token invariants 24/83 preserved; `bun run test:e2e` is NOT required for M3-A (no visible surface).
-  - Three-reviewer rule applies at close: backend-protection (Claude Explore) + normal (Claude review) + codex cross-family (`codex exec`).
-- After M3-A closes: dispatch M3-B (presentation layer) per plan §3.
+- Dispatch M3-B developer subagent per `working/phase-9b/m3-plan.md` §3. Developer brief:
+  - Implement `apps/frontend/src/features/operations/JobCenter.tsx` + `.css` + `.test.tsx`: native `<dialog>` with `showModal()`, prop-driven open/close, focus management on open, backdrop-click + Escape close, aria-labelledby + aria-live region, active/recent sections with empty states + section dividers.
+  - Implement `apps/frontend/src/features/operations/OperationCard.tsx` + `.css` + `.test.tsx`: native `<details>` with Grid summary, monogram kind icon, 7-status pill (inline JSX, `data-pulse` for running), cancel button with single-click + 409 absorption + cancelling-state, uniform expanded panel (`<dl>` always; `<pre>` only when relevant JSON is non-null, applied to all 4 terminal statuses per M1 reviewer caveat #3).
+  - Owns checklist item 49: `python3 wcag.py exit 0` runs against the M1 design artifact and is mandatory before M3-B closes.
+  - Verification: `bun run test`, `bunx tsc --noEmit`, `bun run build` all clean; `python3 working/phase-9b/designs/m1-job-center/wcag.py` exit 0; hex/token invariants 24/83 preserved; `bun run test:e2e` is NOT required (components not yet wired into App until M3-C); 7 `.jc-pill.<status>` class matches in `OperationCard.css`.
+  - Three-reviewer rule applies at close.
 - After M3-B closes: dispatch M3-C (integration + close + 6-surface doc sweep) per plan §4.
