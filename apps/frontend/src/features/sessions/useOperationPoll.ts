@@ -28,9 +28,12 @@ export function nextOperationPollDelay(elapsedMs: number): number {
  * an in-flight read (e.g. when an SSE event arrives first and renders the
  * pending fetch obsolete).
  *
- * Consumed by `useOperationsFeed` during its polling-fallback window. The
- * fallback's outer cadence (5 s `setInterval`) lives at the call site;
- * this helper stays pure and unaware of timers.
+ * Reserved for M3-C consumers (App.tsx's terminal-toast effect, which
+ * fires on the user-submitted operation id when an SSE transition lags).
+ * Not consumed by `useOperationsFeed`'s polling-fallback path — that path
+ * uses `listOperations({ limit: 50 })` per spec because the fallback
+ * scans the live tail of all operations, not a single one. The helper
+ * stays pure and unaware of timers.
  */
 export function pollOperationOnce(
   operationId: string,

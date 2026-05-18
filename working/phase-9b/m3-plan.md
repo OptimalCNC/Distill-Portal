@@ -239,7 +239,7 @@ Bulk of items **9–35, 39–48** + item **49** (`python3 wcag.py exit 0`).
 #### `apps/frontend/src/features/sessions/useOperationPoll.ts`
 
 - Remove the React `useOperationPoll` hook export (no longer consumed by App.tsx after wiring change).
-- Keep pure helpers: `OPERATION_POLL_*` constants, `nextOperationPollDelay`, `isOperationTerminal`, `pollOperationOnce` (consumed by `useOperationsFeed` fallback and App.tsx terminal-toast).
+- Keep pure helpers: `OPERATION_POLL_*` constants, `nextOperationPollDelay`, `isOperationTerminal`, `pollOperationOnce` (reserved for App.tsx's terminal-toast detection on the user-submitted operation id; `useOperationsFeed`'s polling-fallback path uses `listOperations({ limit: 50 })` per spec — confer §2 + §7).
 
 #### `apps/frontend/src/features/sessions/useOperationPoll.test.tsx`
 
