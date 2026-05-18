@@ -18,7 +18,8 @@ use distill_portal_ingest_service::{
 use distill_portal_operations::{
     idempotency::IdempotencyError, CancelRequestOutcome, CancellationToken, CheckpointError,
     Dispatcher, HandlerError, IdempotencyKey, NewOperation, NoopCheckpoint, Operation,
-    OperationCheckpoint, OperationKind, OperationOutcome, OperationWorker, OperationsError,
+    OperationCheckpoint, OperationKind, OperationOutcome, OperationStatus,
+    OperationTransitionEvent, OperationWorker, OperationsBroadcaster, OperationsError,
     OperationsListQuery, OperationsListResponse, OperationsStore, SubmitOperationResponse,
 };
 use distill_portal_raw_session_store::{
@@ -89,6 +90,7 @@ struct AppInner {
     blob_store: Arc<LocalFsBlobStore>,
     ingest_service: Arc<IngestService>,
     operations_store: Arc<OperationsStore>,
+    operations_broadcaster: Arc<OperationsBroadcaster>,
     operation_cancellations: OperationCancellationSignals,
     source_inventory: RwLock<SourceInventory>,
     scan_lock: Mutex<()>,
@@ -138,10 +140,15 @@ impl App {
         let db_path = config.data_dir.join("distill.db");
         let store = Arc::new(SqliteStore::open(db_path.clone())?);
         let operations_store = Arc::new(OperationsStore::open(db_path)?);
+        // Bootstrap reconciliation runs BEFORE the broadcaster is exposed to
+        // clients (no SSE subscribers can exist yet — the router is built
+        // below). Per Phase 9b dispatch: "no publish needed — reconciliation
+        // runs BEFORE the HTTP server starts serving."
         operations_store.reconcile_interrupted()?;
         let blob_store = Arc::new(LocalFsBlobStore::new(config.data_dir.join("blobs"))?);
         let ingest_service = Arc::new(IngestService::new(store.clone(), blob_store.clone()));
         let operation_cancellations = OperationCancellationSignals::default();
+        let operations_broadcaster = OperationsBroadcaster::new();
         let state = AppState {
             inner: Arc::new(AppInner {
                 scanner: Scanner::new(config.claude_roots.clone(), config.codex_roots.clone()),
@@ -150,6 +157,7 @@ impl App {
                 blob_store,
                 ingest_service,
                 operations_store,
+                operations_broadcaster,
                 operation_cancellations,
                 source_inventory: RwLock::new(SourceInventory::default()),
                 scan_lock: Mutex::new(()),
@@ -229,6 +237,61 @@ impl AppState {
         self.inner.operations_store.clone()
     }
 
+    /// Shared `OperationsBroadcaster` instance — the SSE handler subscribes
+    /// here, and `submit_operation` + `request_operation_cancel` publish
+    /// directly into it after their store transactions commit. Workers
+    /// publish via the broadcaster they receive at spawn time.
+    pub fn operations_broadcaster(&self) -> Arc<OperationsBroadcaster> {
+        self.inner.operations_broadcaster.clone()
+    }
+
+    /// Snapshot of operations to emit on initial SSE connect. Returns
+    /// non-terminal ops first (ordered by submission time ASC), then the
+    /// most recent 50 terminal ops in submission-time ASC order so the
+    /// client sees oldest-first within each section. Each row is wrapped
+    /// as a synthetic `OperationTransitionEvent` with `seq = 0` — snapshot
+    /// rows are emitted as `event: snapshot` SSE frames without an `id:`
+    /// line, so the `seq` is never read by the client's `Last-Event-ID`
+    /// tracker. See the SSE handler doc comment for the wire shape.
+    pub async fn operations_snapshot_for_sse(
+        &self,
+    ) -> Result<Vec<OperationTransitionEvent>, AppError> {
+        let store = self.inner.operations_store.clone();
+        tokio::task::spawn_blocking(move || {
+            let non_terminal = store.list(OperationsListQuery {
+                status: Some(vec![
+                    OperationStatus::Queued,
+                    OperationStatus::Running,
+                    OperationStatus::CancelRequested,
+                ]),
+                kind: None,
+                limit: Some(200),
+            })?;
+            let terminal = store.list(OperationsListQuery {
+                status: Some(vec![
+                    OperationStatus::Succeeded,
+                    OperationStatus::Failed,
+                    OperationStatus::Cancelled,
+                    OperationStatus::Interrupted,
+                ]),
+                kind: None,
+                limit: Some(50),
+            })?;
+            // `store.list` orders DESC by submitted_at. Reverse each slice
+            // so the SSE client receives oldest-first within each section;
+            // non-terminal section is emitted first, then terminal.
+            let mut snapshot = Vec::with_capacity(non_terminal.len() + terminal.len());
+            for operation in non_terminal.into_iter().rev() {
+                snapshot.push(OperationTransitionEvent { operation, seq: 0 });
+            }
+            for operation in terminal.into_iter().rev() {
+                snapshot.push(OperationTransitionEvent { operation, seq: 0 });
+            }
+            Ok::<_, AppError>(snapshot)
+        })
+        .await?
+    }
+
     pub async fn submit_rescan_operation(
         &self,
         params_json: Value,
@@ -275,6 +338,12 @@ impl AppState {
     ) -> Result<CancelRequestOutcome, AppError> {
         let outcome = self.inner.operations_store.request_cancel(&id)?;
         if let CancelRequestOutcome::Requested(operation) = &outcome {
+            // Publish the `cancel_requested` transition BEFORE notifying
+            // the worker. Codex pre-consult refinement: the worker can
+            // race ahead and publish `cancelled` first if we notify first.
+            self.inner
+                .operations_broadcaster
+                .publish(operation.clone());
             self.notify_operation_worker(operation.kind);
         }
         Ok(outcome)
@@ -324,6 +393,8 @@ impl AppState {
         if let Some(existing) =
             store.find_by_idempotency_key(kind, &canonical_params_hash, &input_version)?
         {
+            // Idempotent dedupe — the client already saw this operation;
+            // do NOT republish.
             return Ok(existing);
         }
 
@@ -334,11 +405,20 @@ impl AppState {
             params_json,
         };
         match store.insert(input) {
-            Ok(operation) => Ok(operation),
+            Ok(operation) => {
+                // Newly-inserted queued row: publish the `queued`
+                // transition AFTER the insert transaction commits.
+                self.inner
+                    .operations_broadcaster
+                    .publish(operation.clone());
+                Ok(operation)
+            }
             Err(error) => {
                 if let Some(existing) =
                     store.find_by_idempotency_key(kind, &canonical_params_hash, &input_version)?
                 {
+                    // Race with a concurrent insert won by another caller;
+                    // do NOT publish here — that caller's path already did.
                     return Ok(existing);
                 }
                 Err(error.into())
@@ -410,6 +490,7 @@ impl AppState {
         spawn_operation_workers(
             dispatcher,
             self.inner.operations_store.clone(),
+            self.inner.operations_broadcaster.clone(),
             &self.inner.operation_cancellations,
         )
     }
@@ -691,6 +772,7 @@ pub(crate) fn is_cancelled(error: &AppError) -> bool {
 fn spawn_operation_workers(
     dispatcher: &Arc<Dispatcher>,
     store: Arc<OperationsStore>,
+    broadcaster: Arc<OperationsBroadcaster>,
     cancellations: &OperationCancellationSignals,
 ) -> Vec<tokio::task::JoinHandle<()>> {
     use std::str::FromStr;
@@ -707,7 +789,8 @@ fn spawn_operation_workers(
                 OperationKind::ImportSessions => cancellations.import_sessions.clone(),
                 OperationKind::RescanSources => cancellations.rescan_sources.clone(),
             };
-            let worker = OperationWorker::new_with_cancellation(kind, store.clone(), cancellation);
+            let worker = OperationWorker::new_with_cancellation(kind, store.clone(), cancellation)
+                .with_broadcaster(broadcaster.clone());
             worker.spawn(move |operation, checkpoint| {
                 let handler = handler.clone();
                 async move {

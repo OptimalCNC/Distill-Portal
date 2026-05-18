@@ -406,6 +406,38 @@ pub struct SubmitOperationResponse {
     pub kind: OperationKind,
 }
 
+/// SSE event payload for the live operations channel
+/// (`GET /api/v1/operations/events`).
+///
+/// Carries the full updated [`Operation`] row plus a monotonic
+/// broadcaster-assigned `seq`. The `seq` is used as the SSE `id:` field so a
+/// reconnecting client can resume via `Last-Event-ID`. The broadcaster keeps
+/// a 200-entry ring buffer of past events; when a client's `Last-Event-ID`
+/// falls outside the buffer, the server emits a separate `event: resync` SSE
+/// frame (no payload binding) instructing the client to re-fetch via
+/// `GET /api/v1/operations`.
+///
+/// The `seq: u64` field surfaces as `number` in the TS binding. This is
+/// safe — the broadcaster resets on backend restart and the ledger churn is
+/// far below 2^53 transitions per process lifetime.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-bindings", ts(export_to = "OperationTransitionEvent.ts"))]
+pub struct OperationTransitionEvent {
+    pub operation: Operation,
+    /// Monotonic per-broadcaster sequence number; used as SSE event id for
+    /// `Last-Event-ID` reconnect support.
+    ///
+    /// The ts-rs default for `u64` is `bigint`; the M3 frontend treats the
+    /// sequence number as a regular JS `number` because the broadcaster
+    /// resets on every backend restart and ledger churn stays well below
+    /// 2^53. The explicit `ts(type = "number")` override keeps the wire
+    /// payload (JSON number) and the TS type aligned without forcing
+    /// callers to handle BigInt.
+    #[cfg_attr(feature = "ts-bindings", ts(type = "number"))]
+    pub seq: u64,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(feature = "ts-bindings", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts-bindings", ts(export_to = "OperationsListResponse.ts"))]

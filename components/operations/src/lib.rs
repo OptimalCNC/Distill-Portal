@@ -2,6 +2,7 @@ pub mod cancel;
 pub mod dispatcher;
 pub mod idempotency;
 pub mod migrations;
+pub mod sse;
 pub mod store;
 pub mod types;
 pub mod worker;
@@ -27,9 +28,10 @@ pub use cancel::{
 };
 pub use dispatcher::{Dispatcher, HandlerError, HandlerFuture, IdempotencyKey, OperationHandler};
 pub use distill_portal_ui_api_contracts::{
-    Operation, OperationKind, OperationStatus, OperationsListQuery, OperationsListResponse,
-    SubmitOperationResponse,
+    Operation, OperationKind, OperationStatus, OperationTransitionEvent, OperationsListQuery,
+    OperationsListResponse, SubmitOperationResponse,
 };
+pub use sse::{OperationsBroadcaster, Subscription};
 pub use store::{
     decode_operation_params, error_json, result_json, CancelRequestOutcome, NewOperation,
     OperationsError, OperationsStore,

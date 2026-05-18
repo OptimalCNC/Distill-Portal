@@ -12,6 +12,11 @@ distill-portal-observability = { path = "../../components/observability" }
 distill-portal-operations = { path = "../../components/operations" }
 distill-portal-raw-session-store = { path = "../../components/raw-session-store" }
 distill-portal-ui-api-contracts = { path = "../../components/ui-api-contracts" }
+# Phase 9b M2-B escape-hatch dep: axum 0.8's `Sse::new(impl Stream<...>)`
+# requires `futures_core::Stream`, which axum does not re-export. See
+# `components/operations/README.md` §"SSE escape hatch" for the
+# Phase 9b §"Dependency Policy" coverage and Chromium-equivalent reproducer.
+futures-core = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
@@ -21,4 +26,9 @@ tracing = "0.1"
 
 [dev-dependencies]
 tempfile = "3"
+# Test-only tokio features for the M2-B SSE integration tests: io-util gives
+# AsyncReadExt / AsyncWriteExt on the raw TcpStream used by the SSE-reading
+# helper. Keeping these in dev-deps means the runtime binary still ships with
+# the minimum feature set defined above.
+tokio = { version = "1", features = ["io-util"] }
 tower = { version = "0.5", features = ["util"] }

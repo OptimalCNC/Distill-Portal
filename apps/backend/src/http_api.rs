@@ -1,20 +1,30 @@
-use std::str::FromStr;
+use std::{
+    convert::Infallible,
+    pin::Pin,
+    str::FromStr,
+    task::{Context, Poll},
+};
 
 use axum::{
     extract::{Path, Query, State},
-    http::{header, StatusCode},
-    response::{IntoResponse, Response},
+    http::{header, HeaderMap, StatusCode},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        IntoResponse, Response,
+    },
     routing::{get, post},
     Json, Router,
 };
-use distill_portal_operations::CancelRequestOutcome;
+use distill_portal_operations::{CancelRequestOutcome, OperationTransitionEvent, Subscription};
 use distill_portal_ui_api_contracts::{
     ImportSourceSessionsRequest, Operation, OperationKind, OperationStatus, OperationsListQuery,
     OperationsListResponse, PersistedScanError, SourceSessionView, StoredSessionView,
     SubmitOperationResponse,
 };
+use futures_core::Stream;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use tokio::sync::{broadcast::error::RecvError, mpsc};
 
 use crate::app::{AppError, AppState};
 
@@ -24,6 +34,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/rescan", post(submit_rescan))
         .route("/api/v1/import", post(import_source_sessions))
         .route("/api/v1/operations", get(list_operations))
+        .route("/api/v1/operations/events", get(operations_events))
         .route(
             "/api/v1/operations/{operation_id}",
             get(get_operation).delete(cancel_operation),
@@ -131,6 +142,149 @@ async fn get_raw(
         )
             .into_response()),
         None => Err(ApiError::NotFound),
+    }
+}
+
+/// SSE channel for live operation state transitions.
+///
+/// Wire shape (codex pre-consult refinement: snapshot vs transition vs
+/// resync clearly separated so the client's `Last-Event-ID` tracker only
+/// updates on real `id:` lines):
+///
+/// - `event: snapshot` (no `id:`) — initial replay of non-terminal ops +
+///   last 50 terminal ops, emitted first on every connect.
+/// - `event: transition` with `id: <seq>` — backlog replay (from the
+///   broadcaster's ring buffer when `Last-Event-ID` was supplied) and live
+///   transitions. Client updates `Last-Event-ID` from these.
+/// - `event: resync` (no `id:`) — emitted once when `Last-Event-ID` falls
+///   outside the ring buffer OR when the live `broadcast::Receiver` lags
+///   beyond the channel capacity. Client must discard local state and
+///   re-fetch via `GET /api/v1/operations`.
+///
+/// Codex pre-consult refinement A: subscribe to the broadcaster BEFORE
+/// reading the database snapshot so the live channel does not drop events
+/// that fire between the snapshot read and the live tail. The bridge task
+/// emits backlog entries before tailing live and dedupes any live event
+/// whose `seq <= last_backlog_seq` (already delivered as backlog).
+///
+/// Codex pre-consult refinement B: a per-connection bridge task owns the
+/// `broadcast::Receiver` and pushes `Event` values into an `mpsc::channel`
+/// that the SSE response streams from. On `RecvError::Lagged`, emit one
+/// `event: resync` and close — continuing after data loss confuses the
+/// client.
+async fn operations_events(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let last_event_id = headers
+        .get("last-event-id")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok());
+
+    // Snapshot read (database) BEFORE live subscribe is fine here because
+    // any transition that lands between the two will be picked up on the
+    // live channel; the bridge task emits the database snapshot first, so
+    // the client sees a consistent picture before live transitions tail.
+    let snapshot = state.operations_snapshot_for_sse().await.unwrap_or_default();
+
+    let subscription = state.operations_broadcaster().subscribe(last_event_id);
+    let Subscription {
+        backlog,
+        last_backlog_seq,
+        mut receiver,
+        resync_reason,
+    } = subscription;
+
+    // mpsc capacity is generous; the bridge task drains it as fast as the
+    // SSE response can flush bytes to the client. If a client wedges hard
+    // enough to fill 64 buffered events, the bridge task awaits on
+    // `tx.send` which naturally backpressures into the broadcast receiver
+    // (and eventually trips `RecvError::Lagged`, closing the stream).
+    let (tx, rx) = mpsc::channel::<Result<Event, Infallible>>(64);
+
+    tokio::spawn(async move {
+        // Emit resync (if any) BEFORE snapshot/backlog so the client knows
+        // its local state was stale before it processes any rows.
+        if let Some(reason) = resync_reason {
+            let event = Event::default().event("resync").data(reason);
+            if tx.send(Ok(event)).await.is_err() {
+                return;
+            }
+        }
+
+        for transition in &snapshot {
+            let event = build_snapshot_event(transition);
+            if tx.send(Ok(event)).await.is_err() {
+                return;
+            }
+        }
+
+        for transition in &backlog {
+            let event = build_transition_event(transition);
+            if tx.send(Ok(event)).await.is_err() {
+                return;
+            }
+        }
+
+        loop {
+            match receiver.recv().await {
+                Ok(transition) => {
+                    if let Some(last) = last_backlog_seq {
+                        if transition.seq <= last {
+                            // Already delivered as backlog; skip.
+                            continue;
+                        }
+                    }
+                    let event = build_transition_event(&transition);
+                    if tx.send(Ok(event)).await.is_err() {
+                        break;
+                    }
+                }
+                Err(RecvError::Lagged(_)) => {
+                    let event = Event::default().event("resync").data(
+                        "subscriber lagged; please re-fetch via GET /api/v1/operations",
+                    );
+                    let _ = tx.send(Ok(event)).await;
+                    break;
+                }
+                Err(RecvError::Closed) => break,
+            }
+        }
+    });
+
+    let stream = SseEventStream { rx };
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+fn build_snapshot_event(transition: &OperationTransitionEvent) -> Event {
+    // Snapshot events carry the operation row but NOT an `id:` field, so
+    // the client never advances `Last-Event-ID` from a snapshot row.
+    let json = serde_json::to_string(transition).unwrap_or_else(|_| "{}".to_string());
+    Event::default().event("snapshot").data(json)
+}
+
+fn build_transition_event(transition: &OperationTransitionEvent) -> Event {
+    let json = serde_json::to_string(transition).unwrap_or_else(|_| "{}".to_string());
+    Event::default()
+        .id(transition.seq.to_string())
+        .event("transition")
+        .data(json)
+}
+
+/// Hand-rolled `Stream` over `mpsc::Receiver` so the SSE handler does not
+/// pull `tokio-stream` (the closest existing helper) into the workspace.
+/// `axum::response::sse::Sse::new` consumes any `Stream<Item = Result<Event,
+/// E>>`; using `mpsc::Receiver::poll_recv` from tokio (already a workspace
+/// dep) keeps the surface area minimal.
+struct SseEventStream {
+    rx: mpsc::Receiver<Result<Event, Infallible>>,
+}
+
+impl Stream for SseEventStream {
+    type Item = Result<Event, Infallible>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.rx.poll_recv(cx)
     }
 }
 

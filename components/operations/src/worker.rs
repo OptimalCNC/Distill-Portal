@@ -7,7 +7,7 @@ use tracing::warn;
 
 use crate::{
     cancel::{CancellationToken, CheckpointError, CheckpointGuard},
-    error_json, result_json, Operation, OperationKind, OperationsStore,
+    error_json, result_json, Operation, OperationKind, OperationsBroadcaster, OperationsStore,
 };
 
 #[derive(Clone, Debug)]
@@ -16,6 +16,13 @@ pub struct OperationWorker {
     store: Arc<OperationsStore>,
     cancellation: CancellationToken,
     idle_interval: Duration,
+    /// Optional Phase 9b M2-B broadcaster. When `Some`, every state
+    /// transition the worker writes through the store is also published as
+    /// an `OperationTransitionEvent`. Optional so the worker's unit tests
+    /// (which exercise the claim/complete cycle without a broadcaster) keep
+    /// passing byte-equivalent — the wiring point that supplies the
+    /// broadcaster lives in `apps/backend/src/app.rs`.
+    broadcaster: Option<Arc<OperationsBroadcaster>>,
 }
 
 #[derive(Clone, Debug)]
@@ -40,6 +47,7 @@ impl OperationWorker {
             store,
             cancellation,
             idle_interval: Duration::from_millis(250),
+            broadcaster: None,
         }
     }
 
@@ -48,8 +56,23 @@ impl OperationWorker {
         self
     }
 
+    /// Attach a Phase 9b M2-B SSE broadcaster. After this is set, the
+    /// worker publishes every state transition it commits through the
+    /// store (running, succeeded, failed, cancelled) so the live SSE
+    /// channel reflects the database.
+    pub fn with_broadcaster(mut self, broadcaster: Arc<OperationsBroadcaster>) -> Self {
+        self.broadcaster = Some(broadcaster);
+        self
+    }
+
     pub fn cancellation_token(&self) -> CancellationToken {
         self.cancellation.clone()
+    }
+
+    fn publish(&self, operation: Operation) {
+        if let Some(broadcaster) = &self.broadcaster {
+            broadcaster.publish(operation);
+        }
     }
 
     pub fn spawn<F, Fut>(&self, handler: F) -> JoinHandle<()>
@@ -72,7 +95,12 @@ impl OperationWorker {
             }
 
             let operation = match self.store.claim_next_queued(self.kind) {
-                Ok(Some(operation)) => operation,
+                Ok(Some(operation)) => {
+                    // Queued -> Running transition: publish AFTER the
+                    // claim transaction commits (Phase 9b §"Risks" row 4).
+                    self.publish(operation.clone());
+                    operation
+                }
                 Ok(None) => {
                     tokio::select! {
                         _ = self.cancellation.notified() => {}
@@ -104,7 +132,12 @@ impl OperationWorker {
 
     fn complete_queued_cancellation(&self) -> bool {
         match self.store.complete_next_queued_cancellation(self.kind) {
-            Ok(Some(_)) => true,
+            Ok(Some(cancelled)) => {
+                // Queued (with cancel-requested) -> Cancelled terminal
+                // transition; publish AFTER commit.
+                self.publish(cancelled);
+                true
+            }
             Ok(None) => false,
             Err(error) => {
                 warn!(?error, kind = %self.kind, "operation worker failed to complete queued cancellation");
@@ -121,17 +154,29 @@ impl OperationWorker {
         match guard.check().await {
             Ok(()) => false,
             Err(CheckpointError::CancelRequested(_)) => {
-                if let Err(error) = self.store.complete_cancelled(&operation.id, None) {
-                    warn!(?error, operation_id = %operation.id, "operation worker failed to complete cancellation");
+                match self.store.complete_cancelled(&operation.id, None) {
+                    Ok(Some(updated)) => self.publish(updated),
+                    Ok(None) => {}
+                    Err(error) => warn!(
+                        ?error,
+                        operation_id = %operation.id,
+                        "operation worker failed to complete cancellation",
+                    ),
                 }
                 true
             }
             Err(error) => {
-                if let Err(finish_error) = self.store.complete_failure(
+                match self.store.complete_failure(
                     &operation.id,
                     error_json(format!("checkpoint failed before execution: {error}")),
                 ) {
-                    warn!(?finish_error, operation_id = %operation.id, "operation worker failed to record checkpoint failure");
+                    Ok(Some(updated)) => self.publish(updated),
+                    Ok(None) => {}
+                    Err(finish_error) => warn!(
+                        ?finish_error,
+                        operation_id = %operation.id,
+                        "operation worker failed to record checkpoint failure",
+                    ),
                 }
                 true
             }
@@ -146,33 +191,61 @@ impl OperationWorker {
     ) {
         match outcome {
             OperationOutcome::Succeeded(result) => match guard.check().await {
-                Ok(()) => {
-                    if let Err(error) = self.store.complete_success(&operation.id, result) {
-                        warn!(?error, operation_id = %operation.id, "operation worker failed to record success");
-                    }
-                }
+                Ok(()) => match self.store.complete_success(&operation.id, result) {
+                    Ok(Some(updated)) => self.publish(updated),
+                    Ok(None) => {}
+                    Err(error) => warn!(
+                        ?error,
+                        operation_id = %operation.id,
+                        "operation worker failed to record success",
+                    ),
+                },
                 Err(CheckpointError::CancelRequested(_)) => {
-                    if let Err(error) = self.store.complete_cancelled(&operation.id, None) {
-                        warn!(?error, operation_id = %operation.id, "operation worker failed to record cancellation after success checkpoint");
+                    match self.store.complete_cancelled(&operation.id, None) {
+                        Ok(Some(updated)) => self.publish(updated),
+                        Ok(None) => {}
+                        Err(error) => warn!(
+                            ?error,
+                            operation_id = %operation.id,
+                            "operation worker failed to record cancellation after success checkpoint",
+                        ),
                     }
                 }
                 Err(error) => {
-                    if let Err(finish_error) = self.store.complete_failure(
+                    match self.store.complete_failure(
                         &operation.id,
                         error_json(format!("checkpoint failed after execution: {error}")),
                     ) {
-                        warn!(?finish_error, operation_id = %operation.id, "operation worker failed to record checkpoint failure");
+                        Ok(Some(updated)) => self.publish(updated),
+                        Ok(None) => {}
+                        Err(finish_error) => warn!(
+                            ?finish_error,
+                            operation_id = %operation.id,
+                            "operation worker failed to record checkpoint failure",
+                        ),
                     }
                 }
             },
             OperationOutcome::Failed(error) => {
-                if let Err(finish_error) = self.store.complete_failure(&operation.id, error) {
-                    warn!(?finish_error, operation_id = %operation.id, "operation worker failed to record failure");
+                match self.store.complete_failure(&operation.id, error) {
+                    Ok(Some(updated)) => self.publish(updated),
+                    Ok(None) => {}
+                    Err(finish_error) => warn!(
+                        ?finish_error,
+                        operation_id = %operation.id,
+                        "operation worker failed to record failure",
+                    ),
                 }
             }
             OperationOutcome::Cancelled(result) => {
-                if let Err(error) = self.store.complete_cancelled(&operation.id, result) {
-                    warn!(?error, operation_id = %operation.id, "operation worker failed to record cancellation");
+                match self.store.complete_cancelled(&operation.id, result) {
+                    Ok(Some(updated)) => self.publish(updated),
+                    Ok(None) => {}
+                    Err(error) => warn!(
+                        ?error,
+                        operation_id = %operation.id,
+                        "operation worker failed to record cancellation",
+                    ),
                 }
             }
         }

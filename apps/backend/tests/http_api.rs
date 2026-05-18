@@ -12,11 +12,17 @@ use distill_portal_backend::App;
 use distill_portal_configuration::BackendConfig;
 use distill_portal_operations::{NewOperation, OperationKind, OperationStatus, OperationsStore};
 use distill_portal_ui_api_contracts::{
-    source_key, ImportReport, Operation, OperationsListResponse, RescanReport, SessionSyncStatus,
-    SourceSessionView, StoredSessionView, SubmitOperationResponse, TitleSource, Tool,
+    source_key, ImportReport, Operation, OperationTransitionEvent, OperationsListResponse,
+    RescanReport, SessionSyncStatus, SourceSessionView, StoredSessionView, SubmitOperationResponse,
+    TitleSource, Tool,
 };
 use serde_json::json;
 use tempfile::TempDir;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+    sync::oneshot,
+};
 use tower::util::ServiceExt;
 
 const CLAUDE_FIXTURE: &[u8] =
@@ -632,4 +638,439 @@ fn session_by_source_key<'a>(
         .iter()
         .find(|session| session.session_key == session_key)
         .unwrap()
+}
+
+// --- Phase 9b M2-B SSE integration tests --------------------------------
+//
+// The SSE response is a streaming body, so the existing `oneshot` +
+// `to_bytes` helpers cannot be reused — `to_bytes` would block waiting for
+// the stream to close, and we don't want to close it until we've read the
+// events we care about. Instead, each test binds a real `TcpListener` on
+// 127.0.0.1:0, spawns `App::serve_with_shutdown` on it, and opens a raw
+// TCP connection to issue the GET and parse the SSE wire format.
+
+/// Single SSE event parsed from the wire. `id` is the optional `id:` line
+/// value, `event` is the optional `event:` line value (defaults to
+/// "message" per SSE spec but we treat the absent case as None), and
+/// `data` is the concatenated `data:` lines.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct SseEvent {
+    id: Option<String>,
+    event: Option<String>,
+    data: String,
+}
+
+/// Spin up `App` on a real localhost TCP port; returns the bound port and
+/// a shutdown sender. The caller drops the shutdown sender to terminate
+/// the server.
+async fn spawn_app_on_port(app: App) -> (u16, oneshot::Sender<()>, tokio::task::JoinHandle<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+    let handle = tokio::spawn(async move {
+        let _ = app
+            .serve_with_shutdown(listener, async move {
+                let _ = shutdown_rx.await;
+            })
+            .await;
+    });
+    (port, shutdown_tx, handle)
+}
+
+/// Open a raw TCP connection to the bound port and send the SSE request.
+async fn open_sse_stream(port: u16, last_event_id: Option<u64>) -> TcpStream {
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    let mut request = String::new();
+    request.push_str("GET /api/v1/operations/events HTTP/1.1\r\n");
+    request.push_str("Host: localhost\r\n");
+    request.push_str("Accept: text/event-stream\r\n");
+    request.push_str("Connection: keep-alive\r\n");
+    if let Some(id) = last_event_id {
+        request.push_str(&format!("Last-Event-ID: {id}\r\n"));
+    }
+    request.push_str("\r\n");
+    stream.write_all(request.as_bytes()).await.unwrap();
+    // Discard the HTTP/1.1 status + headers (terminated by an empty line).
+    skip_http_headers(&mut stream).await;
+    stream
+}
+
+async fn skip_http_headers(stream: &mut TcpStream) {
+    let mut prev_was_cr = false;
+    let mut prev_was_lf = false;
+    let mut prev2_was_cr = false;
+    let mut buf = [0u8; 1];
+    loop {
+        let read = stream.read(&mut buf).await.unwrap();
+        if read == 0 {
+            panic!("connection closed while reading SSE headers");
+        }
+        let byte = buf[0];
+        // Look for the terminating \r\n\r\n sequence.
+        match byte {
+            b'\r' => {
+                prev2_was_cr = prev_was_lf && prev_was_cr;
+                prev_was_cr = true;
+                prev_was_lf = false;
+            }
+            b'\n' => {
+                if prev2_was_cr && prev_was_lf {
+                    // already at terminator on previous iteration
+                }
+                if prev_was_cr && prev_was_lf {
+                    // \r\n\n? Treat as end too.
+                    return;
+                }
+                if prev_was_cr && prev2_was_cr {
+                    return;
+                }
+                prev2_was_cr = prev_was_cr;
+                prev_was_cr = false;
+                prev_was_lf = true;
+                if prev2_was_cr && prev_was_lf {
+                    return;
+                }
+            }
+            _ => {
+                prev_was_cr = false;
+                prev_was_lf = false;
+                prev2_was_cr = false;
+            }
+        }
+    }
+}
+
+/// Read `count` SSE events from the stream within `timeout`. Returns the
+/// events in arrival order.
+async fn read_sse_events(stream: &mut TcpStream, count: usize, timeout: Duration) -> Vec<SseEvent> {
+    let mut events: Vec<SseEvent> = Vec::with_capacity(count);
+    let mut leftover = String::new();
+    let read_result = tokio::time::timeout(timeout, async {
+        let mut buf = [0u8; 1024];
+        loop {
+            let read = stream.read(&mut buf).await.unwrap();
+            if read == 0 {
+                return;
+            }
+            leftover.push_str(std::str::from_utf8(&buf[..read]).expect("UTF-8 SSE bytes"));
+            // Parse complete events delimited by a blank line ("\n\n" per
+            // the SSE spec; axum emits "\n\n" between events).
+            while let Some(event_end) = leftover.find("\n\n") {
+                let raw_event = leftover[..event_end].to_string();
+                leftover.drain(..event_end + 2);
+                let mut parsed = SseEvent::default();
+                for line in raw_event.lines() {
+                    if let Some(value) = line.strip_prefix("id:") {
+                        parsed.id = Some(value.trim().to_string());
+                    } else if let Some(value) = line.strip_prefix("event:") {
+                        parsed.event = Some(value.trim().to_string());
+                    } else if let Some(value) = line.strip_prefix("data:") {
+                        if !parsed.data.is_empty() {
+                            parsed.data.push('\n');
+                        }
+                        parsed.data.push_str(value.trim_start());
+                    }
+                    // Ignore comment lines like ": keep-alive" and any
+                    // other field we don't care about.
+                }
+                if parsed.event.is_some() || parsed.id.is_some() || !parsed.data.is_empty() {
+                    events.push(parsed);
+                    if events.len() >= count {
+                        return;
+                    }
+                }
+            }
+        }
+    })
+    .await;
+    if read_result.is_err() {
+        // Timeout — surface what we have so the assertion failure is informative.
+    }
+    events
+}
+
+#[tokio::test]
+async fn sse_endpoint_emits_snapshot_on_connect() {
+    let tempdir = TempDir::new().unwrap();
+    let claude_root = seed_claude_source(tempdir.path(), CLAUDE_FIXTURE);
+    let app = App::bootstrap(test_config(
+        tempdir.path().join("data"),
+        vec![claude_root],
+        vec![],
+    ))
+    .await
+    .unwrap();
+
+    // Submit + complete an import so we have a terminal op in the snapshot.
+    let key = source_key(Tool::ClaudeCode, CLAUDE_SESSION_ID);
+    let import_response = submit_import_operation(&app, vec![key]).await;
+    let _: ImportReport = wait_http_operation_success(&app, &import_response.operation_id).await;
+
+    // Insert one queued op directly into the store so the snapshot has a
+    // non-terminal row too.
+    let store = app.state().operations_store();
+    let queued = store
+        .insert(new_operation(
+            OperationKind::RescanSources,
+            "snapshot-queued",
+            json!({}),
+        ))
+        .unwrap();
+
+    let (port, shutdown_tx, server_handle) = spawn_app_on_port(app).await;
+    let mut stream = open_sse_stream(port, None).await;
+    // We expect at minimum: 1 snapshot for the queued op + 1 snapshot for
+    // the terminal import op. Both go out as `event: snapshot`.
+    let events = read_sse_events(&mut stream, 2, Duration::from_secs(3)).await;
+    drop(stream);
+    let _ = shutdown_tx.send(());
+    let _ = server_handle.await;
+
+    assert!(
+        events.len() >= 2,
+        "expected at least 2 snapshot events, got {}: {:?}",
+        events.len(),
+        events
+    );
+    for event in &events {
+        assert_eq!(
+            event.event.as_deref(),
+            Some("snapshot"),
+            "snapshot events must use event: snapshot, got {:?}",
+            event,
+        );
+        assert!(
+            event.id.is_none(),
+            "snapshot events must not carry an id: line, got {:?}",
+            event.id,
+        );
+    }
+    let parsed_ids: Vec<String> = events
+        .iter()
+        .map(|e| {
+            let transition: OperationTransitionEvent =
+                serde_json::from_str(&e.data).expect("snapshot data parses as transition event");
+            // Snapshot rows carry seq = 0 (synthetic).
+            assert_eq!(transition.seq, 0, "snapshot seq must be 0");
+            transition.operation.id
+        })
+        .collect();
+    assert!(
+        parsed_ids.contains(&queued.id),
+        "snapshot should include queued op {} (got {:?})",
+        queued.id,
+        parsed_ids,
+    );
+    assert!(
+        parsed_ids.contains(&import_response.operation_id),
+        "snapshot should include completed import op {} (got {:?})",
+        import_response.operation_id,
+        parsed_ids,
+    );
+}
+
+#[tokio::test]
+async fn sse_endpoint_emits_live_transition_event() {
+    let tempdir = TempDir::new().unwrap();
+    let claude_root = seed_claude_source(tempdir.path(), CLAUDE_FIXTURE);
+    let app = App::bootstrap(test_config(
+        tempdir.path().join("data"),
+        vec![claude_root],
+        vec![],
+    ))
+    .await
+    .unwrap();
+
+    let (port, shutdown_tx, server_handle) = spawn_app_on_port(app).await;
+    let mut stream = open_sse_stream(port, None).await;
+
+    // Drain the initial snapshot (it may be empty since no ops exist yet).
+    // We'll read a few bytes worth and then keep going.
+    // Submit an import via a separate raw HTTP request.
+    let key = source_key(Tool::ClaudeCode, CLAUDE_SESSION_ID);
+    submit_import_via_http(port, vec![key]).await;
+
+    // Expect transitions: queued (from submit_operation publish),
+    // running (worker claim), succeeded (worker complete). Each goes out
+    // as `event: transition` with an `id:` line.
+    let events = read_sse_events(&mut stream, 3, Duration::from_secs(5)).await;
+    drop(stream);
+    let _ = shutdown_tx.send(());
+    let _ = server_handle.await;
+
+    let transitions: Vec<&SseEvent> = events
+        .iter()
+        .filter(|e| e.event.as_deref() == Some("transition"))
+        .collect();
+    assert!(
+        transitions.len() >= 3,
+        "expected at least 3 live transitions, got {}: {:?}",
+        transitions.len(),
+        events,
+    );
+    let statuses: Vec<OperationStatus> = transitions
+        .iter()
+        .map(|e| {
+            assert!(e.id.is_some(), "transition events must carry id: line");
+            let transition: OperationTransitionEvent = serde_json::from_str(&e.data).unwrap();
+            assert!(transition.seq > 0, "live seq must be > 0");
+            transition.operation.status
+        })
+        .collect();
+    assert!(
+        statuses.contains(&OperationStatus::Queued),
+        "expected a queued transition in {:?}",
+        statuses,
+    );
+    assert!(
+        statuses.contains(&OperationStatus::Running),
+        "expected a running transition in {:?}",
+        statuses,
+    );
+    assert!(
+        statuses.contains(&OperationStatus::Succeeded),
+        "expected a succeeded transition in {:?}",
+        statuses,
+    );
+}
+
+#[tokio::test]
+async fn sse_endpoint_replays_from_last_event_id() {
+    let tempdir = TempDir::new().unwrap();
+    let claude_root = seed_claude_source(tempdir.path(), CLAUDE_FIXTURE);
+    let app = App::bootstrap(test_config(
+        tempdir.path().join("data"),
+        vec![claude_root],
+        vec![],
+    ))
+    .await
+    .unwrap();
+    let (port, shutdown_tx, server_handle) = spawn_app_on_port(app).await;
+
+    // First connection: submit one rescan op so the broadcaster has a few
+    // events to replay, capture a seq, then disconnect.
+    let mut stream = open_sse_stream(port, None).await;
+    submit_rescan_via_http(port).await;
+    let first_events = read_sse_events(&mut stream, 3, Duration::from_secs(5)).await;
+    drop(stream);
+
+    let highest_seq = first_events
+        .iter()
+        .filter(|e| e.event.as_deref() == Some("transition"))
+        .filter_map(|e| e.id.as_ref())
+        .filter_map(|id| id.parse::<u64>().ok())
+        .max()
+        .expect("at least one transition with an id");
+
+    // Second connection with Last-Event-ID at the captured seq: replay
+    // any events newer than that seq. There should be NONE for the same
+    // run we just observed; submit a new op to force one.
+    let mut stream2 = open_sse_stream(port, Some(highest_seq)).await;
+    // Submit a *new* op that is idempotency-distinct from the first.
+    submit_rescan_with_marker_via_http(port, "second").await;
+    let second_events = read_sse_events(&mut stream2, 3, Duration::from_secs(5)).await;
+    drop(stream2);
+    let _ = shutdown_tx.send(());
+    let _ = server_handle.await;
+
+    // No `event: resync` (seq still within ring buffer).
+    let has_resync = second_events
+        .iter()
+        .any(|e| e.event.as_deref() == Some("resync"));
+    assert!(
+        !has_resync,
+        "expected no resync after recent Last-Event-ID; got {:?}",
+        second_events,
+    );
+    // At least one transition with a seq > highest_seq must have arrived.
+    let saw_new_transition = second_events.iter().any(|e| {
+        if e.event.as_deref() != Some("transition") {
+            return false;
+        }
+        e.id
+            .as_ref()
+            .and_then(|id| id.parse::<u64>().ok())
+            .map(|seq| seq > highest_seq)
+            .unwrap_or(false)
+    });
+    assert!(
+        saw_new_transition,
+        "expected at least one transition with seq > {highest_seq}; got {:?}",
+        second_events,
+    );
+}
+
+#[tokio::test]
+async fn sse_endpoint_emits_resync_when_last_event_id_too_old() {
+    let tempdir = TempDir::new().unwrap();
+    let app = App::bootstrap(test_config(tempdir.path().join("data"), vec![], vec![]))
+        .await
+        .unwrap();
+    let broadcaster = app.state().operations_broadcaster();
+    // Push enough events through the broadcaster to evict seq 1 (ring
+    // buffer capacity is 200). Using the broadcaster directly is allowed
+    // because this test runs in-process with App; we synthesize a
+    // sufficient burst of `Operation` rows.
+    for index in 0..260 {
+        broadcaster.publish(synthetic_operation(index));
+    }
+    let (port, shutdown_tx, server_handle) = spawn_app_on_port(app).await;
+    let mut stream = open_sse_stream(port, Some(1)).await;
+    let events = read_sse_events(&mut stream, 1, Duration::from_secs(3)).await;
+    drop(stream);
+    let _ = shutdown_tx.send(());
+    let _ = server_handle.await;
+
+    assert!(!events.is_empty(), "expected at least one event");
+    assert_eq!(
+        events[0].event.as_deref(),
+        Some("resync"),
+        "first event after stale Last-Event-ID must be resync; got {:?}",
+        events,
+    );
+    assert!(events[0].id.is_none(), "resync events must not carry id:");
+}
+
+fn synthetic_operation(index: usize) -> distill_portal_operations::Operation {
+    use distill_portal_ui_api_contracts::{Operation, OperationKind, OperationStatus};
+    Operation {
+        id: format!("synthetic-{index}"),
+        kind: OperationKind::ImportSessions,
+        status: OperationStatus::Queued,
+        canonical_params_hash: format!("{index:0>64}"),
+        input_version: format!("input-{index}"),
+        params_json: json!({"index": index}),
+        result_json: None,
+        error_json: None,
+        submitted_at: "2026-05-18T00:00:00Z".to_string(),
+        started_at: None,
+        finished_at: None,
+        cancel_requested_at: None,
+    }
+}
+
+async fn submit_import_via_http(port: u16, session_keys: Vec<String>) {
+    let body = json!({ "session_keys": session_keys }).to_string();
+    raw_http_post(port, "/api/v1/import", &body).await;
+}
+
+async fn submit_rescan_via_http(port: u16) {
+    raw_http_post(port, "/api/v1/rescan", "{}").await;
+}
+
+async fn submit_rescan_with_marker_via_http(port: u16, marker: &str) {
+    let body = json!({ "marker": marker }).to_string();
+    raw_http_post(port, "/api/v1/rescan", &body).await;
+}
+
+async fn raw_http_post(port: u16, path: &str, body: &str) {
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    let request = format!(
+        "POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    );
+    stream.write_all(request.as_bytes()).await.unwrap();
+    // Drain to EOF so the server completes the response.
+    let mut sink = Vec::new();
+    let _ = stream.read_to_end(&mut sink).await;
 }

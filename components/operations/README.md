@@ -23,6 +23,7 @@ access layer, and runs one worker loop per concrete operation kind.
 - `src/cancel.rs`
 - `src/worker.rs`
 - `src/dispatcher.rs` *(Phase 9b M2-A — trait-based handler registry)*
+- `src/sse.rs` *(Phase 9b M2-B — operations SSE broadcaster + ring buffer)*
 - `kinds/import_sessions.rs` *(Phase 9b M2-A — per-kind idempotency helper)*
 - `kinds/rescan_sources.rs` *(Phase 9b M2-A — per-kind idempotency helper)*
 
@@ -41,6 +42,7 @@ access layer, and runs one worker loop per concrete operation kind.
 - `Dispatcher`, `OperationHandler`, `HandlerFuture`, `HandlerError`, `IdempotencyKey` *(Phase 9b M2-A)*
 - `kinds::import_sessions::{KIND_NAME, decode_params, idempotency_key_for}` *(Phase 9b M2-A)*
 - `kinds::rescan_sources::{KIND_NAME, idempotency_key_for}` *(Phase 9b M2-A)*
+- `OperationsBroadcaster`, `Subscription`, `OperationTransitionEvent` *(Phase 9b M2-B — SSE channel)*
 - `idempotency::canonical_params_hash`
 - `idempotency::import_sessions_input_version`
 - `idempotency::rescan_sources_input_version`
@@ -114,6 +116,64 @@ in without touching the worker loop:
 
 The on-disk schema is unchanged from Phase 9a — the refactor is purely
 in-process plumbing.
+
+## SSE channel (Phase 9b M2-B)
+
+`OperationsBroadcaster` is the process-singleton fan-out for operation
+state-transition events. Lifecycle:
+
+- The backend constructs one `Arc<OperationsBroadcaster>` at bootstrap and
+  passes it to every `OperationWorker` via `OperationWorker::with_broadcaster`.
+- The worker calls `broadcaster.publish(operation)` AFTER every store
+  transition: `queued -> running` (claim), `cancel_requested -> cancelled`
+  (queued-cancel path), and every terminal write (succeeded / failed /
+  cancelled). The HTTP layer in `apps/backend/src/app.rs` publishes the
+  `queued` row produced by `submit_operation` and the `cancel_requested` row
+  produced by `request_operation_cancel`. The ordering guarantee — publish
+  AFTER the transaction commits — is the Phase 9b §"Risks" row 4 invariant.
+- Each publish atomically assigns a monotonic `seq`, pushes the event into a
+  200-entry ring buffer, and broadcasts it over a
+  `tokio::sync::broadcast::Sender`. The buffer enables `Last-Event-ID`
+  reconnect replay (size 200 per spec §"SSE Channel Design").
+- `subscribe(last_event_id)` returns a `Subscription { backlog, receiver,
+  resync_reason, last_backlog_seq }`. `backlog` is the replay slice from the
+  ring buffer (events with `seq > last_event_id`); `resync_reason` is
+  populated when the client's `Last-Event-ID` falls before the oldest
+  buffered event (the SSE handler emits a single `event: resync` frame so
+  the client re-fetches via `GET /api/v1/operations`).
+
+The HTTP SSE handler lives in `apps/backend/src/http_api.rs`:
+`GET /api/v1/operations/events`. The wire shape is:
+
+- `event: snapshot` (no `id:`) — initial replay of non-terminal ops + the
+  last 50 terminal ops on connect. Client populates its in-memory map but
+  does NOT update `Last-Event-ID` from these.
+- `event: transition` with `id: <seq>` — live state transitions and any
+  backlog from the ring buffer. Client updates `Last-Event-ID` from these.
+- `event: resync` (no `id:`) — emitted when the buffer cannot replay
+  (`Last-Event-ID` too old) or when the live `broadcast::Receiver` lags
+  beyond the channel capacity. Client must discard its map and re-fetch via
+  `GET /api/v1/operations`.
+
+## SSE escape hatch: futures-core
+
+Phase 9b §"Dependency Policy" forbids new external Rust dependencies but
+explicitly authorizes a "framework-specific helper crate" with documentation.
+`futures-core = "0.3"` is that helper: `axum::response::sse::Sse::new` accepts
+`impl Stream<Item = Result<Event, E>>`, where `Stream` is
+`futures_core::Stream`. axum 0.8 does NOT publicly re-export this trait, so
+backend cannot construct an SSE response without depending on `futures-core`
+directly. The crate is already present in `Cargo.lock` transitively via axum
++ tokio; the new direct declaration is interface-only and adds no new
+compiled code to the binary.
+
+**Chromium-equivalent reproducer**: the SSE handler at
+`GET /api/v1/operations/events` emits `event: transition` lines with
+`id: <seq>` for `Last-Event-ID` reconnect support. A vanilla
+`new EventSource("/api/v1/operations/events")` in Chromium 111+ receives
+transitions; on reconnect, the browser sends `Last-Event-ID: <last-seq>` and
+the server replays from the 200-entry ring buffer (or emits `event: resync`
+if too old). Standard SSE behavior; no library code on either side.
 
 ## Worker And Cancellation Model
 

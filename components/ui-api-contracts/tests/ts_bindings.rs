@@ -32,8 +32,8 @@ use std::{
 
 use distill_portal_ui_api_contracts::{
     ImportReport, ImportSourceSessionsRequest, Operation, OperationKind, OperationStatus,
-    OperationsListQuery, OperationsListResponse, PersistedScanError, RescanReport,
-    SessionSyncStatus, SourceSessionView, StoredSessionRecord, StoredSessionView,
+    OperationTransitionEvent, OperationsListQuery, OperationsListResponse, PersistedScanError,
+    RescanReport, SessionSyncStatus, SourceSessionView, StoredSessionRecord, StoredSessionView,
     SubmitOperationResponse, TitleSource, Tool,
 };
 use ts_rs::{Config, TS};
@@ -47,6 +47,7 @@ const EXPECTED_BINDING_FILES: &[&str] = &[
     "Operation.ts",
     "OperationKind.ts",
     "OperationStatus.ts",
+    "OperationTransitionEvent.ts",
     "OperationsListQuery.ts",
     "OperationsListResponse.ts",
     "PersistedScanError.ts",
@@ -104,6 +105,7 @@ fn export_all_contracts(out_dir: &Path) {
     OperationKind::export_all(&config).expect("export OperationKind");
     OperationStatus::export_all(&config).expect("export OperationStatus");
     Operation::export_all(&config).expect("export Operation");
+    OperationTransitionEvent::export_all(&config).expect("export OperationTransitionEvent");
     SubmitOperationResponse::export_all(&config).expect("export SubmitOperationResponse");
     OperationsListResponse::export_all(&config).expect("export OperationsListResponse");
     OperationsListQuery::export_all(&config).expect("export OperationsListQuery");

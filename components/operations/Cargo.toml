@@ -5,6 +5,14 @@ edition = "2021"
 
 [dependencies]
 distill-portal-ui-api-contracts = { path = "../ui-api-contracts" }
+# Phase 9b §"Dependency Policy" forbids new external Rust deps but
+# explicitly authorizes a "framework-specific helper crate" with
+# documentation. `futures-core` is that helper: axum 0.8's
+# `Sse::new(impl Stream<Item = ...>)` requires the `futures_core::Stream`
+# trait, which axum does not re-export. See README §"SSE escape hatch".
+# `futures-core` is already pulled transitively by axum + tokio in the
+# workspace `Cargo.lock`; the new direct declaration is interface-only.
+futures-core = "0.3"
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
