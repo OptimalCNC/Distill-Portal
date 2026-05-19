@@ -8,6 +8,7 @@
 // exercised in tests — no manual mock needed.
 
 import { afterEach, expect, mock, test } from "bun:test";
+import { StrictMode } from "react";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import type { Operation, OperationKind, OperationStatus } from "../../lib/contracts";
 import { JobCenter } from "./JobCenter";
@@ -110,6 +111,34 @@ test("JobCenter focuses the close button within one rAF after opening", async ()
   });
 });
 
+// 2a. StrictMode focus regression (codex M3-B review caught this) ------
+//
+// The earlier focus rAF was gated by `if (open && !dialog.open)`. Under
+// React StrictMode's dev-mode double-effect, setup → cleanup → setup, the
+// second setup observed dialog.open === true (showModal already called
+// on the first setup) and SKIPPED the focus scheduling. Result: open
+// dialog with no focus inside. The fix schedules the rAF unconditionally
+// whenever `open` is true. This test mounts the dialog inside <StrictMode>
+// to exercise that path.
+test("JobCenter focuses close button under React StrictMode double-effect", async () => {
+  const { container } = render(
+    <StrictMode>
+      <JobCenter
+        open={true}
+        onClose={() => {}}
+        activeOps={[]}
+        recentOps={[]}
+        onCancel={() => {}}
+      />
+    </StrictMode>,
+  );
+  await waitFor(() => {
+    const closeBtn = container.querySelector(".jc-close");
+    expect(closeBtn).not.toBeNull();
+    expect(document.activeElement).toBe(closeBtn);
+  });
+});
+
 // 3. ARIA wiring ----------------------------------------------------
 
 test("JobCenter header renders <h2 id='jc-dialog-title'>Job Center</h2>", () => {
@@ -175,7 +204,7 @@ test("JobCenter renders Active and Recent sections with their counts when both p
       onCancel={() => {}}
     />,
   );
-  const titles = Array.from(container.querySelectorAll(".jc-section-title")).map(
+  const titles = Array.from(container.querySelectorAll(".jc-section-label")).map(
     (n) => n.textContent,
   );
   // Each title contains "Active <count>" or "Recent <count>".

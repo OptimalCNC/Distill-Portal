@@ -64,26 +64,34 @@ export function JobCenter({
     const dialog = dialogRef.current;
     if (!dialog) return;
 
-    if (open && !dialog.open) {
-      // Some happy-dom builds throw a SecurityError if showModal() is
-      // called twice; guard via dialog.open. In real browsers,
-      // showModal() on an already-open dialog throws — same guard.
-      try {
-        dialog.showModal();
-      } catch {
-        // Fall back to setting the open attribute. The browser then
-        // skips the focus trap, but the UI still renders.
-        dialog.setAttribute("open", "");
+    if (open) {
+      if (!dialog.open) {
+        // Some happy-dom builds throw a SecurityError if showModal() is
+        // called twice; guard via dialog.open. In real browsers,
+        // showModal() on an already-open dialog throws — same guard.
+        try {
+          dialog.showModal();
+        } catch {
+          // Fall back to setting the open attribute. The browser then
+          // skips the focus trap, but the UI still renders.
+          dialog.setAttribute("open", "");
+        }
       }
-      // Focus the close button on the next paint so Tab cycles inward
-      // and Escape is one keypress away (checklist item 20).
+      // Focus is scheduled UNCONDITIONALLY whenever `open` is true.
+      // Codex review caught the StrictMode bug here: if focus were
+      // gated by `!dialog.open`, React's dev-mode double-effect would
+      // run setup → cleanup → setup, and the second setup would see
+      // dialog.open === true (showModal already called on the first
+      // setup) and skip the focus — leaving the dialog open with no
+      // focus inside. Scheduling the rAF unconditionally keeps the
+      // contract (item 20: close button focused on next paint).
       const raf = requestAnimationFrame(() => {
         closeButtonRef.current?.focus();
       });
       return () => cancelAnimationFrame(raf);
     }
 
-    if (!open && dialog.open) {
+    if (dialog.open) {
       dialog.close();
     }
     return undefined;
@@ -153,7 +161,7 @@ export function JobCenter({
           ) : (
             <>
               <section className="jc-section jc-section-active">
-                <h3 className="jc-section-title">
+                <h3 className="jc-section-label">
                   Active{" "}
                   <span className="jc-section-count">{activeOps.length}</span>
                 </h3>
@@ -171,7 +179,7 @@ export function JobCenter({
               </section>
               {showDivider ? <hr className="jc-section-divider" /> : null}
               <section className="jc-section jc-section-recent">
-                <h3 className="jc-section-title">
+                <h3 className="jc-section-label">
                   Recent{" "}
                   <span className="jc-section-count">{recentOps.length}</span>
                 </h3>

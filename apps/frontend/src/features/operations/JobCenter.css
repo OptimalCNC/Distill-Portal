@@ -8,7 +8,7 @@
  *   - `.jc-tray` — flex column inner layout.
  *   - `.jc-header` / `.jc-header h2` / `.jc-close` — header bar.
  *   - `.jc-body` — scrolling region (aria-live).
- *   - `.jc-section` / `.jc-section-title` / `.jc-section-count` /
+ *   - `.jc-section` / `.jc-section-label` / `.jc-section-count` /
  *     `.jc-section-divider` — Active + Recent sections.
  *   - `.jc-card-list` — `<ul>` wrapper around the cards.
  *   - `.jc-empty` / `.jc-empty-tray` — empty-state copy.
@@ -132,7 +132,7 @@ dialog.jc-dialog::backdrop {
   margin-top: 0;
 }
 
-.jc-section-title {
+.jc-section-label {
   font-family: var(--font-chrome);
   font-size: var(--text-xs);
   font-weight: 600;

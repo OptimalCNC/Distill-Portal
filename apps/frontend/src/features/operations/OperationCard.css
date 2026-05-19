@@ -7,7 +7,7 @@
  *   - `.jc-card-summary` — CSS Grid summary row (icon / kind / time /
  *     pill / bottom row).
  *   - `.jc-icon`, `.jc-kind`, `.jc-time` — summary fields.
- *   - `.jc-bottom-row` — full-width cancel-or-summary line.
+ *   - `.jc-bottom` — full-width cancel-or-summary line.
  *   - `.jc-summary-text` — terminal-op result line.
  *   - `.jc-cancel` / `.jc-cancel:hover` / `.jc-cancel[disabled]` —
  *     one-click cancel button.
@@ -110,14 +110,19 @@
   line-height: 1.2;
 }
 
-.jc-pill {
-  /* Pill anchors to the rightmost column of the summary grid. */
+.jc-pill-slot {
+  /* Slot is the grid cell; pill sits inside it inline-flex.
+     Per M1 prototype the slot decouples grid placement from pill
+     intrinsic sizing — pill width is determined by its content, slot
+     is the rightmost column of the summary grid. */
   grid-column: 3;
   grid-row: 1;
   justify-self: end;
+  display: inline-flex;
+  align-items: center;
 }
 
-.jc-bottom-row {
+.jc-bottom {
   grid-column: 1 / -1;
   grid-row: 3;
   display: flex;

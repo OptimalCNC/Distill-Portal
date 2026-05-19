@@ -290,14 +290,16 @@ export function OperationCard({ op, onCancel }: OperationCardProps): ReactNode {
         >
           {relativeTime}
         </time>
-        <span
-          className={`jc-pill ${op.status}`}
-          data-pulse={op.status === "running" ? "true" : undefined}
-        >
-          <span className="jc-pill-dot" aria-hidden="true" />
-          <span className="jc-pill-label">{statusLabel}</span>
+        <span className="jc-pill-slot">
+          <span
+            className={`jc-pill ${op.status}`}
+            data-pulse={op.status === "running" ? "true" : undefined}
+          >
+            <span className="jc-pill-dot" aria-hidden="true" />
+            <span className="jc-pill-label">{statusLabel}</span>
+          </span>
         </span>
-        <div className="jc-bottom-row">{bottomRow}</div>
+        <div className="jc-bottom">{bottomRow}</div>
       </summary>
       <div className="jc-expand">
         <dl className="jc-expand-meta">
