@@ -234,7 +234,7 @@ dialog.jc-dialog::backdrop {
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
   border: 1px solid
-    color-mix(in srgb, var(--color-accent) 35%, var(--color-surface));
+    color-mix(in srgb, var(--color-accent) 35%, var(--color-border-strong));
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
   color: color-mix(in srgb, var(--color-accent) 75%, var(--color-text));

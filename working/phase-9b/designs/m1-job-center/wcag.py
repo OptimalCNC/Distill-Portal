@@ -209,8 +209,8 @@ PAIRS = [
     # Cancel button ------------------------------------------------------
     ("J12", "Cancel button text (error 75% / text) on surface",
         ("mix", "error", 0.75, "ink"), "surface", "AA text"),
-    ("J13", "Cancel button border (error 35% / border) on surface (NT)",
-        ("mix", "error", 0.35, "border"), "surface", "SC 1.4.11"),
+    ("J13", "Cancel button border (error 35% / border-strong) on surface (NT)",
+        ("mix", "error", 0.35, "border-strong"), "surface", "SC 1.4.11"),
     ("J14", "Cancel button on hover-fill (error 8% / surface) text",
         ("mix", "error", 0.75, "ink"),
         ("mix", "error", 0.08, "surface"), "AA text"),
@@ -233,8 +233,8 @@ PAIRS = [
     ("J20", "Pill 'running' text (accent 75% / ink) on accent-10% fill",
         ("mix", "accent", 0.75, "ink"),
         ("mix", "accent", 0.10, "surface"), "AA text"),
-    ("J21", "Pill 'running' border (accent 35% / surface) on tray surface (NT)",
-        ("mix", "accent", 0.35, "surface"), "surface", "SC 1.4.11"),
+    ("J21", "Pill 'running' border (accent 35% / border-strong) on tray surface (NT)",
+        ("mix", "accent", 0.35, "border-strong"), "surface", "SC 1.4.11"),
     ("J22", "Pill 'running' dot (text fg) on accent-10% fill (NT)",
         ("mix", "accent", 0.75, "ink"),
         ("mix", "accent", 0.10, "surface"), "SC 1.4.11"),
@@ -243,22 +243,22 @@ PAIRS = [
     ("J23", "Pill 'cancel_requested' text (warn 75% / ink) on warn-12% fill",
         ("mix", "warn", 0.75, "ink"),
         ("mix", "warn", 0.12, "surface"), "AA text"),
-    ("J24", "Pill 'cancel_requested' dashed border (warn 55% / surface) (NT)",
-        ("mix", "warn", 0.55, "surface"), "surface", "SC 1.4.11"),
+    ("J24", "Pill 'cancel_requested' dashed border (warn 55% / border-strong) (NT)",
+        ("mix", "warn", 0.55, "border-strong"), "surface", "SC 1.4.11"),
 
     # Status pill — succeeded (success fill) -----------------------------
     ("J25", "Pill 'succeeded' text (success 75% / ink) on success-12% fill",
         ("mix", "success", 0.75, "ink"),
         ("mix", "success", 0.12, "surface"), "AA text"),
-    ("J26", "Pill 'succeeded' border (success 35% / surface) on tray (NT)",
-        ("mix", "success", 0.35, "surface"), "surface", "SC 1.4.11"),
+    ("J26", "Pill 'succeeded' border (success 35% / border-strong) on tray (NT)",
+        ("mix", "success", 0.35, "border-strong"), "surface", "SC 1.4.11"),
 
     # Status pill — failed (error fill) ----------------------------------
     ("J27", "Pill 'failed' text (error 75% / ink) on error-12% fill",
         ("mix", "error", 0.75, "ink"),
         ("mix", "error", 0.12, "surface"), "AA text"),
-    ("J28", "Pill 'failed' border (error 35% / surface) on tray (NT)",
-        ("mix", "error", 0.35, "surface"), "surface", "SC 1.4.11"),
+    ("J28", "Pill 'failed' border (error 35% / border-strong) on tray (NT)",
+        ("mix", "error", 0.35, "border-strong"), "surface", "SC 1.4.11"),
 
     # Status pill — cancelled (muted, solid border, square dot) ----------
     ("J29", "Pill 'cancelled' text (ink-muted) on surface-raised",
@@ -288,8 +288,8 @@ PAIRS = [
     ("J38", "Trigger count chip text (accent 75% / ink) on accent-10% fill",
         ("mix", "accent", 0.75, "ink"),
         ("mix", "accent", 0.10, "surface"), "AA text"),
-    ("J39", "Trigger count chip border (accent 35% / surface) on action bar (NT)",
-        ("mix", "accent", 0.35, "surface"), "surface", "SC 1.4.11"),
+    ("J39", "Trigger count chip border (accent 35% / border-strong) on action bar (NT)",
+        ("mix", "accent", 0.35, "border-strong"), "surface", "SC 1.4.11"),
 ]
 
 
